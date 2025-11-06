@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+ 
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>netcoreapp3.1</TargetFramework>
+		<PackageLicenseExpression>MIT OR Apache-2.0</PackageLicenseExpression>
+		<Version>1.0.0.2</Version>
+		<AssemblyName>SDSM.ContentManagementApi.BL</AssemblyName>
+		<RootNamespace>SDSM.ContentManagementApi.BL</RootNamespace>
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<AssemblyVersion>1.0.0.2</AssemblyVersion>
+		<FileVersion>1.0.0.2</FileVersion>
+	</PropertyGroup>
+
+ 
+	<ItemGroup>
+    <PackageReference Include="SDSM.BL.Common" Version="1.0.0" />
+	  <PackageReference Include="SDSM.DL.MySql" Version="1.0.0.1" />
+	</ItemGroup>
+
+
+</Project>

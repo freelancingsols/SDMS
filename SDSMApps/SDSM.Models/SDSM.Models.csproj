@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageLicenseExpression>MIT OR Apache-2.0</PackageLicenseExpression>
+    <Version>1.0.0.0</Version>
+    <PackageId>SDSM.Models</PackageId>
+    <AssemblyName>SDSM.Models</AssemblyName>
+    <RootNamespace>SDSM.Models</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SDSM.Common.Infra" Version="1.0.0.3" />
+    <Folder Include="Models\" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,14 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <PackageLicenseExpression>MIT OR Apache-2.0</PackageLicenseExpression>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <AssemblyVersion>1.0.0.7</AssemblyVersion>
+    <FileVersion>1.0.0.7</FileVersion>
+    <Version>1.0.0.7</Version>
+    <AssemblyName>SDSM.Common.Infra</AssemblyName>
+    <RootNamespace>SDSM.Common.Infra</RootNamespace>
+  </PropertyGroup>
+
+</Project>

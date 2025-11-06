@@ -1,0 +1,27 @@
+<head>
+    <title></title>
+</head>
+
+<body>
+    <script src="oidc-client.min.js"></script>
+    <script>
+
+        new UserManager().signinSilentCallback(
+            {
+                automaticSilentRenew: true,
+                includeIdTokenInSilentRenew: true,
+                silent_redirect_uri: 'http://localhost:5000/assets/login-callback-silent.html'
+            }
+        ).then(() => {
+            setTimeout(function () {
+                console.log('waiting');
+            }, 50000);
+            setTimeout(function () {
+                console.log('waiting');
+            }, 50000);
+        })
+            .catch((err) => {
+                console.log(err);
+            });
+    </script>
+</body>

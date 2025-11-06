@@ -1,0 +1,104 @@
+.footer .container-fluid{
+    margin-top: -130px;
+}
+
+.footer {
+    background: #F3C20A;
+    /* color:#FFF; */
+    color: #333;
+margin-top: 20px;
+}
+.footer .ebusiness h3{
+    /* color: #FFFF; */
+    color: #333;
+    font-weight: 600;
+    font-size: 40px;
+    margin-top: -35px;
+}
+
+@media only screen and (max-width: 500px){
+    .footer .ebusiness h3{
+        font-size: 36px;
+        margin-top: 0px;
+    }
+    
+}
+
+.footer .ebusiness span{
+   color:#fcb316; 
+}
+.footer .ebusiness p{
+    /* color:#FFF; */
+    color: #333;
+    line-height: 28px;
+}
+.footer .ebusiness ul li{
+   list-style: none;
+    display: inline-block;
+    width: 45px;
+    height: 45px;
+    border: 1px solid #fcb316;
+    text-align: center;
+    line-height: 45px;
+    border-radius: 50%;
+    margin-right: 5px;
+    cursor: pointer;
+    transition: 0.5s;
+    
+}
+.footer .ebusiness ul li:hover{
+    background-color:#fcb316;
+    /* color:#FFF; */
+    color: #333;
+    border-color:#fcb316;
+}
+.footer .ebusiness ul li a{
+     /* color: #FFF; */
+     color: #333;
+    text-decoration: none;
+    background-color: transparent;  
+}
+
+.footer .info h4{
+        /* color: #FFF; */
+        color: #333;
+        font-size: 20px;
+}
+.footer .insta h4{
+    /* color: #FFF; */
+    color: #333;
+    font-size: 20px;
+    margin-top: 20px;
+}
+.footer .info .personal span{
+    color:#fcb316;
+    font-weight: 600;
+}
+.footer .insta .images {
+  margin-top: 15px;   
+}
+.footer .insta .images div{
+    width: 31%;
+    height: 60px;
+    float: left;
+}
+ img{
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    border: 1px solid #000000;
+}
+ .copyright{
+          background-color: #000000;
+    text-align: center;
+    padding: 15px;
+    width: 100%;
+     /* color:#FFF; */
+     color: #333;
+}
+.copyright p{
+    margin: 0;
+}
+.copyright span{
+  color:#fcb316; 
+}

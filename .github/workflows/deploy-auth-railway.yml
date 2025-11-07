@@ -37,7 +37,7 @@ jobs:
         working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
         run: |
           npm ci
-          npm run build
+          npm run build -- --configuration production
 
       - name: Build .NET app
         working-directory: SDMSApps/SDMS.AuthenticationWebApp

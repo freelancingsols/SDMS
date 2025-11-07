@@ -117,7 +117,7 @@ jobs:
 
       - name: Build Angular app (Production)
         working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
-        run: npm run build
+        run: npm run build -- --configuration production
 
       - name: Build .NET app (Production)
         working-directory: SDMSApps/SDMS.AuthenticationWebApp

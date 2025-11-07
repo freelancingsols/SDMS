@@ -20,6 +20,25 @@ var builder = WebApplication.CreateBuilder(args);
 // Environment variables take precedence over appsettings.json
 builder.Configuration.AddEnvironmentVariables();
 
+// Configure server URLs from configuration
+// Priority: Environment Variable (PORT) > Configuration (Server:Port) > Configuration (Server:Urls) > Default
+var port = Environment.GetEnvironmentVariable("PORT") 
+    ?? builder.Configuration[ConfigurationKeys.ServerPort];
+var urls = builder.Configuration[ConfigurationKeys.ServerUrls];
+
+if (!string.IsNullOrEmpty(port))
+{
+    // Use PORT from environment variable or configuration
+    // Railway and other platforms provide PORT environment variable
+    builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+}
+else if (!string.IsNullOrEmpty(urls))
+{
+    // Use URLs from configuration (supports multiple URLs separated by semicolon)
+    builder.WebHost.UseUrls(urls.Split(';', StringSplitOptions.RemoveEmptyEntries));
+}
+// If neither is set, ASP.NET Core will use defaults from launchSettings.json or default ports
+
 // Add services
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -310,5 +329,6 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-app.Run("https://localhost:7001");
+// Start the application
+app.Run();
 

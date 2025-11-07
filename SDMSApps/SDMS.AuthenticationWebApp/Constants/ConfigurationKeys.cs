@@ -19,5 +19,8 @@ public static class ConfigurationKeys
     public const string ExternalAuthGoogleClientSecret = "ExternalAuth:Google:ClientSecret";
     
     public const string WebhookSecret = "Webhook:Secret";
+    
+    public const string ServerPort = "Server:Port";
+    public const string ServerUrls = "Server:Urls";
 }
 

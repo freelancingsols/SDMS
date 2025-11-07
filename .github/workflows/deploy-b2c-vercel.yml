@@ -22,11 +22,16 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: SDMSApps/SDMS.EndUserWebApp/ClientApp/package-lock.json
+          cache-dependency-path: SDMSApps/SDMS.EndUserWebApp/ClientApp/package.json
 
-      - name: Install dependencies
+      - name: Install dependencies and generate package-lock.json
         working-directory: SDMSApps/SDMS.EndUserWebApp/ClientApp
-        run: npm ci
+        run: |
+          npm install
+          # Ensure package-lock.json is created
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only
+          fi
 
       - name: Build Angular app (Production)
         working-directory: SDMSApps/SDMS.EndUserWebApp/ClientApp

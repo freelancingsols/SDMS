@@ -161,6 +161,6 @@ See individual README files in each project folder.
 5. Monitor deployment in GitHub Actions
 
 For detailed instructions, see:
-- `SDMS.EndUserWebApp/README_DEPLOYMENT.md`
+- `SDMS.B2CWebApp/README_DEPLOYMENT.md`
 - `SDMS.AuthenticationWebApp/README_DEPLOYMENT.md`
 

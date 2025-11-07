@@ -4,19 +4,19 @@ All CI/CD workflows are located at the repository root level in `.github/workflo
 
 ## Workflow Files
 
-### B2C WebApp (SDMS.EndUserWebApp)
+### B2C WebApp (SDMS.B2CWebApp)
 
 1. **`ci-b2c-webapp.yml`** - CI workflow for B2C WebApp
    - Runs on: push/PR to main, master, develop, release branches
    - **Manual trigger:** Yes (via GitHub Actions UI)
    - Jobs: Lint, Build (Dev), Build (Prod), Test, CI Complete
-   - Triggers only when files in `SDMSApps/SDMS.EndUserWebApp/` are changed
+   - Triggers only when files in `SDMSApps/SDMS.B2CWebApp/` are changed
 
 2. **`deploy-b2c-vercel.yml`** - Deployment workflow for B2C WebApp
    - Runs on: push to `release` branch
    - **Manual trigger:** Yes (via GitHub Actions UI)
    - Deploys to: Vercel
-   - Triggers only when files in `SDMSApps/SDMS.EndUserWebApp/` are changed
+   - Triggers only when files in `SDMSApps/SDMS.B2CWebApp/` are changed
 
 ### Authentication WebApp (SDMS.AuthenticationWebApp)
 
@@ -36,16 +36,17 @@ All CI/CD workflows are located at the repository root level in `.github/workflo
    - Deploys to: Railway
    - Triggers only when files in `SDMSApps/SDMS.AuthenticationWebApp/` are changed
 
-### B2B WebApp (SDMS.B2BWebApp)
+### Authentication WebApp - Frontend Only CI
 
-1. **`ci-b2b-webapp.yml`** - CI workflow for B2B WebApp (Frontend Only)
+1. **`ci-b2b-webapp.yml`** - CI workflow for Authentication WebApp (Frontend Only)
    - Runs on: push/PR to main, master, develop, release branches
    - **Manual trigger:** Yes (via GitHub Actions UI)
    - **Build Type:** Frontend only (no .NET build)
    - **Package Management:** Uses `package.json` and generates `package-lock.json`
    - Jobs: Lint, Build (Dev), Build (Prod), Test, CI Complete
-   - Triggers only when files in `SDMSApps/SDMS.B2BWebApp/` are changed
+   - Triggers only when files in `SDMSApps/SDMS.AuthenticationWebApp/ClientApp/` are changed
    - **Note:** Only builds `ClientApp` folder, no .NET build required
+   - **Use Case:** Faster CI for frontend-only changes, separate from full stack CI
 
 ## Workflow Structure
 
@@ -63,9 +64,9 @@ All CI/CD workflows are located at the repository root level in `.github/workflo
 
 Each workflow uses `paths` filter to only trigger when relevant project files change:
 
-- B2C WebApp workflows: `SDMSApps/SDMS.EndUserWebApp/**`
-- B2B WebApp workflows: `SDMSApps/SDMS.B2BWebApp/**`
-- Authentication WebApp workflows: `SDMSApps/SDMS.AuthenticationWebApp/**`
+- B2C WebApp workflows: `SDMSApps/SDMS.B2CWebApp/**`
+- Authentication WebApp (Full Stack) workflows: `SDMSApps/SDMS.AuthenticationWebApp/**`
+- Authentication WebApp (Frontend Only) workflow: `SDMSApps/SDMS.AuthenticationWebApp/ClientApp/**`
 
 This ensures workflows only run when their respective project files are modified.
 
@@ -85,9 +86,10 @@ All workflows now:
 3. Restore .NET dependencies
 4. Build .NET code
 
-**B2BWebApp:**
+**AuthenticationWebApp (Frontend Only CI):**
 - Frontend only - no .NET build
 - Only builds `ClientApp` folder
+- Triggers only on ClientApp changes for faster feedback
 
 **B2C WebApp:**
 - Frontend only - no .NET build

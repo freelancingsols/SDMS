@@ -78,7 +78,7 @@ dotnet build
 
 **Note:** The build process will automatically run `npm install` if `node_modules` doesn't exist.
 
-### SDMS.EndUserWebApp (B2C WebApp)
+### SDMS.B2CWebApp (B2C WebApp)
 
 **Requirements:**
 - Node.js 18.x
@@ -87,7 +87,7 @@ dotnet build
 **Build Steps:**
 
 ```powershell
-cd SDMSApps\SDMS.EndUserWebApp\ClientApp
+cd SDMSApps\SDMS.B2CWebApp\ClientApp
 
 # Install dependencies
 npm install
@@ -184,7 +184,7 @@ You can manually trigger workflows from GitHub Actions UI:
 - .NET: `bin/Debug/netcoreapp3.1/` or `bin/Release/netcoreapp3.1/`
 - Angular: `ClientApp/dist/browser/`
 
-### B2C WebApp (EndUserWebApp)
+### B2C WebApp (B2CWebApp)
 - Angular: `ClientApp/dist/sdms-b2c-webapp/`
 
 ## Troubleshooting

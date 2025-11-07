@@ -16,12 +16,16 @@ using System.Net;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Load configuration from environment variables (for Railway/deployment)
+// Environment variables take precedence over appsettings.json
+builder.Configuration.AddEnvironmentVariables();
+
 // Add services
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Database
+// Database - Load from environment variable (Railway provides POSTGRES_CONNECTION automatically)
 var connectionString = builder.Configuration[ConfigurationKeys.PostgresConnection] 
     ?? builder.Configuration[ConfigurationKeys.DefaultConnection]
     ?? "Host=localhost;Database=sdms_auth;Username=postgres;Password=postgres";

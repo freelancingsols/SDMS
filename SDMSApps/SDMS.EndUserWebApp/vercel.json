@@ -1,0 +1,38 @@
+{
+  "version": 2,
+  "buildCommand": "cd ClientApp && npm install && npm run build",
+  "outputDirectory": "ClientApp/dist/sdms-b2c-webapp",
+  "installCommand": "cd ClientApp && npm install",
+  "framework": null,
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        }
+      ]
+    }
+  ],
+  "env": {
+    "API_URL": "@api_url",
+    "AUTH_SERVER": "@auth_server",
+    "CLIENT_ID": "@client_id"
+  }
+}
+

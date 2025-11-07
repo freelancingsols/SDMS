@@ -12,6 +12,12 @@ on:
       - "Deploy Authentication WebApp to Railway"
     types:
       - completed
+  workflow_dispatch:
+    inputs:
+      workflow_run_id:
+        description: 'Optional: Workflow Run ID to analyze (leave empty to analyze latest failure)'
+        required: false
+        type: string
 
 jobs:
   analyze-and-report:

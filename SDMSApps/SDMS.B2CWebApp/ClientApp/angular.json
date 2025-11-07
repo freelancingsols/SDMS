@@ -13,7 +13,7 @@
         "build": {
           "builder": "@angular-devkit/build-angular:browser",
           "options": {
-            "outputPath": "dist/browser",
+            "outputPath": "dist/sdms-b2c-webapp",
             "index": "src/index.html",
             "main": "src/main.ts",
             "polyfills": "src/polyfills.ts",
@@ -23,15 +23,11 @@
               "src/favicon.ico",
               "src/assets",
               "src/manifest.json",
-              "src/assets/login-callback-silent.html",
-              { "glob": "src/silent-refresh.html", "input": "./", "output": "./assets" },
-              { "glob": "oidc-client.min.js", "input": "./node_modules/oidc-client/lib", "output": "./assets" }
+              "src/assets/login-callback-silent.html"
             ],
             "styles": [
-              "./node_modules/@angular/material/prebuilt-themes/indigo-pink.css",
               "src/styles.css",
-              "node_modules/bootstrap/dist/css/bootstrap.min.css",
-              "node_modules/font-awesome/css/font-awesome.css"
+              "node_modules/bootstrap/dist/css/bootstrap.min.css"
             ],
             "scripts": [
               "node_modules/bootstrap/dist/js/bootstrap.bundle.min.js"
@@ -101,7 +97,6 @@
               "src/manifest.json"
             ],
             "styles": [
-              "./node_modules/@angular/material/prebuilt-themes/indigo-pink.css",
               "src/styles.css"
             ],
             "scripts": []
@@ -112,8 +107,7 @@
           "options": {
             "tsConfig": [
               "tsconfig.app.json",
-              "tsconfig.spec.json",
-              "e2e/tsconfig.json"
+              "tsconfig.spec.json"
             ],
             "exclude": [
               "**/node_modules/**"

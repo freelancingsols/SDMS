@@ -51,10 +51,10 @@ jobs:
         working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
         run: |
           # Try Angular CLI lint command
-          if npx ng lint 2>/dev/null; then
-            npx ng lint || echo "Linting issues found (non-blocking)"
-          elif npm run lint 2>/dev/null; then
+          if npm run lint 2>/dev/null; then
             npm run lint || echo "Linting issues found (non-blocking)"
+          elif npx ng lint 2>/dev/null; then
+            npx ng lint || echo "Linting issues found (non-blocking)"
           else
             echo "Lint not configured, skipping"
           fi

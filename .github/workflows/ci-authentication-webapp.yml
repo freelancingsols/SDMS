@@ -63,14 +63,15 @@ jobs:
           cache: 'npm'
           cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package.json
 
-      - name: Install Angular dependencies and generate package-lock.json
+      - name: Remove old package-lock.json and node_modules
         working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
         run: |
-          npm install
-          # Ensure package-lock.json is created
-          if [ ! -f package-lock.json ]; then
-            npm install --package-lock-only
-          fi
+          rm -f package-lock.json
+          rm -rf node_modules || true
+
+      - name: Install Angular dependencies
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
+        run: npm install --legacy-peer-deps
 
       - name: Build Angular app (Development) - Build Node code first
         working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
@@ -112,14 +113,15 @@ jobs:
           cache: 'npm'
           cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package.json
 
-      - name: Install Angular dependencies and generate package-lock.json
+      - name: Remove old package-lock.json and node_modules
         working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
         run: |
-          npm install
-          # Ensure package-lock.json is created
-          if [ ! -f package-lock.json ]; then
-            npm install --package-lock-only
-          fi
+          rm -f package-lock.json
+          rm -rf node_modules || true
+
+      - name: Install Angular dependencies
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
+        run: npm install --legacy-peer-deps
 
       - name: Build Angular app (Production) - Build Node code first
         working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
@@ -165,14 +167,15 @@ jobs:
           cache: 'npm'
           cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package.json
 
-      - name: Install Angular dependencies and generate package-lock.json
+      - name: Remove old package-lock.json and node_modules
         working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
         run: |
-          npm install
-          # Ensure package-lock.json is created
-          if [ ! -f package-lock.json ]; then
-            npm install --package-lock-only
-          fi
+          rm -f package-lock.json
+          rm -rf node_modules || true
+
+      - name: Install Angular dependencies
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
+        run: npm install --legacy-peer-deps
 
       - name: Run .NET tests (if any)
         working-directory: SDMSApps/SDMS.AuthenticationWebApp

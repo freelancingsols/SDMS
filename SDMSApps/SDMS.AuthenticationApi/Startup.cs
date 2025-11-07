@@ -175,7 +175,7 @@ namespace SDMS.AuthenticationApi
                 options.KnownNetworks.Clear();
                 options.KnownProxies.Clear();
             });
-            services.AddTransient<IReturnUrlParser, AuthenticationApi.Helper.ReturnUrlParser>();
+            services.AddTransient<IReturnUrlParser, SDMS.AuthenticationApi.Helper.ReturnUrlParser>();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

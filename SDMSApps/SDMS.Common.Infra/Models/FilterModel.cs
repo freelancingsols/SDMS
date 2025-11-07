@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
-using static SDSM.Common.Infra.Constants.Enums;
+using static SDMS.Common.Infra.Constants.Enums;
 
 namespace SDMS.Common.Infra.Models
 {

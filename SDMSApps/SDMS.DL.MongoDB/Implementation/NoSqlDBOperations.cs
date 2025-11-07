@@ -8,7 +8,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
-using static SDSM.Common.Infra.Constants.Enums;
+using static SDMS.Common.Infra.Constants.Enums;
 
 namespace SDMS.DL.MongoDB.Implementation
 {

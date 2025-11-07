@@ -1,6 +1,6 @@
 ﻿using SDMS.Common.Infra.Attributes;
 using SDMS.Common.Infra.Models;
-using static SDSM.Common.Infra.Constants.Enums;
+using static SDMS.Common.Infra.Constants.Enums;
 
 
 namespace SDMS.Models.ContentManagementModels

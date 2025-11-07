@@ -10,7 +10,7 @@ using SDMS.Common.Infra.Attributes;
 using System.Linq;
 using MySql.Data.MySqlClient;
 using System.Data;
-using static SDSM.Common.Infra.Constants.Enums;
+using static SDMS.Common.Infra.Constants.Enums;
 using SDMS.Common.Infra.Constants;
 using System.Text.RegularExpressions;
 

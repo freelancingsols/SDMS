@@ -1,4 +1,4 @@
-name: CI - Build, Test, and Lint
+name: CI - Authentication WebApp (Build, Test, and Lint)
 
 on:
   push:
@@ -8,6 +8,9 @@ on:
       - develop
       - release
       - Release
+    paths:
+      - 'SDMSApps/SDMS.AuthenticationWebApp/**'
+      - '.github/workflows/ci-authentication-webapp.yml'
   pull_request:
     branches:
       - main
@@ -15,6 +18,9 @@ on:
       - develop
       - release
       - Release
+    paths:
+      - 'SDMSApps/SDMS.AuthenticationWebApp/**'
+      - '.github/workflows/ci-authentication-webapp.yml'
 
 jobs:
   lint:
@@ -33,6 +39,7 @@ jobs:
         run: dotnet tool install -g dotnet-format
 
       - name: Run dotnet format (check)
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp
         run: dotnet format --verify-no-changes --verbosity diagnostic
         continue-on-error: true
 
@@ -53,29 +60,31 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: ClientApp/package-lock.json
+          cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package-lock.json
 
       - name: Restore .NET dependencies
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp
         run: dotnet restore
 
       - name: Install Angular dependencies
-        working-directory: ClientApp
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
         run: npm ci
 
       - name: Build Angular app (Development)
-        working-directory: ClientApp
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
         run: npm run build
 
       - name: Build .NET app (Development)
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp
         run: dotnet build --configuration Debug --no-restore
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-dev
+          name: build-dev-auth
           path: |
-            bin/Debug
-            ClientApp/dist
+            SDMSApps/SDMS.AuthenticationWebApp/bin/Debug
+            SDMSApps/SDMS.AuthenticationWebApp/ClientApp/dist
           retention-days: 1
 
   build-prod:
@@ -95,32 +104,35 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: ClientApp/package-lock.json
+          cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package-lock.json
 
       - name: Restore .NET dependencies
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp
         run: dotnet restore
 
       - name: Install Angular dependencies
-        working-directory: ClientApp
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
         run: npm ci
 
       - name: Build Angular app (Production)
-        working-directory: ClientApp
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
         run: npm run build
 
       - name: Build .NET app (Production)
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp
         run: dotnet build --configuration Release --no-restore
 
       - name: Publish .NET app
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp
         run: dotnet publish --configuration Release --no-build --output ./publish
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-prod
+          name: build-prod-auth
           path: |
-            publish
-            ClientApp/dist
+            SDMSApps/SDMS.AuthenticationWebApp/publish
+            SDMSApps/SDMS.AuthenticationWebApp/ClientApp/dist
           retention-days: 7
 
   test:
@@ -140,16 +152,18 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: ClientApp/package-lock.json
+          cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package-lock.json
 
       - name: Restore .NET dependencies
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp
         run: dotnet restore
 
       - name: Install Angular dependencies
-        working-directory: ClientApp
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
         run: npm ci
 
       - name: Run .NET tests (if any)
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp
         run: |
           # Find and run test projects
           find . -name "*.Tests.csproj" -o -name "*Test.csproj" | while read testproj; do
@@ -160,7 +174,7 @@ jobs:
         continue-on-error: true
 
       - name: Run Angular tests
-        working-directory: ClientApp
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
         run: |
           if [ -f "package.json" ]; then
             if grep -q '"test:ci"' package.json; then
@@ -177,8 +191,8 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: dotnet-test-results
-          path: "**/TestResults/*.trx"
+          name: dotnet-test-results-auth
+          path: "SDMSApps/SDMS.AuthenticationWebApp/**/TestResults/*.trx"
           retention-days: 7
           if-no-files-found: ignore
 
@@ -186,8 +200,8 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: angular-test-results
-          path: ClientApp/coverage
+          name: angular-test-results-auth
+          path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/coverage
           retention-days: 7
           if-no-files-found: ignore
 

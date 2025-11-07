@@ -1,0 +1,11 @@
+bin/
+obj/
+*.user
+*.suo
+*.cache
+appsettings.Development.json
+signing-key.pem
+*.db
+*.db-shm
+*.db-wal
+

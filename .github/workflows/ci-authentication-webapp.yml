@@ -21,6 +21,7 @@ on:
     paths:
       - 'SDMSApps/SDMS.AuthenticationWebApp/**'
       - '.github/workflows/ci-authentication-webapp.yml'
+  workflow_dispatch:
 
 jobs:
   lint:
@@ -60,7 +61,7 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package-lock.json
+          cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package.json
 
       - name: Restore .NET dependencies
         working-directory: SDMSApps/SDMS.AuthenticationWebApp
@@ -104,7 +105,7 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package-lock.json
+          cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package.json
 
       - name: Restore .NET dependencies
         working-directory: SDMSApps/SDMS.AuthenticationWebApp
@@ -152,7 +153,7 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package-lock.json
+          cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package.json
 
       - name: Restore .NET dependencies
         working-directory: SDMSApps/SDMS.AuthenticationWebApp

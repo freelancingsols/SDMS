@@ -8,11 +8,13 @@ All CI/CD workflows are located at the repository root level in `.github/workflo
 
 1. **`ci-b2c-webapp.yml`** - CI workflow for B2C WebApp
    - Runs on: push/PR to main, master, develop, release branches
+   - **Manual trigger:** Yes (via GitHub Actions UI)
    - Jobs: Lint, Build (Dev), Build (Prod), Test, CI Complete
    - Triggers only when files in `SDMSApps/SDMS.EndUserWebApp/` are changed
 
 2. **`deploy-b2c-vercel.yml`** - Deployment workflow for B2C WebApp
    - Runs on: push to `release` branch
+   - **Manual trigger:** Yes (via GitHub Actions UI)
    - Deploys to: Vercel
    - Triggers only when files in `SDMSApps/SDMS.EndUserWebApp/` are changed
 
@@ -20,11 +22,13 @@ All CI/CD workflows are located at the repository root level in `.github/workflo
 
 1. **`ci-authentication-webapp.yml`** - CI workflow for Authentication WebApp
    - Runs on: push/PR to main, master, develop, release branches
+   - **Manual trigger:** Yes (via GitHub Actions UI)
    - Jobs: Lint (.NET format), Build (Dev), Build (Prod), Test (.NET + Angular), CI Complete
    - Triggers only when files in `SDMSApps/SDMS.AuthenticationWebApp/` are changed
 
 2. **`deploy-auth-railway.yml`** - Deployment workflow for Authentication WebApp
    - Runs on: push to `release` branch
+   - **Manual trigger:** Yes (via GitHub Actions UI)
    - Deploys to: Railway
    - Triggers only when files in `SDMSApps/SDMS.AuthenticationWebApp/` are changed
 
@@ -48,11 +52,27 @@ Each workflow uses `paths` filter to only trigger when relevant project files ch
 
 This ensures workflows only run when their respective project files are modified.
 
-## Viewing Workflows in GitHub
+## Viewing and Running Workflows in GitHub
 
 After pushing these files to your repository, you can view them in:
 - **GitHub Repository** → **Actions** tab
 - Each workflow will appear as a separate workflow with its own run history
+
+### Manual Trigger (Run on Click)
+
+All workflows support **manual triggering** via the GitHub Actions UI:
+
+1. Go to **GitHub Repository** → **Actions** tab
+2. Select the workflow you want to run (e.g., "CI - B2C WebApp")
+3. Click **"Run workflow"** button on the right
+4. Select the branch to run from
+5. Click **"Run workflow"** to start
+
+This is useful for:
+- Testing workflows without pushing code
+- Re-running failed workflows
+- Running CI checks on demand
+- Deploying manually when needed
 
 ## Notes
 

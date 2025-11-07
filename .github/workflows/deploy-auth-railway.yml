@@ -27,7 +27,7 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package-lock.json
+          cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package.json
 
       - name: Restore dependencies
         working-directory: SDMSApps/SDMS.AuthenticationWebApp

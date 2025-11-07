@@ -21,6 +21,7 @@ on:
     paths:
       - 'SDMSApps/SDMS.EndUserWebApp/**'
       - '.github/workflows/ci-b2c-webapp.yml'
+  workflow_dispatch:
 
 jobs:
   lint:

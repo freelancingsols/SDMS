@@ -4,14 +4,14 @@
     <TargetFramework>netcoreapp3.1</TargetFramework>
     <PackageLicenseExpression>MIT OR Apache-2.0</PackageLicenseExpression>
     <Version>1.0.0.0</Version>
-    <AssemblyName>SDSM.BL.Common</AssemblyName>
-    <RootNamespace>SDSM.BL.Common</RootNamespace>
+    <AssemblyName>SDMS.BL.Common</AssemblyName>
+    <RootNamespace>SDMS.BL.Common</RootNamespace>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
     <FileVersion>1.0.0.0</FileVersion>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="SDSM.Models" Version="1.0.0.1" />
-    <PackageReference Include="SDSM.ViewModels" Version="1.0.0" />
+    <PackageReference Include="SDMS.Models" Version="1.0.0.1" />
+    <PackageReference Include="SDMS.ViewModels" Version="1.0.0" />
   </ItemGroup>
 </Project>

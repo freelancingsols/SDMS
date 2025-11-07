@@ -10,9 +10,9 @@
 
     <!-- Set this to true if you enable server-side prerendering -->
     <BuildServerSideRenderer>false</BuildServerSideRenderer>
-    <AssemblyName>SDSM.BackOfficeWebApp</AssemblyName>
-    <StartupObject>SDSM.BackOfficeWebApp.Program</StartupObject>
-    <RootNamespace>SDSM.BackOfficeWebApp</RootNamespace>
+    <AssemblyName>SDMS.BackOfficeWebApp</AssemblyName>
+    <StartupObject>SDMS.BackOfficeWebApp.Program</StartupObject>
+    <RootNamespace>SDMS.BackOfficeWebApp</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>

@@ -10,9 +10,9 @@
 
     <!-- Set this to true if you enable server-side prerendering -->
     <BuildServerSideRenderer>false</BuildServerSideRenderer>
-    <AssemblyName>SDSM.DeliveryPartnerWebApp</AssemblyName>
-    <StartupObject>SDSM.DeliveryPartnerWebApp.Program</StartupObject>
-    <RootNamespace>SDSM.DeliveryPartnerWebApp</RootNamespace>
+    <AssemblyName>SDMS.DeliveryPartnerWebApp</AssemblyName>
+    <StartupObject>SDMS.DeliveryPartnerWebApp.Program</StartupObject>
+    <RootNamespace>SDMS.DeliveryPartnerWebApp</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>

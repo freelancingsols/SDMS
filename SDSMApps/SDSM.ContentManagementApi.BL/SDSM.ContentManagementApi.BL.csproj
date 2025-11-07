@@ -6,8 +6,8 @@
 		<TargetFramework>netcoreapp3.1</TargetFramework>
 		<PackageLicenseExpression>MIT OR Apache-2.0</PackageLicenseExpression>
 		<Version>1.0.0.2</Version>
-		<AssemblyName>SDSM.ContentManagementApi.BL</AssemblyName>
-		<RootNamespace>SDSM.ContentManagementApi.BL</RootNamespace>
+		<AssemblyName>SDMS.ContentManagementApi.BL</AssemblyName>
+		<RootNamespace>SDMS.ContentManagementApi.BL</RootNamespace>
 		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 		<AssemblyVersion>1.0.0.2</AssemblyVersion>
 		<FileVersion>1.0.0.2</FileVersion>
@@ -15,8 +15,8 @@
 
  
 	<ItemGroup>
-    <PackageReference Include="SDSM.BL.Common" Version="1.0.0" />
-	  <PackageReference Include="SDSM.DL.MySql" Version="1.0.0.1" />
+    <PackageReference Include="SDMS.BL.Common" Version="1.0.0" />
+	  <PackageReference Include="SDMS.DL.MySql" Version="1.0.0.1" />
 	</ItemGroup>
 
 

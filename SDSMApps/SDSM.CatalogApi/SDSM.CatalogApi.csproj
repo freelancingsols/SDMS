@@ -2,9 +2,9 @@
 
   <PropertyGroup>
     <TargetFramework>netcoreapp3.1</TargetFramework>
-    <RootNamespace>SDSM.CatalogApi</RootNamespace>
-    <AssemblyName>SDSM.CatalogApi</AssemblyName>
-    <StartupObject>SDSM.CatalogApi.Program</StartupObject>
+    <RootNamespace>SDMS.CatalogApi</RootNamespace>
+    <AssemblyName>SDMS.CatalogApi</AssemblyName>
+    <StartupObject>SDMS.CatalogApi.Program</StartupObject>
   </PropertyGroup>
 
 

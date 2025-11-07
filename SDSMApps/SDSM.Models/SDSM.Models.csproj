@@ -4,8 +4,8 @@
     <TargetFramework>netcoreapp3.1</TargetFramework>
     <PackageLicenseExpression>MIT OR Apache-2.0</PackageLicenseExpression>
 	<Version>1.0.0.1</Version>
-    <AssemblyName>SDSM.Models</AssemblyName>
-    <RootNamespace>SDSM.Models</RootNamespace>
+    <AssemblyName>SDMS.Models</AssemblyName>
+    <RootNamespace>SDMS.Models</RootNamespace>
 	<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 	<AssemblyVersion>1.0.0.1</AssemblyVersion>
 	<FileVersion>1.0.0.1</FileVersion>
@@ -14,7 +14,7 @@
 
 
   <ItemGroup>
-    <PackageReference Include="SDSM.Common.Infra" Version="1.0.0.8" />
+    <PackageReference Include="SDMS.Common.Infra" Version="1.0.0.8" />
   </ItemGroup>
 
  

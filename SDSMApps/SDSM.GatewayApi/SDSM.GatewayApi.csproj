@@ -2,9 +2,9 @@
 
   <PropertyGroup>
     <TargetFramework>netcoreapp3.1</TargetFramework>
-    <AssemblyName>SDSM.GatewayApi</AssemblyName>
-    <RootNamespace>SDSM.GatewayApi</RootNamespace>
-    <StartupObject>SDSM.GatewayApi.Program</StartupObject>
+    <AssemblyName>SDMS.GatewayApi</AssemblyName>
+    <RootNamespace>SDMS.GatewayApi</RootNamespace>
+    <StartupObject>SDMS.GatewayApi.Program</StartupObject>
   </PropertyGroup>
 
   <ItemGroup>

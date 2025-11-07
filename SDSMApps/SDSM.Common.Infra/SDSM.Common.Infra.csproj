@@ -7,8 +7,8 @@
     <AssemblyVersion>1.0.0.8</AssemblyVersion>
     <FileVersion>1.0.0.8</FileVersion>
     <Version>1.0.0.8</Version>
-    <AssemblyName>SDSM.Common.Infra</AssemblyName>
-    <RootNamespace>SDSM.Common.Infra</RootNamespace>
+    <AssemblyName>SDMS.Common.Infra</AssemblyName>
+    <RootNamespace>SDMS.Common.Infra</RootNamespace>
   </PropertyGroup>
 
 </Project>

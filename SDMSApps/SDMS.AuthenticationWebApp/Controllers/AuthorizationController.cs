@@ -3,9 +3,11 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
+using SDMS.AuthenticationWebApp.Constants;
 using SDMS.AuthenticationWebApp.Models;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
@@ -50,14 +52,17 @@ public class AuthorizationController : Controller
         // If the user can't be extracted, redirect them to the login page.
         if (!result.Succeeded || result.Principal == null)
         {
+            // Get configured login URL from configuration
+            var configuration = HttpContext.RequestServices.GetRequiredService<IConfiguration>();
+            var loginUrl = configuration[ConfigurationKeys.AuthenticationLoginUrl] ?? "/login";
+            var returnUrlParameter = configuration[ConfigurationKeys.AuthenticationReturnUrlParameter] ?? "ReturnUrl";
+            
+            // Build return URL with all query parameters
+            var returnUrl = Request.PathBase + Request.Path + QueryString.Create(
+                Request.HasFormContentType ? Request.Form.ToList() : Request.Query.ToList());
+            
             // Redirect to login page with return URL
-            return Challenge(
-                authenticationSchemes: IdentityConstants.ApplicationScheme,
-                properties: new AuthenticationProperties
-                {
-                    RedirectUri = Request.PathBase + Request.Path + QueryString.Create(
-                        Request.HasFormContentType ? Request.Form.ToList() : Request.Query.ToList())
-                });
+            return Redirect($"{loginUrl}?{returnUrlParameter}={Uri.EscapeDataString(returnUrl)}");
         }
 
         // Retrieve the profile of the logged-in user.

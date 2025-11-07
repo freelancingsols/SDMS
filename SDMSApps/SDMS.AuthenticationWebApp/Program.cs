@@ -6,10 +6,13 @@ using Microsoft.IdentityModel.Tokens;
 using OpenIddict.Abstractions;
 using OpenIddict.EntityFrameworkCore.Models;
 using OpenIddict.Server.AspNetCore;
+using SDMS.AuthenticationWebApp.Constants;
 using SDMS.AuthenticationWebApp.Data;
 using SDMS.AuthenticationWebApp.Models;
 using SDMS.AuthenticationWebApp.Services;
 using static OpenIddict.Abstractions.OpenIddictConstants;
+using Microsoft.Extensions.FileProviders;
+using System.Net;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,8 +22,8 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Database
-var connectionString = builder.Configuration["POSTGRES_CONNECTION"] 
-    ?? builder.Configuration.GetConnectionString("DefaultConnection")
+var connectionString = builder.Configuration[ConfigurationKeys.PostgresConnection] 
+    ?? builder.Configuration[ConfigurationKeys.DefaultConnection]
     ?? "Host=localhost;Database=sdms_auth;Username=postgres;Password=postgres";
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -43,7 +46,11 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 .AddEntityFrameworkStores<ApplicationDbContext>()
 .AddDefaultTokenProviders();
 
-// OpenIddict
+// OpenIddict Configuration
+// Note: OpenIddict doesn't have a direct UserInteraction.LoginUrl like IdentityServer4.
+// Instead, the login URL is configured via cookie authentication (see below).
+// When /connect/authorize is called without authentication, AuthorizationController
+// redirects to the login page configured in Authentication:LoginUrl (default: "/login").
 builder.Services.AddOpenIddict()
     .AddCore(options =>
     {
@@ -82,22 +89,30 @@ builder.Services.AddOpenIddict()
         options.UseAspNetCore();
     });
 
-// Authentication
+// Authentication - configure login interaction similar to IdentityServer4 UserInteraction
+var loginUrl = builder.Configuration[ConfigurationKeys.AuthenticationLoginUrl] ?? "/login";
+var logoutUrl = builder.Configuration[ConfigurationKeys.AuthenticationLogoutUrl] ?? "/logout";
+var errorUrl = builder.Configuration[ConfigurationKeys.AuthenticationErrorUrl] ?? "/login";
+var returnUrlParameter = builder.Configuration[ConfigurationKeys.AuthenticationReturnUrlParameter] ?? "ReturnUrl";
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultScheme = IdentityConstants.ApplicationScheme;
     options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
+    options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme;
 })
 .AddCookie(IdentityConstants.ApplicationScheme, options =>
 {
-    options.LoginPath = "/Account/Login";
-    options.LogoutPath = "/Account/Logout";
+    options.LoginPath = loginUrl;
+    options.LogoutPath = logoutUrl;
+    options.AccessDeniedPath = errorUrl;
+    options.ReturnUrlParameter = returnUrlParameter;
 })
 .AddCookie(IdentityConstants.ExternalScheme)
 .AddGoogle(options =>
 {
-    var clientId = builder.Configuration["ExternalAuth:Google:ClientId"];
-    var clientSecret = builder.Configuration["ExternalAuth:Google:ClientSecret"];
+    var clientId = builder.Configuration[ConfigurationKeys.ExternalAuthGoogleClientId];
+    var clientSecret = builder.Configuration[ConfigurationKeys.ExternalAuthGoogleClientSecret];
     
     if (!string.IsNullOrEmpty(clientId) && !string.IsNullOrEmpty(clientSecret))
     {
@@ -107,6 +122,45 @@ builder.Services.AddAuthentication(options =>
         options.SaveTokens = true;
         options.GetClaimsFromUserInfoEndpoint = true;
     }
+});
+
+// Authorization - configure to redirect to login for unauthorized requests
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("RequireAuthentication", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+    });
+});
+
+// Configure authentication options
+// Redirect to login only when user is unauthorized or token is invalid
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.LoginPath = loginUrl;
+    options.LogoutPath = logoutUrl;
+    options.AccessDeniedPath = errorUrl;
+    options.ReturnUrlParameter = returnUrlParameter;
+    
+    // Only redirect to login when user is unauthorized or token is invalid
+    // OnRedirectToLogin is only called when authentication is required but user is not authenticated
+    options.Events.OnRedirectToLogin = context =>
+    {
+        // For API calls, always return 401 instead of redirecting
+        if (context.Request.Path.StartsWithSegments("/api") || 
+            context.Request.Path.StartsWithSegments("/connect/token") ||
+            context.Request.Path.StartsWithSegments("/connect/userinfo"))
+        {
+            context.Response.StatusCode = 401;
+            return Task.CompletedTask;
+        }
+        
+        // For browser requests: redirect to login when unauthorized
+        // (OnRedirectToLogin is only called when user is unauthorized or token is invalid)
+        var returnUrl = context.Request.Path + context.Request.QueryString;
+        context.Response.Redirect($"{loginUrl}?{returnUrlParameter}={Uri.EscapeDataString(returnUrl)}");
+        return Task.CompletedTask;
+    };
 });
 
 // Services
@@ -122,7 +176,7 @@ builder.Services.AddCors(options =>
         policy.WithOrigins(
             "http://localhost:4200",
             "https://localhost:4200",
-            builder.Configuration["Frontend:Url"] ?? "http://localhost:4200")
+            builder.Configuration[ConfigurationKeys.FrontendUrl] ?? "http://localhost:4200")
             .AllowAnyMethod()
             .AllowAnyHeader()
             .AllowCredentials();
@@ -145,6 +199,43 @@ app.UseAuthorization();
 
 // Map controllers - OpenIddict endpoints are handled automatically by middleware
 app.MapControllers();
+
+// Serve static files from Angular build output
+var angularDistPath = Path.Combine(builder.Environment.ContentRootPath, "ClientApp", "dist", "sdms-auth-client");
+var wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
+
+var fileProvider = new CompositeFileProvider(
+    new List<IFileProvider>()
+    {
+        new PhysicalFileProvider(angularDistPath),
+        new PhysicalFileProvider(wwwrootPath)
+    }
+);
+
+// SPA fallback: redirect non-API routes to index.html
+app.Use(async (HttpContext context, Func<Task> next) =>
+{
+    await next.Invoke();
+    if (context.Response.StatusCode == (int)HttpStatusCode.NotFound 
+        && !context.Request.Path.Value.StartsWith("/api")
+        && !context.Request.Path.Value.StartsWith("/connect")
+        && !context.Request.Path.Value.StartsWith("/swagger"))
+    {
+        context.Request.Path = new PathString("/index.html");
+        await next.Invoke();
+    }
+});
+
+app.UseDefaultFiles(new DefaultFilesOptions()
+{
+    FileProvider = fileProvider,
+    DefaultFileNames = new List<string>() { "index.html" }
+});
+
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = fileProvider
+});
 
 // Initialize database and OpenIddict
 using (var scope = app.Services.CreateScope())

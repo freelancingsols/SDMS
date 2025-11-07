@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
+using SDMS.AuthenticationWebApp.Constants;
 using SDMS.AuthenticationWebApp.Models;
 using System.Text.Json;
 
@@ -32,7 +33,7 @@ public class WebhookController : ControllerBase
         try
         {
             // Validate webhook secret if configured
-            var webhookSecret = _configuration["Webhook:Secret"];
+            var webhookSecret = _configuration[ConfigurationKeys.WebhookSecret];
             if (!string.IsNullOrEmpty(webhookSecret))
             {
                 var providedSecret = Request.Headers["X-Webhook-Secret"].FirstOrDefault();

@@ -1,0 +1,9 @@
+F:\wp\2\SDMS\SDMSApps\SDMS.Common.Infra\bin\Debug\netcoreapp3.1\SDMS.Common.Infra.deps.json
+F:\wp\2\SDMS\SDMSApps\SDMS.Common.Infra\bin\Debug\netcoreapp3.1\SDMS.Common.Infra.dll
+F:\wp\2\SDMS\SDMSApps\SDMS.Common.Infra\bin\Debug\netcoreapp3.1\SDMS.Common.Infra.pdb
+F:\wp\2\SDMS\SDMSApps\SDMS.Common.Infra\obj\Debug\netcoreapp3.1\SDMS.Common.Infra.csprojAssemblyReference.cache
+F:\wp\2\SDMS\SDMSApps\SDMS.Common.Infra\obj\Debug\netcoreapp3.1\SDMS.Common.Infra.AssemblyInfoInputs.cache
+F:\wp\2\SDMS\SDMSApps\SDMS.Common.Infra\obj\Debug\netcoreapp3.1\SDMS.Common.Infra.AssemblyInfo.cs
+F:\wp\2\SDMS\SDMSApps\SDMS.Common.Infra\obj\Debug\netcoreapp3.1\SDMS.Common.Infra.csproj.CoreCompileInputs.cache
+F:\wp\2\SDMS\SDMSApps\SDMS.Common.Infra\obj\Debug\netcoreapp3.1\SDMS.Common.Infra.dll
+F:\wp\2\SDMS\SDMSApps\SDMS.Common.Infra\obj\Debug\netcoreapp3.1\SDMS.Common.Infra.pdb

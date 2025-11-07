@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "dgSpecHash": "URg662wEFtiT8bbpEfQv/gsQucOkkIljsXZhuc6DWImkfx1zqvcW2t5EyzrZ9YCwZUyRZPrT5poVGCJmehEOkw==",
+  "success": true,
+  "projectFilePath": "F:\\wp\\2\\SDMS\\SDMSApps\\SDMS.DL.PostgreSQL\\SDMS.DL.PostgreSQL.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\saurabh\\.nuget\\packages\\microsoft.extensions.configuration.abstractions\\3.1.7\\microsoft.extensions.configuration.abstractions.3.1.7.nupkg.sha512",
+    "C:\\Users\\saurabh\\.nuget\\packages\\microsoft.extensions.primitives\\3.1.7\\microsoft.extensions.primitives.3.1.7.nupkg.sha512",
+    "C:\\Users\\saurabh\\.nuget\\packages\\npgsql\\4.1.9\\npgsql.4.1.9.nupkg.sha512",
+    "C:\\Users\\saurabh\\.nuget\\packages\\system.runtime.compilerservices.unsafe\\4.6.0\\system.runtime.compilerservices.unsafe.4.6.0.nupkg.sha512"
+  ],
+  "logs": []
+}

@@ -1,11 +1,33 @@
+# Build outputs
 bin/
 obj/
-*.user
-*.suo
-*.cache
-appsettings.Development.json
-signing-key.pem
+publish/
+
+# Environment files
+.env
+.env.local
+appsettings.Production.json.local
+
+# Database
 *.db
 *.db-shm
 *.db-wal
 
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Certificates
+*.pem
+*.key
+*.pfx
+signing-key.pem

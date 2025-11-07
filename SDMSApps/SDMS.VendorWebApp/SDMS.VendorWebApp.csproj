@@ -11,8 +11,11 @@
     <!-- Set this to true if you enable server-side prerendering -->
     <BuildServerSideRenderer>false</BuildServerSideRenderer>
     <AssemblyName>SDMS.VendorWebApp</AssemblyName>
-    <StartupObject>SDMS.VendorWebApp.Program</StartupObject>
     <RootNamespace>SDMS.VendorWebApp</RootNamespace>
+    
+    <!-- Frontend-only project - no backend entry point required -->
+    <OutputType>Library</OutputType>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>
 
   <ItemGroup>
@@ -28,6 +31,18 @@
     <Content Remove="$(SpaRoot)**" />
     <None Remove="$(SpaRoot)**" />
     <None Include="$(SpaRoot)**" Exclude="$(SpaRoot)node_modules\**" />
+    
+    <!-- Exclude backend files since this is frontend-only -->
+    <Compile Remove="Pages/**" />
+    <Compile Remove="Program.cs" />
+    <Compile Remove="Startup.cs" />
+    <Content Remove="Pages/**" />
+    <Content Remove="appsettings*.json" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <None Remove="Pages/**" />
+    <None Remove="appsettings*.json" />
   </ItemGroup>
 
   <Target Name="DebugEnsureNodeEnv" BeforeTargets="Build" Condition=" '$(Configuration)' == 'Debug' And !Exists('$(SpaRoot)node_modules') ">
@@ -43,7 +58,7 @@
   <Target Name="PublishRunWebpack" AfterTargets="ComputeFilesToPublish">
     <!-- As part of publishing, ensure the JS resources are freshly built in production mode -->
     <Exec WorkingDirectory="$(SpaRoot)" Command="npm install" />
-    <Exec WorkingDirectory="$(SpaRoot)" Command="npm run build -- --prod" />
+    <Exec WorkingDirectory="$(SpaRoot)" Command="npm run build:prod" />
     <Exec WorkingDirectory="$(SpaRoot)" Command="npm run build:ssr -- --prod" Condition=" '$(BuildServerSideRenderer)' == 'true' " />
 
     <!-- Include the newly-built files in the publish output -->

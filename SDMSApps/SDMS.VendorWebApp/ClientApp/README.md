@@ -1,27 +1,81 @@
-# WebApp
+# Vendor Web App - Angular 18 PWA
 
-This project was generated with [Angular CLI](https://github.com/angular/angular-cli) version 8.3.26.
+This is a Progressive Web Application (PWA) built with Angular 18 for the Vendor portal.
 
-## Development server
+## Features
 
-Run `ng serve` for a dev server. Navigate to `http://localhost:4200/`. The app will automatically reload if you change any of the source files.
+- **Angular 18**: Latest Angular version with standalone components
+- **PWA Support**: Service Worker enabled for offline functionality
+- **Standalone Components**: Modern Angular architecture
+- **TypeScript 5.4**: Latest TypeScript version
 
-## Code scaffolding
+## Getting Started
 
-Run `ng generate component component-name` to generate a new component. You can also use `ng generate directive|pipe|service|class|guard|interface|enum|module`.
+### Prerequisites
 
-## Build
+- Node.js (v18 or higher)
+- npm (v9 or higher)
 
-Run `ng build` to build the project. The build artifacts will be stored in the `dist/` directory. Use the `--prod` flag for a production build.
+### Installation
 
-## Running unit tests
+1. Navigate to the ClientApp directory:
+```bash
+cd ClientApp
+```
 
-Run `ng test` to execute the unit tests via [Karma](https://karma-runner.github.io).
+2. Install dependencies:
+```bash
+npm install
+```
 
-## Running end-to-end tests
+### Development
 
-Run `ng e2e` to execute the end-to-end tests via [Protractor](http://www.protractortest.org/).
+Run the development server:
+```bash
+npm start
+```
 
-## Further help
+The app will be available at `http://localhost:4200/`
 
-To get more help on the Angular CLI use `ng help` or go check out the [Angular CLI README](https://github.com/angular/angular-cli/blob/master/README.md).
+### Building for Production
+
+Build the application:
+```bash
+npm run build
+```
+
+The production build will be in the `dist/vendor-web-app` directory.
+
+## Project Structure
+
+```
+ClientApp/
+├── src/
+│   ├── app/
+│   │   ├── app.component.ts      # Root component
+│   │   ├── app.routes.ts         # Route configuration
+│   │   └── app.config.ts         # App configuration
+│   ├── assets/                   # Static assets
+│   ├── index.html                # Main HTML file
+│   ├── main.ts                   # Bootstrap file
+│   ├── manifest.webmanifest      # PWA manifest
+│   └── styles.css                # Global styles
+├── angular.json                  # Angular CLI configuration
+├── ngsw-config.json              # Service Worker configuration
+├── package.json                  # Dependencies
+└── tsconfig.json                 # TypeScript configuration
+```
+
+## PWA Features
+
+- Service Worker for offline support
+- Web App Manifest for installability
+- App icons for different sizes
+- Theme color configuration
+
+## Notes
+
+- This is a frontend-only application
+- No backend files (Program.cs, Startup.cs) are included
+- The .csproj file is minimal and only used for solution integration
+

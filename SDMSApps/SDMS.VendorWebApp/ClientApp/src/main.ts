@@ -1,14 +1,18 @@
-import { enableProdMode } from '@angular/core';
-import { platformBrowserDynamic } from '@angular/platform-browser-dynamic';
+import { bootstrapApplication } from '@angular/platform-browser';
+import { provideRouter } from '@angular/router';
+import { provideServiceWorker } from '@angular/service-worker';
+import { isDevMode } from '@angular/core';
 
-import { AppModule } from './app/app.module';
-import { environment } from './environments/environment';
+import { AppComponent } from './app/app.component';
+import { routes } from './app/app.routes';
 
-if (environment.production) {
-  enableProdMode();
-}
+bootstrapApplication(AppComponent, {
+  providers: [
+    provideRouter(routes),
+    provideServiceWorker('ngsw-worker.js', {
+      enabled: !isDevMode(),
+      registrationStrategy: 'registerWhenStable:30000'
+    })
+  ]
+}).catch(err => console.error(err));
 
-document.addEventListener('DOMContentLoaded', () => {
-  platformBrowserDynamic().bootstrapModule(AppModule)
-  .catch(err => console.error(err));
-});

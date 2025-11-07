@@ -1,59 +1,41 @@
 import { BrowserModule } from '@angular/platform-browser';
 import { NgModule } from '@angular/core';
-// import { FormsModule } from '@angular/forms';
+import { FormsModule } from '@angular/forms';
 import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
 import { RouterModule } from '@angular/router';
 import { ServiceWorkerModule } from '@angular/service-worker';
 import { environment } from '../environments/environment';
-import { ApiAuthorizationModule } from './api-authorization/api-authorization.module';
-import { AuthorizeInterceptor } from './api-authorization/authorize.interceptor';
 import { FrameworkModule } from './framework/framework.module';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { TestComponent } from './Components/test/test.component';
-import { LoginComponent } from './api-authorization/login/login.component';
-// import { NavMenuComponent } from './nav-menu/nav-menu.component';
-// import { CounterComponent } from './counter/counter.component';
-// import { FetchDataComponent } from './fetch-data/fetch-data.component';
-// import { ApiAuthorizationModule } from 'src/api-authorization/api-authorization.module';
-// import { AuthorizeGuard } from 'src/api-authorization/authorize.guard';
-// import { AuthorizeInterceptor } from 'src/api-authorization/authorize.interceptor';
-// import { LibModule,LibComponent } from 'lib';
+import { OAuthModule } from 'angular-oauth2-oidc';
+import { AuthInterceptor } from './interceptors/auth.interceptor';
 
 @NgModule({
   declarations: [
     AppComponent,
     TestComponent
-  //   NavMenuComponent,
-  //   CounterComponent,
-  //   FetchDataComponent
   ],
   imports: [
-    BrowserModule.withServerTransition({ appId: 'serverApp' }),
+    BrowserModule,
     AppRoutingModule,
     HttpClientModule,
-    // FormsModule,
-    ApiAuthorizationModule,
+    FormsModule,
     RouterModule.forRoot([
-      { path: 'test', component:TestComponent },
-      { path: '**', redirectTo: '' }
-      //{ path: '', component: HomeComponent, pathMatch: 'full' },
-      //{ path: 'counter', component: CounterComponent },
-      //{ path: 'fetch-data', component: FetchDataComponent, canActivate: [AuthorizeGuard] },
+      { path: 'test', component: TestComponent },
+      { path: '', redirectTo: '/test', pathMatch: 'full' },
+      { path: '**', redirectTo: '/test' }
     ]),
-    RouterModule,
     ServiceWorkerModule.register('ngsw-worker.js', { enabled: environment.production }),
     FrameworkModule,
-    BrowserAnimationsModule
-// ,LibModule
+    BrowserAnimationsModule,
+    OAuthModule.forRoot()
   ],
   providers: [
-    { provide: HTTP_INTERCEPTORS, useClass: AuthorizeInterceptor, multi: true }
+    { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true }
   ],
-  bootstrap: [AppComponent
-    // NavMenuComponent,
-    // LibComponent
-  ]
+  bootstrap: [AppComponent]
 })
 export class AppModule { }

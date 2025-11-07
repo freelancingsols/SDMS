@@ -11,12 +11,12 @@ namespace SDMS.AuthenticationApi.Helper
     {
         public struct ClientIds
         {
-            public const string EndUserWebApp = "sdms.enduser.web.app";
+            public const string B2CWebApp = "sdms.b2c.web.app";
             public const string B2BWebApp = "sdms.b2b.web.app";
             public const string BackOfficeWebApp = "sdms.backoffice.web.app";
             public const string DeliveryPartnerWebApp = "sdms.deliverypartner.web.app";
             public const string VendorWebApp = "sdms.vendor.web.app";
-            public const string app2 = "sdms.enduser.web.app";
+            public const string app2 = "sdms.b2c.web.app";
         }
         public struct ClientNames
         {
@@ -53,7 +53,7 @@ namespace SDMS.AuthenticationApi.Helper
             {
             new Client
             {
-                ClientId = ClientIds.EndUserWebApp,
+                ClientId = ClientIds.B2CWebApp,
                 ClientName = ClientNames.app1,
                 AllowedGrantTypes = GrantTypes.Implicit,
                 ClientSecrets = { new Secret("02F97D49-18F8-4E20-AD8D-0EA51F3450A0".Sha256()) },

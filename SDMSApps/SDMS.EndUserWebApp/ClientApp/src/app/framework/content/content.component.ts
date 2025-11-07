@@ -1,19 +1,22 @@
 import { Component, OnInit } from '@angular/core';
 
-declare var particlesJS: any;
-
 @Component({
   selector: 'app-content',
   templateUrl: './content.component.html',
   styleUrls: ['./content.component.css']
 })
 export class ContentComponent implements OnInit {
+  // Dummy data for UI display
+  featuredItems = [
+    { id: 1, title: 'Featured Product 1', description: 'Description for featured product 1', image: 'assets/11.jpg' },
+    { id: 2, title: 'Featured Product 2', description: 'Description for featured product 2', image: 'assets/12.jpg' },
+    { id: 3, title: 'Featured Product 3', description: 'Description for featured product 3', image: 'assets/13.jpg' }
+  ];
 
   constructor() { }
 
   ngOnInit() {
-    // particlesJS.load('particles-js', 'particles.json', null);
-    particlesJS.load('particles-js', 'assets/data/particles1.json', function () { console.log('callback - particles.js config loaded'); });
+    // Using dummy data instead of API calls
+    console.log('Content component loaded with dummy data');
   }
-
 }

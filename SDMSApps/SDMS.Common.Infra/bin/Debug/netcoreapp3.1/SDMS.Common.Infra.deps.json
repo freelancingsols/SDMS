@@ -1,0 +1,23 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v3.1",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v3.1": {
+      "SDMS.Common.Infra/1.0.0.8": {
+        "runtime": {
+          "SDMS.Common.Infra.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "SDMS.Common.Infra/1.0.0.8": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

@@ -1,0 +1,69 @@
+name: Deploy Authentication WebApp to Railway
+
+on:
+  push:
+    branches:
+      - release
+      - Release
+    paths:
+      - 'SDMSApps/SDMS.AuthenticationWebApp/**'
+      - '.github/workflows/deploy-auth-railway.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package.json
+
+      - name: Remove old package-lock.json and node_modules
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
+        run: |
+          rm -f package-lock.json
+          rm -rf node_modules || true
+
+      - name: Install Angular dependencies
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
+        run: npm install --legacy-peer-deps
+
+      - name: Build Angular app - Build Node code first
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
+        run: npm run build -- --configuration production
+
+      - name: Restore .NET dependencies
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp
+        run: dotnet restore
+
+      - name: Build .NET app
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Publish .NET app
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp
+        run: dotnet publish --configuration Release --no-build --output ./publish
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy to Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp
+        run: |
+          railway login --token $RAILWAY_TOKEN
+          railway link ${{ secrets.RAILWAY_PROJECT_ID }}
+          railway up --service ${{ secrets.RAILWAY_SERVICE_ID }}
+

@@ -1,0 +1,55 @@
+name: Deploy B2C WebApp to Vercel
+
+on:
+  push:
+    branches:
+      - release
+      - Release
+    paths:
+      - 'SDMSApps/SDMS.B2CWebApp/**'
+      - '.github/workflows/deploy-b2c-vercel.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: SDMSApps/SDMS.B2CWebApp/ClientApp/package.json
+
+      - name: Remove old package-lock.json and node_modules
+        working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
+        run: |
+          rm -f package-lock.json
+          rm -rf node_modules || true
+
+      - name: Install dependencies
+        working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
+        run: npm install --legacy-peer-deps
+
+      - name: Build Angular app (Production)
+        working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
+        env:
+          API_URL: ${{ secrets.API_URL }}
+          AUTH_SERVER: ${{ secrets.AUTH_SERVER }}
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+        run: |
+          node build-env.js
+          npm run build:prod
+
+      - name: Deploy to Vercel
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
+          scope: ${{ secrets.VERCEL_ORG_ID }}
+

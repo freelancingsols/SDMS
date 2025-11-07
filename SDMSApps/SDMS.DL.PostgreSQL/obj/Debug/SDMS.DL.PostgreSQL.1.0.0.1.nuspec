@@ -1,0 +1,22 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
+  <metadata>
+    <id>SDMS.DL.PostgreSQL</id>
+    <version>1.0.0.1</version>
+    <authors>SDMS.DL.PostgreSQL</authors>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <license type="expression">MIT OR Apache-2.0</license>
+    <licenseUrl>https://licenses.nuget.org/MIT%20OR%20Apache-2.0</licenseUrl>
+    <description>Package Description</description>
+    <dependencies>
+      <group targetFramework=".NETCoreApp3.1">
+        <dependency id="SDMS.Common.Infra" version="1.0.0.8" exclude="Build,Analyzers" />
+        <dependency id="Microsoft.Extensions.Configuration.Abstractions" version="3.1.7" exclude="Build,Analyzers" />
+        <dependency id="Npgsql" version="4.1.9" exclude="Build,Analyzers" />
+      </group>
+    </dependencies>
+  </metadata>
+  <files>
+    <file src="F:\wp\2\SDMS\SDMSApps\SDMS.DL.PostgreSQL\bin\Debug\netcoreapp3.1\SDMS.DL.PostgreSQL.dll" target="lib\netcoreapp3.1\SDMS.DL.PostgreSQL.dll" />
+  </files>
+</package>

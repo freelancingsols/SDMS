@@ -1,0 +1,12 @@
+F:\wp\2\SDMS\SDMSApps\SDMS.DL.FerretDB\obj\Debug\netcoreapp3.1\SDMS.DL.FerretDB.csprojAssemblyReference.cache
+F:\wp\2\SDMS\SDMSApps\SDMS.DL.FerretDB\obj\Debug\netcoreapp3.1\SDMS.DL.FerretDB.AssemblyInfoInputs.cache
+F:\wp\2\SDMS\SDMSApps\SDMS.DL.FerretDB\obj\Debug\netcoreapp3.1\SDMS.DL.FerretDB.AssemblyInfo.cs
+F:\wp\2\SDMS\SDMSApps\SDMS.DL.FerretDB\obj\Debug\netcoreapp3.1\SDMS.DL.FerretDB.csproj.CoreCompileInputs.cache
+F:\wp\2\SDMS\SDMSApps\SDMS.DL.FerretDB\bin\Debug\netcoreapp3.1\SDMS.DL.FerretDB.deps.json
+F:\wp\2\SDMS\SDMSApps\SDMS.DL.FerretDB\bin\Debug\netcoreapp3.1\SDMS.DL.FerretDB.dll
+F:\wp\2\SDMS\SDMSApps\SDMS.DL.FerretDB\bin\Debug\netcoreapp3.1\SDMS.DL.FerretDB.pdb
+F:\wp\2\SDMS\SDMSApps\SDMS.DL.FerretDB\bin\Debug\netcoreapp3.1\SDMS.Common.Infra.dll
+F:\wp\2\SDMS\SDMSApps\SDMS.DL.FerretDB\bin\Debug\netcoreapp3.1\SDMS.Common.Infra.pdb
+F:\wp\2\SDMS\SDMSApps\SDMS.DL.FerretDB\obj\Debug\netcoreapp3.1\SDMS.DL.FerretDB.csproj.CopyComplete
+F:\wp\2\SDMS\SDMSApps\SDMS.DL.FerretDB\obj\Debug\netcoreapp3.1\SDMS.DL.FerretDB.dll
+F:\wp\2\SDMS\SDMSApps\SDMS.DL.FerretDB\obj\Debug\netcoreapp3.1\SDMS.DL.FerretDB.pdb

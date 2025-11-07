@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: sdms_postgres
+    environment:
+      POSTGRES_DB: sdms_auth
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  auth-service:
+    build:
+      context: ./SDMS.AuthenticationWebApp
+      dockerfile: Dockerfile
+    container_name: sdms_auth_service
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - POSTGRES_CONNECTION=Host=postgres;Database=sdms_auth;Username=postgres;Password=postgres;Port=5432
+      - ExternalAuth__Auth0__Domain=${AUTH0_DOMAIN:-}
+      - ExternalAuth__Auth0__ClientId=${AUTH0_CLIENT_ID:-}
+      - ExternalAuth__Auth0__ClientSecret=${AUTH0_CLIENT_SECRET:-}
+      - ExternalAuth__Google__ClientId=${GOOGLE_CLIENT_ID:-}
+      - ExternalAuth__Google__ClientSecret=${GOOGLE_CLIENT_SECRET:-}
+      - Frontend__Url=http://localhost:4200
+    ports:
+      - "7001:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./SDMS.AuthenticationWebApp/signing-key.pem:/app/signing-key.pem
+
+volumes:
+  postgres_data:
+

@@ -1,0 +1,97 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v3.1",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v3.1": {
+      "SDMS.DL.PostgreSQL/1.0.0.1": {
+        "dependencies": {
+          "Microsoft.Extensions.Configuration.Abstractions": "3.1.7",
+          "Npgsql": "4.1.9",
+          "SDMS.Common.Infra": "1.0.0.8"
+        },
+        "runtime": {
+          "SDMS.DL.PostgreSQL.dll": {}
+        }
+      },
+      "Microsoft.Extensions.Configuration.Abstractions/3.1.7": {
+        "dependencies": {
+          "Microsoft.Extensions.Primitives": "3.1.7"
+        },
+        "runtime": {
+          "lib/netcoreapp3.1/Microsoft.Extensions.Configuration.Abstractions.dll": {
+            "assemblyVersion": "3.1.7.0",
+            "fileVersion": "3.100.720.37108"
+          }
+        }
+      },
+      "Microsoft.Extensions.Primitives/3.1.7": {
+        "runtime": {
+          "lib/netcoreapp3.1/Microsoft.Extensions.Primitives.dll": {
+            "assemblyVersion": "3.1.7.0",
+            "fileVersion": "3.100.720.37108"
+          }
+        }
+      },
+      "Npgsql/4.1.9": {
+        "dependencies": {
+          "System.Runtime.CompilerServices.Unsafe": "4.6.0"
+        },
+        "runtime": {
+          "lib/netcoreapp3.0/Npgsql.dll": {
+            "assemblyVersion": "4.1.9.0",
+            "fileVersion": "4.1.9.0"
+          }
+        }
+      },
+      "System.Runtime.CompilerServices.Unsafe/4.6.0": {},
+      "SDMS.Common.Infra/1.0.0.8": {
+        "runtime": {
+          "SDMS.Common.Infra.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "SDMS.DL.PostgreSQL/1.0.0.1": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Microsoft.Extensions.Configuration.Abstractions/3.1.7": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-WJEbrrIgly95D9rM8Gwr4w8sbYla6/iOcCZ0UE7+Qg/Q8NnQJwAJ60Lq1A26zbNE8Fm1fkbGU90LDl8e+BoRSQ==",
+      "path": "microsoft.extensions.configuration.abstractions/3.1.7",
+      "hashPath": "microsoft.extensions.configuration.abstractions.3.1.7.nupkg.sha512"
+    },
+    "Microsoft.Extensions.Primitives/3.1.7": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-sa17s3vDAXTuIVGxuJcK713i0B0iaUoiwY4Sl2SLHhMqM8snznn0YVGiZAVkoKEUFWjvIg1Z/JNmAicBamI4mg==",
+      "path": "microsoft.extensions.primitives/3.1.7",
+      "hashPath": "microsoft.extensions.primitives.3.1.7.nupkg.sha512"
+    },
+    "Npgsql/4.1.9": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-Afs+nX8OWZ8PPZRj7vdtjcj0xKQDZbl8b0jXUmDBuKgzEkHatX/fPu1NtgbCin14EkoyMMxKtQnagfoMC58i+Q==",
+      "path": "npgsql/4.1.9",
+      "hashPath": "npgsql.4.1.9.nupkg.sha512"
+    },
+    "System.Runtime.CompilerServices.Unsafe/4.6.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-HxozeSlipUK7dAroTYwIcGwKDeOVpQnJlpVaOkBz7CM4TsE5b/tKlQBZecTjh6FzcSbxndYaxxpsBMz+wMJeyw==",
+      "path": "system.runtime.compilerservices.unsafe/4.6.0",
+      "hashPath": "system.runtime.compilerservices.unsafe.4.6.0.nupkg.sha512"
+    },
+    "SDMS.Common.Infra/1.0.0.8": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

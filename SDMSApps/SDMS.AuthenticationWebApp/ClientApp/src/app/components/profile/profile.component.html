@@ -1,0 +1,58 @@
+<div class="profile-container">
+  <div class="profile-card">
+    <h2>User Profile</h2>
+    
+    <div *ngIf="isLoading" class="loading">
+      <p>Loading profile...</p>
+    </div>
+
+    <div *ngIf="!isLoading && userInfo" class="profile-content">
+      <div class="profile-header">
+        <div *ngIf="userInfo.profilePictureUrl" class="profile-picture">
+          <img [src]="userInfo.profilePictureUrl" [alt]="userInfo.displayName || userInfo.email">
+        </div>
+        <div class="profile-info">
+          <h3>{{ userInfo.displayName || userInfo.email }}</h3>
+          <p class="email">{{ userInfo.email }}</p>
+        </div>
+      </div>
+
+      <div class="profile-details">
+        <div class="detail-item">
+          <label>User ID:</label>
+          <span>{{ userInfo.userId }}</span>
+        </div>
+
+        <div class="detail-item" *ngIf="userInfo.displayName">
+          <label>Display Name:</label>
+          <span>{{ userInfo.displayName }}</span>
+        </div>
+
+        <div class="detail-item" *ngIf="userInfo.externalProvider">
+          <label>External Provider:</label>
+          <span>{{ userInfo.externalProvider }}</span>
+        </div>
+
+        <div class="detail-item" *ngIf="userInfo.lastLoginDate">
+          <label>Last Login:</label>
+          <span>{{ userInfo.lastLoginDate }}</span>
+        </div>
+
+        <div class="detail-item" *ngIf="userInfo.roles && userInfo.roles.length > 0">
+          <label>Roles:</label>
+          <span>{{ userInfo.roles.join(', ') }}</span>
+        </div>
+      </div>
+
+      <div class="profile-actions">
+        <button class="btn btn-secondary" (click)="logout()">Logout</button>
+      </div>
+    </div>
+
+    <div *ngIf="!isLoading && !userInfo" class="error">
+      <p>Failed to load profile information</p>
+      <button class="btn btn-primary" (click)="logout()">Go to Login</button>
+    </div>
+  </div>
+</div>
+

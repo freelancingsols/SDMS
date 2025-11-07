@@ -1,0 +1,22 @@
+# Railway uses Nixpacks for .NET builds
+# This file configures the build process
+
+[phases.setup]
+nixPkgs = ["dotnet-sdk_8", "nodejs-18_x"]
+
+[phases.install]
+cmds = [
+  "cd ClientApp && npm ci",
+  "dotnet restore"
+]
+
+[phases.build]
+cmds = [
+  "cd ClientApp && npm run build",
+  "dotnet build -c Release",
+  "dotnet publish -c Release -o ./publish"
+]
+
+[start]
+cmd = "dotnet ./publish/SDMS.AuthenticationWebApp.dll"
+

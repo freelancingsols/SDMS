@@ -1,0 +1,12 @@
+F:\wp\2\SDMS\SDMSApps\SDMS.DL.PostgreSQL\obj\Debug\netcoreapp3.1\SDMS.DL.PostgreSQL.csprojAssemblyReference.cache
+F:\wp\2\SDMS\SDMSApps\SDMS.DL.PostgreSQL\obj\Debug\netcoreapp3.1\SDMS.DL.PostgreSQL.AssemblyInfoInputs.cache
+F:\wp\2\SDMS\SDMSApps\SDMS.DL.PostgreSQL\obj\Debug\netcoreapp3.1\SDMS.DL.PostgreSQL.AssemblyInfo.cs
+F:\wp\2\SDMS\SDMSApps\SDMS.DL.PostgreSQL\obj\Debug\netcoreapp3.1\SDMS.DL.PostgreSQL.csproj.CoreCompileInputs.cache
+F:\wp\2\SDMS\SDMSApps\SDMS.DL.PostgreSQL\bin\Debug\netcoreapp3.1\SDMS.DL.PostgreSQL.deps.json
+F:\wp\2\SDMS\SDMSApps\SDMS.DL.PostgreSQL\bin\Debug\netcoreapp3.1\SDMS.DL.PostgreSQL.dll
+F:\wp\2\SDMS\SDMSApps\SDMS.DL.PostgreSQL\bin\Debug\netcoreapp3.1\SDMS.DL.PostgreSQL.pdb
+F:\wp\2\SDMS\SDMSApps\SDMS.DL.PostgreSQL\bin\Debug\netcoreapp3.1\SDMS.Common.Infra.dll
+F:\wp\2\SDMS\SDMSApps\SDMS.DL.PostgreSQL\bin\Debug\netcoreapp3.1\SDMS.Common.Infra.pdb
+F:\wp\2\SDMS\SDMSApps\SDMS.DL.PostgreSQL\obj\Debug\netcoreapp3.1\SDMS.DL.PostgreSQL.csproj.CopyComplete
+F:\wp\2\SDMS\SDMSApps\SDMS.DL.PostgreSQL\obj\Debug\netcoreapp3.1\SDMS.DL.PostgreSQL.dll
+F:\wp\2\SDMS\SDMSApps\SDMS.DL.PostgreSQL\obj\Debug\netcoreapp3.1\SDMS.DL.PostgreSQL.pdb

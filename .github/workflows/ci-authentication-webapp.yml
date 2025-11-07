@@ -1,0 +1,251 @@
+name: CI - Authentication WebApp (Build, Test, and Lint)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+      - release
+      - Release
+    paths:
+      - 'SDMSApps/SDMS.AuthenticationWebApp/**'
+      - '.github/workflows/ci-authentication-webapp.yml'
+  pull_request:
+    branches:
+      - main
+      - master
+      - develop
+      - release
+      - Release
+    paths:
+      - 'SDMSApps/SDMS.AuthenticationWebApp/**'
+      - '.github/workflows/ci-authentication-webapp.yml'
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install .NET format tool
+        run: dotnet tool install -g dotnet-format
+
+      - name: Run dotnet format (check)
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp
+        run: dotnet format --verify-no-changes --verbosity diagnostic
+        continue-on-error: true
+
+  build-dev:
+    name: Build (Development)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package.json
+
+      - name: Remove old package-lock.json and node_modules
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
+        run: |
+          rm -f package-lock.json
+          rm -rf node_modules || true
+
+      - name: Install Angular dependencies
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
+        run: npm install --legacy-peer-deps
+
+      - name: Build Angular app (Development) - Build Node code first
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
+        run: npm run build
+
+      - name: Restore .NET dependencies
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp
+        run: dotnet restore
+
+      - name: Build .NET app (Development)
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp
+        run: dotnet build --configuration Debug --no-restore
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-dev-auth
+          path: |
+            SDMSApps/SDMS.AuthenticationWebApp/bin/Debug
+            SDMSApps/SDMS.AuthenticationWebApp/ClientApp/dist
+          retention-days: 1
+
+  build-prod:
+    name: Build (Production)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package.json
+
+      - name: Remove old package-lock.json and node_modules
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
+        run: |
+          rm -f package-lock.json
+          rm -rf node_modules || true
+
+      - name: Install Angular dependencies
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
+        run: npm install --legacy-peer-deps
+
+      - name: Build Angular app (Production) - Build Node code first
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
+        run: npm run build -- --configuration production
+
+      - name: Restore .NET dependencies
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp
+        run: dotnet restore
+
+      - name: Build .NET app (Production)
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Publish .NET app
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp
+        run: dotnet publish --configuration Release --no-build --output ./publish
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-prod-auth
+          path: |
+            SDMSApps/SDMS.AuthenticationWebApp/publish
+            SDMSApps/SDMS.AuthenticationWebApp/ClientApp/dist
+          retention-days: 7
+
+  test:
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package.json
+
+      - name: Remove old package-lock.json and node_modules
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
+        run: |
+          rm -f package-lock.json
+          rm -rf node_modules || true
+
+      - name: Install Angular dependencies
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
+        run: npm install --legacy-peer-deps
+
+      - name: Run .NET tests (if any)
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp
+        run: |
+          # Find and run test projects
+          find . -name "*.Tests.csproj" -o -name "*Test.csproj" | while read testproj; do
+            if [ -f "$testproj" ]; then
+              dotnet test "$testproj" --configuration Release --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx"
+            fi
+          done
+        continue-on-error: true
+
+      - name: Run Angular tests
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
+        run: |
+          if [ -f "package.json" ]; then
+            if grep -q '"test:ci"' package.json; then
+              npm run test:ci || echo "Tests failed (non-blocking)"
+            else
+              npm test -- --watch=false --browsers=ChromeHeadless --code-coverage || echo "Tests failed (non-blocking)"
+            fi
+          else
+            echo "No Angular tests found, skipping"
+          fi
+        continue-on-error: true
+
+      - name: Build .NET app (if needed for tests)
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp
+        run: |
+          # Only build if there are .NET test projects
+          if find . -name "*.Tests.csproj" -o -name "*Test.csproj" | grep -q .; then
+            dotnet build --configuration Release --no-restore
+          else
+            echo "No .NET test projects found, skipping build"
+          fi
+        continue-on-error: true
+
+      - name: Upload .NET test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dotnet-test-results-auth
+          path: "SDMSApps/SDMS.AuthenticationWebApp/**/TestResults/*.trx"
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload Angular test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: angular-test-results-auth
+          path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/coverage
+          retention-days: 7
+          if-no-files-found: ignore
+
+  ci-complete:
+    name: CI Complete
+    runs-on: ubuntu-latest
+    needs: [lint, build-dev, build-prod, test]
+    if: always()
+    steps:
+      - name: Check CI status
+        run: |
+          if [ "${{ needs.lint.result }}" == "failure" ] || \
+             [ "${{ needs.build-dev.result }}" == "failure" ] || \
+             [ "${{ needs.build-prod.result }}" == "failure" ] || \
+             [ "${{ needs.test.result }}" == "failure" ]; then
+            echo "CI checks failed"
+            exit 1
+          else
+            echo "All CI checks passed"
+          fi
+

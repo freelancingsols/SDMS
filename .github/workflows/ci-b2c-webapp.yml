@@ -1,4 +1,4 @@
-name: CI - Build, Test, and Lint
+name: CI - B2C WebApp (Build, Test, and Lint)
 
 on:
   push:
@@ -8,6 +8,9 @@ on:
       - develop
       - release
       - Release
+    paths:
+      - 'SDMSApps/SDMS.EndUserWebApp/**'
+      - '.github/workflows/ci-b2c-webapp.yml'
   pull_request:
     branches:
       - main
@@ -15,6 +18,9 @@ on:
       - develop
       - release
       - Release
+    paths:
+      - 'SDMSApps/SDMS.EndUserWebApp/**'
+      - '.github/workflows/ci-b2c-webapp.yml'
 
 jobs:
   lint:
@@ -29,14 +35,14 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: ClientApp/package-lock.json
+          cache-dependency-path: SDMSApps/SDMS.EndUserWebApp/ClientApp/package-lock.json
 
       - name: Install dependencies
-        working-directory: ClientApp
+        working-directory: SDMSApps/SDMS.EndUserWebApp/ClientApp
         run: npm ci
 
       - name: Run Angular Lint
-        working-directory: ClientApp
+        working-directory: SDMSApps/SDMS.EndUserWebApp/ClientApp
         run: |
           # Try Angular CLI lint command
           if npx ng lint 2>/dev/null; then
@@ -60,21 +66,21 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: ClientApp/package-lock.json
+          cache-dependency-path: SDMSApps/SDMS.EndUserWebApp/ClientApp/package-lock.json
 
       - name: Install dependencies
-        working-directory: ClientApp
+        working-directory: SDMSApps/SDMS.EndUserWebApp/ClientApp
         run: npm ci
 
       - name: Build Angular app (Development)
-        working-directory: ClientApp
+        working-directory: SDMSApps/SDMS.EndUserWebApp/ClientApp
         run: npm run build
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-dev
-          path: ClientApp/dist
+          name: build-dev-b2c
+          path: SDMSApps/SDMS.EndUserWebApp/ClientApp/dist
           retention-days: 1
 
   build-prod:
@@ -89,14 +95,14 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: ClientApp/package-lock.json
+          cache-dependency-path: SDMSApps/SDMS.EndUserWebApp/ClientApp/package-lock.json
 
       - name: Install dependencies
-        working-directory: ClientApp
+        working-directory: SDMSApps/SDMS.EndUserWebApp/ClientApp
         run: npm ci
 
       - name: Build Angular app (Production)
-        working-directory: ClientApp
+        working-directory: SDMSApps/SDMS.EndUserWebApp/ClientApp
         env:
           API_URL: ${{ secrets.API_URL || 'https://localhost:7001' }}
           AUTH_SERVER: ${{ secrets.AUTH_SERVER || 'https://localhost:7001' }}
@@ -108,8 +114,8 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-prod
-          path: ClientApp/dist
+          name: build-prod-b2c
+          path: SDMSApps/SDMS.EndUserWebApp/ClientApp/dist
           retention-days: 7
 
   test:
@@ -124,14 +130,14 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: ClientApp/package-lock.json
+          cache-dependency-path: SDMSApps/SDMS.EndUserWebApp/ClientApp/package-lock.json
 
       - name: Install dependencies
-        working-directory: ClientApp
+        working-directory: SDMSApps/SDMS.EndUserWebApp/ClientApp
         run: npm ci
 
       - name: Run unit tests
-        working-directory: ClientApp
+        working-directory: SDMSApps/SDMS.EndUserWebApp/ClientApp
         run: npm run test:ci
         continue-on-error: true
 
@@ -139,8 +145,8 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: test-results
-          path: ClientApp/coverage
+          name: test-results-b2c
+          path: SDMSApps/SDMS.EndUserWebApp/ClientApp/coverage
           retention-days: 7
 
   ci-complete:

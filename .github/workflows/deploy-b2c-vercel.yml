@@ -1,10 +1,13 @@
-name: Deploy to Vercel
+name: Deploy B2C WebApp to Vercel
 
 on:
   push:
     branches:
       - release
       - Release
+    paths:
+      - 'SDMSApps/SDMS.EndUserWebApp/**'
+      - '.github/workflows/deploy-b2c-vercel.yml'
   workflow_dispatch:
 
 jobs:
@@ -19,14 +22,14 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: ClientApp/package-lock.json
+          cache-dependency-path: SDMSApps/SDMS.EndUserWebApp/ClientApp/package-lock.json
 
       - name: Install dependencies
-        working-directory: ClientApp
+        working-directory: SDMSApps/SDMS.EndUserWebApp/ClientApp
         run: npm ci
 
       - name: Build Angular app (Production)
-        working-directory: ClientApp
+        working-directory: SDMSApps/SDMS.EndUserWebApp/ClientApp
         env:
           API_URL: ${{ secrets.API_URL }}
           AUTH_SERVER: ${{ secrets.AUTH_SERVER }}
@@ -41,6 +44,6 @@ jobs:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          working-directory: ClientApp
+          working-directory: SDMSApps/SDMS.EndUserWebApp/ClientApp
           scope: ${{ secrets.VERCEL_ORG_ID }}
 

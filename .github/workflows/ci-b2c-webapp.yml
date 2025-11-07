@@ -9,7 +9,7 @@ on:
       - release
       - Release
     paths:
-      - 'SDMSApps/SDMS.EndUserWebApp/**'
+      - 'SDMSApps/SDMS.B2CWebApp/**'
       - '.github/workflows/ci-b2c-webapp.yml'
   pull_request:
     branches:
@@ -19,8 +19,9 @@ on:
       - release
       - Release
     paths:
-      - 'SDMSApps/SDMS.EndUserWebApp/**'
+      - 'SDMSApps/SDMS.B2CWebApp/**'
       - '.github/workflows/ci-b2c-webapp.yml'
+  workflow_dispatch:
 
 jobs:
   lint:
@@ -35,14 +36,19 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: SDMSApps/SDMS.EndUserWebApp/ClientApp/package-lock.json
+          cache-dependency-path: SDMSApps/SDMS.B2CWebApp/ClientApp/package.json
 
-      - name: Install dependencies
-        working-directory: SDMSApps/SDMS.EndUserWebApp/ClientApp
-        run: npm ci
+      - name: Install dependencies and generate package-lock.json
+        working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
+        run: |
+          npm install
+          # Ensure package-lock.json is created
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only
+          fi
 
       - name: Run Angular Lint
-        working-directory: SDMSApps/SDMS.EndUserWebApp/ClientApp
+        working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
         run: |
           # Try Angular CLI lint command
           if npx ng lint 2>/dev/null; then
@@ -66,21 +72,26 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: SDMSApps/SDMS.EndUserWebApp/ClientApp/package-lock.json
+          cache-dependency-path: SDMSApps/SDMS.B2CWebApp/ClientApp/package.json
 
-      - name: Install dependencies
-        working-directory: SDMSApps/SDMS.EndUserWebApp/ClientApp
-        run: npm ci
+      - name: Install dependencies and generate package-lock.json
+        working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
+        run: |
+          npm install
+          # Ensure package-lock.json is created
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only
+          fi
 
       - name: Build Angular app (Development)
-        working-directory: SDMSApps/SDMS.EndUserWebApp/ClientApp
+        working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
         run: npm run build
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-dev-b2c
-          path: SDMSApps/SDMS.EndUserWebApp/ClientApp/dist
+          path: SDMSApps/SDMS.B2CWebApp/ClientApp/dist
           retention-days: 1
 
   build-prod:
@@ -95,14 +106,19 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: SDMSApps/SDMS.EndUserWebApp/ClientApp/package-lock.json
+          cache-dependency-path: SDMSApps/SDMS.B2CWebApp/ClientApp/package.json
 
-      - name: Install dependencies
-        working-directory: SDMSApps/SDMS.EndUserWebApp/ClientApp
-        run: npm ci
+      - name: Install dependencies and generate package-lock.json
+        working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
+        run: |
+          npm install
+          # Ensure package-lock.json is created
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only
+          fi
 
       - name: Build Angular app (Production)
-        working-directory: SDMSApps/SDMS.EndUserWebApp/ClientApp
+        working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
         env:
           API_URL: ${{ secrets.API_URL || 'https://localhost:7001' }}
           AUTH_SERVER: ${{ secrets.AUTH_SERVER || 'https://localhost:7001' }}
@@ -115,7 +131,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-prod-b2c
-          path: SDMSApps/SDMS.EndUserWebApp/ClientApp/dist
+          path: SDMSApps/SDMS.B2CWebApp/ClientApp/dist
           retention-days: 7
 
   test:
@@ -130,14 +146,19 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: SDMSApps/SDMS.EndUserWebApp/ClientApp/package-lock.json
+          cache-dependency-path: SDMSApps/SDMS.B2CWebApp/ClientApp/package.json
 
-      - name: Install dependencies
-        working-directory: SDMSApps/SDMS.EndUserWebApp/ClientApp
-        run: npm ci
+      - name: Install dependencies and generate package-lock.json
+        working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
+        run: |
+          npm install
+          # Ensure package-lock.json is created
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only
+          fi
 
       - name: Run unit tests
-        working-directory: SDMSApps/SDMS.EndUserWebApp/ClientApp
+        working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
         run: npm run test:ci
         continue-on-error: true
 
@@ -146,7 +167,7 @@ jobs:
         if: always()
         with:
           name: test-results-b2c
-          path: SDMSApps/SDMS.EndUserWebApp/ClientApp/coverage
+          path: SDMSApps/SDMS.B2CWebApp/ClientApp/coverage
           retention-days: 7
 
   ci-complete:

@@ -2,7 +2,7 @@
 
 ## Files Created
 
-### SDMS.EndUserWebApp (B2C Frontend)
+### SDMS.B2CWebApp (B2C Frontend)
 
 #### Configuration Files
 - ✅ `appsettings.json` - Application configuration with endpoints

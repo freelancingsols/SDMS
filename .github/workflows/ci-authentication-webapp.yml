@@ -21,6 +21,7 @@ on:
     paths:
       - 'SDMSApps/SDMS.AuthenticationWebApp/**'
       - '.github/workflows/ci-authentication-webapp.yml'
+  workflow_dispatch:
 
 jobs:
   lint:
@@ -60,19 +61,24 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package-lock.json
+          cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package.json
+
+      - name: Install Angular dependencies and generate package-lock.json
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
+        run: |
+          npm install
+          # Ensure package-lock.json is created
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only
+          fi
+
+      - name: Build Angular app (Development) - Build Node code first
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
+        run: npm run build
 
       - name: Restore .NET dependencies
         working-directory: SDMSApps/SDMS.AuthenticationWebApp
         run: dotnet restore
-
-      - name: Install Angular dependencies
-        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
-        run: npm ci
-
-      - name: Build Angular app (Development)
-        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
-        run: npm run build
 
       - name: Build .NET app (Development)
         working-directory: SDMSApps/SDMS.AuthenticationWebApp
@@ -104,19 +110,24 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package-lock.json
+          cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package.json
+
+      - name: Install Angular dependencies and generate package-lock.json
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
+        run: |
+          npm install
+          # Ensure package-lock.json is created
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only
+          fi
+
+      - name: Build Angular app (Production) - Build Node code first
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
+        run: npm run build -- --configuration production
 
       - name: Restore .NET dependencies
         working-directory: SDMSApps/SDMS.AuthenticationWebApp
         run: dotnet restore
-
-      - name: Install Angular dependencies
-        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
-        run: npm ci
-
-      - name: Build Angular app (Production)
-        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
-        run: npm run build
 
       - name: Build .NET app (Production)
         working-directory: SDMSApps/SDMS.AuthenticationWebApp
@@ -152,15 +163,16 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package-lock.json
+          cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package.json
 
-      - name: Restore .NET dependencies
-        working-directory: SDMSApps/SDMS.AuthenticationWebApp
-        run: dotnet restore
-
-      - name: Install Angular dependencies
+      - name: Install Angular dependencies and generate package-lock.json
         working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
-        run: npm ci
+        run: |
+          npm install
+          # Ensure package-lock.json is created
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only
+          fi
 
       - name: Run .NET tests (if any)
         working-directory: SDMSApps/SDMS.AuthenticationWebApp
@@ -184,6 +196,17 @@ jobs:
             fi
           else
             echo "No Angular tests found, skipping"
+          fi
+        continue-on-error: true
+
+      - name: Build .NET app (if needed for tests)
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp
+        run: |
+          # Only build if there are .NET test projects
+          if find . -name "*.Tests.csproj" -o -name "*Test.csproj" | grep -q .; then
+            dotnet build --configuration Release --no-restore
+          else
+            echo "No .NET test projects found, skipping build"
           fi
         continue-on-error: true
 

@@ -27,17 +27,24 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package-lock.json
+          cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package.json
 
-      - name: Restore dependencies
-        working-directory: SDMSApps/SDMS.AuthenticationWebApp
-        run: dotnet restore
-
-      - name: Build Angular app
+      - name: Install Angular dependencies and generate package-lock.json
         working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
         run: |
-          npm ci
-          npm run build
+          npm install
+          # Ensure package-lock.json is created
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only
+          fi
+
+      - name: Build Angular app - Build Node code first
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
+        run: npm run build -- --configuration production
+
+      - name: Restore .NET dependencies
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp
+        run: dotnet restore
 
       - name: Build .NET app
         working-directory: SDMSApps/SDMS.AuthenticationWebApp

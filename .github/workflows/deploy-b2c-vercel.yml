@@ -6,7 +6,7 @@ on:
       - release
       - Release
     paths:
-      - 'SDMSApps/SDMS.EndUserWebApp/**'
+      - 'SDMSApps/SDMS.B2CWebApp/**'
       - '.github/workflows/deploy-b2c-vercel.yml'
   workflow_dispatch:
 
@@ -22,14 +22,19 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: SDMSApps/SDMS.EndUserWebApp/ClientApp/package-lock.json
+          cache-dependency-path: SDMSApps/SDMS.B2CWebApp/ClientApp/package.json
 
-      - name: Install dependencies
-        working-directory: SDMSApps/SDMS.EndUserWebApp/ClientApp
-        run: npm ci
+      - name: Install dependencies and generate package-lock.json
+        working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
+        run: |
+          npm install
+          # Ensure package-lock.json is created
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only
+          fi
 
       - name: Build Angular app (Production)
-        working-directory: SDMSApps/SDMS.EndUserWebApp/ClientApp
+        working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
         env:
           API_URL: ${{ secrets.API_URL }}
           AUTH_SERVER: ${{ secrets.AUTH_SERVER }}
@@ -44,6 +49,6 @@ jobs:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          working-directory: SDMSApps/SDMS.EndUserWebApp/ClientApp
+          working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
           scope: ${{ secrets.VERCEL_ORG_ID }}
 

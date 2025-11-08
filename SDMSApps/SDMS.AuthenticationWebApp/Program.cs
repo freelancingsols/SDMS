@@ -222,6 +222,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors();
+app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -289,7 +290,6 @@ using (var scope = app.Services.CreateScope())
                 Permissions.Endpoints.Authorization,
                 Permissions.Endpoints.Token,
                 Permissions.Endpoints.Logout,
-                Permissions.Endpoints.UserInfo,
                 Permissions.GrantTypes.AuthorizationCode,
                 Permissions.GrantTypes.RefreshToken,
                 Permissions.ResponseTypes.Code,

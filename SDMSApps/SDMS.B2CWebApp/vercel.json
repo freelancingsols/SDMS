@@ -32,7 +32,8 @@
   "env": {
     "API_URL": "@api_url",
     "AUTH_SERVER": "@auth_server",
-    "CLIENT_ID": "@client_id"
+    "CLIENT_ID": "@client_id",
+    "GITHUB_SECRETS_URL": "@github_secrets_url"
   }
 }
 

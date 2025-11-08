@@ -43,8 +43,7 @@ export class AuthService {
       showDebugInformation: true,
       strictDiscoveryDocumentValidation: false,
       useSilentRefresh: false,
-      disableAtHashCheck: true,
-      usePkce: true
+      disableAtHashCheck: true
     });
 
     this.oauthService.loadDiscoveryDocumentAndTryLogin().then(() => {

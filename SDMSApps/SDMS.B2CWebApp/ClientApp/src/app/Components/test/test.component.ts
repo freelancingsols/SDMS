@@ -19,9 +19,12 @@ export class TestComponent implements OnInit {
   
   // Dummy data for display
   items = [
-    { id: 1, name: 'Item 1', description: 'Description for item 1', price: 29.99 },
-    { id: 2, name: 'Item 2', description: 'Description for item 2', price: 39.99 },
-    { id: 3, name: 'Item 3', description: 'Description for item 3', price: 49.99 }
+    { id: 1, name: 'Premium Headphones', description: 'High-quality wireless headphones with noise cancellation', price: 199.99 },
+    { id: 2, name: 'Smart Watch', description: 'Feature-rich smartwatch with health tracking', price: 299.99 },
+    { id: 3, name: 'Laptop Stand', description: 'Ergonomic aluminum laptop stand for better posture', price: 49.99 },
+    { id: 4, name: 'Wireless Mouse', description: 'Ergonomic wireless mouse with long battery life', price: 39.99 },
+    { id: 5, name: 'Mechanical Keyboard', description: 'RGB backlit mechanical keyboard with blue switches', price: 89.99 },
+    { id: 6, name: 'USB-C Hub', description: 'Multi-port USB-C hub with HDMI and SD card reader', price: 59.99 }
   ];
 
   constructor(

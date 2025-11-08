@@ -13,6 +13,7 @@ using SDMS.AuthenticationWebApp.Services;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 using Microsoft.Extensions.FileProviders;
 using System.Net;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -42,7 +43,10 @@ else if (!string.IsNullOrEmpty(urls))
 // Add services
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "SDMS Authentication API", Version = "v1" });
+});
 
 // Database - Load from environment variable (Railway provides POSTGRES_CONNECTION automatically)
 var connectionString = builder.Configuration[ConfigurationKeys.PostgresConnection] 
@@ -143,7 +147,8 @@ builder.Services.AddAuthentication(options =>
         options.ClientSecret = clientSecret;
         options.SignInScheme = IdentityConstants.ExternalScheme;
         options.SaveTokens = true;
-        options.GetClaimsFromUserInfoEndpoint = true;
+        // GetClaimsFromUserInfoEndpoint is automatically enabled in ASP.NET Core 8.0
+        // No need to set it explicitly
     }
 });
 
@@ -217,6 +222,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors();
+app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -240,6 +246,7 @@ app.Use(async (HttpContext context, Func<Task> next) =>
 {
     await next.Invoke();
     if (context.Response.StatusCode == (int)HttpStatusCode.NotFound 
+        && context.Request.Path.Value != null
         && !context.Request.Path.Value.StartsWith("/api")
         && !context.Request.Path.Value.StartsWith("/connect")
         && !context.Request.Path.Value.StartsWith("/swagger"))
@@ -283,7 +290,6 @@ using (var scope = app.Services.CreateScope())
                 Permissions.Endpoints.Authorization,
                 Permissions.Endpoints.Token,
                 Permissions.Endpoints.Logout,
-                Permissions.Endpoints.Userinfo,
                 Permissions.GrantTypes.AuthorizationCode,
                 Permissions.GrantTypes.RefreshToken,
                 Permissions.ResponseTypes.Code,

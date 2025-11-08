@@ -3,6 +3,7 @@ import { platformBrowserDynamic } from '@angular/platform-browser-dynamic';
 
 import { AppModule } from './app/app.module';
 import { environment } from './environments/environment';
+import { loadAppSettingsBeforeBootstrap } from './app/services/app-settings-loader.service';
 
 export function getBaseUrl() {
   return document.getElementsByTagName('base')[0].href;
@@ -16,7 +17,19 @@ if (environment.production) {
   enableProdMode();
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  platformBrowserDynamic(providers).bootstrapModule(AppModule)
-  .catch(err => console.error(err));
+// Load appsettings before bootstrapping Angular application
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    // Load appsettings from GitHub secrets or local appsettings.json
+    await loadAppSettingsBeforeBootstrap();
+    
+    // Bootstrap Angular application after settings are loaded
+    platformBrowserDynamic(providers).bootstrapModule(AppModule)
+      .catch(err => console.error(err));
+  } catch (error) {
+    console.error('Error loading appsettings before bootstrap:', error);
+    // Still bootstrap even if loading settings fails
+    platformBrowserDynamic(providers).bootstrapModule(AppModule)
+      .catch(err => console.error(err));
+  }
 });

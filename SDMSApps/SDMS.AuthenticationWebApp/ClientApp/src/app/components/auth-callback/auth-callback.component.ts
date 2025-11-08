@@ -90,9 +90,9 @@ export class AuthCallbackComponent implements OnInit {
           try {
             // Complete the OAuth flow
             await this.oauthService.loadDiscoveryDocument();
-            const success = await this.oauthService.tryLoginCodeFlow();
+            await this.oauthService.tryLoginCodeFlow();
             
-            if (success && this.oauthService.hasValidAccessToken()) {
+            if (this.oauthService.hasValidAccessToken()) {
               await this.authService.loadUserProfile();
               this.success = true;
               setTimeout(() => {

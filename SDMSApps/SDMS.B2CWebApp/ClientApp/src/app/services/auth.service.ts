@@ -3,7 +3,7 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { OAuthService } from 'angular-oauth2-oidc';
 import { BehaviorSubject, Observable } from 'rxjs';
-import { environment } from '../../environments/environment';
+import { AppSettings } from '../config/app-settings';
 
 export interface UserInfo {
   userId: string;
@@ -21,7 +21,7 @@ export interface UserInfo {
 export class AuthService {
   private userInfoSubject = new BehaviorSubject<UserInfo | null>(null);
   public userInfo$ = this.userInfoSubject.asObservable();
-  private apiUrl = environment.apiUrl;
+  private apiUrl = AppSettings.SDMS_AuthenticationWebApp_url;
 
   constructor(
     private oauthService: OAuthService,
@@ -34,17 +34,16 @@ export class AuthService {
 
   private configureOAuth() {
     this.oauthService.configure({
-      issuer: environment.authServer,
-      redirectUri: window.location.origin + '/auth-callback',
-      clientId: environment.clientId,
+      issuer: AppSettings.SDMS_AuthenticationWebApp_url,
+      redirectUri: AppSettings.SDMS_AuthenticationWebApp_redirectUri,
+      clientId: AppSettings.SDMS_AuthenticationWebApp_clientid,
       responseType: 'code',
-      scope: 'openid profile email roles api',
+      scope: AppSettings.SDMS_AuthenticationWebApp_scope,
       requireHttps: false, // Set to true in production
       showDebugInformation: true,
       strictDiscoveryDocumentValidation: false,
       useSilentRefresh: false,
-      disableAtHashCheck: true,
-      usePkce: true
+      disableAtHashCheck: true
     });
 
     this.oauthService.loadDiscoveryDocumentAndTryLogin().then(() => {

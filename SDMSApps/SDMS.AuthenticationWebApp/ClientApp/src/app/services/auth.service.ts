@@ -43,8 +43,8 @@ export class AuthService {
       showDebugInformation: true,
       strictDiscoveryDocumentValidation: false,
       useSilentRefresh: false,
-      disableAtHashCheck: true,
-      usePkce: true
+      disableAtHashCheck: true
+      // PKCE is enabled by default for code flow in angular-oauth2-oidc v18
     });
 
     this.oauthService.loadDiscoveryDocumentAndTryLogin().then(() => {

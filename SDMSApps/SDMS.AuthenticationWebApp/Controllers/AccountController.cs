@@ -172,7 +172,7 @@ public class AccountController : ControllerBase
         }
     }
 
-    [Authorize(AuthenticationSchemes = IdentityConstants.ApplicationScheme)]
+    [Authorize(AuthenticationSchemes = "Identity.Application")]
     [HttpGet("userinfo")]
     public async Task<IActionResult> UserInfo()
     {

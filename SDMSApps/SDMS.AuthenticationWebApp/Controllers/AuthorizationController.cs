@@ -9,6 +9,7 @@ using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
 using SDMS.AuthenticationWebApp.Constants;
 using SDMS.AuthenticationWebApp.Models;
+using SDMS.AuthenticationWebApp.Services;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace SDMS.AuthenticationWebApp.Controllers;

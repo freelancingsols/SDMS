@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
+using SDMS.AuthenticationWebApp.Constants;
 using SDMS.AuthenticationWebApp.Data;
 using SDMS.AuthenticationWebApp.Models;
 
@@ -57,8 +58,8 @@ public class ExternalAuthService : IExternalAuthService
     {
         try
         {
-            var auth0Domain = _configuration["ExternalAuth:Auth0:Domain"];
-            var auth0ClientId = _configuration["ExternalAuth:Auth0:ClientId"];
+            var auth0Domain = _configuration[ConfigurationKeys.ExternalAuthAuth0Domain];
+            var auth0ClientId = _configuration[ConfigurationKeys.ExternalAuthAuth0ClientId];
             
             if (string.IsNullOrEmpty(auth0Domain) || string.IsNullOrEmpty(auth0ClientId))
             {
@@ -170,8 +171,8 @@ public class ExternalAuthService : IExternalAuthService
     {
         try
         {
-            var googleClientId = _configuration["ExternalAuth:Google:ClientId"];
-            var googleClientSecret = _configuration["ExternalAuth:Google:ClientSecret"];
+            var googleClientId = _configuration[ConfigurationKeys.ExternalAuthGoogleClientId];
+            var googleClientSecret = _configuration[ConfigurationKeys.ExternalAuthGoogleClientSecret];
             
             if (string.IsNullOrEmpty(googleClientId))
             {
@@ -294,9 +295,9 @@ public class ExternalAuthService : IExternalAuthService
             string tokenEndpoint;
             if (provider == "auth0")
             {
-                var domain = _configuration["ExternalAuth:Auth0:Domain"];
-                var clientId = _configuration["ExternalAuth:Auth0:ClientId"];
-                var clientSecret = _configuration["ExternalAuth:Auth0:ClientSecret"];
+                var domain = _configuration[ConfigurationKeys.ExternalAuthAuth0Domain];
+                var clientId = _configuration[ConfigurationKeys.ExternalAuthAuth0ClientId];
+                var clientSecret = _configuration[ConfigurationKeys.ExternalAuthAuth0ClientSecret];
                 tokenEndpoint = $"{domain}/oauth/token";
                 content = new FormUrlEncodedContent(new[]
                 {
@@ -309,8 +310,8 @@ public class ExternalAuthService : IExternalAuthService
             }
             else if (provider == "google")
             {
-                var clientId = _configuration["ExternalAuth:Google:ClientId"];
-                var clientSecret = _configuration["ExternalAuth:Google:ClientSecret"];
+                var clientId = _configuration[ConfigurationKeys.ExternalAuthGoogleClientId];
+                var clientSecret = _configuration[ConfigurationKeys.ExternalAuthGoogleClientSecret];
                 tokenEndpoint = "https://oauth2.googleapis.com/token";
                 content = new FormUrlEncodedContent(new[]
                 {

@@ -20,7 +20,7 @@ if (environment.production) {
 // Load appsettings before bootstrapping Angular application
 document.addEventListener('DOMContentLoaded', async () => {
   try {
-    // Load appsettings from GitHub secrets or local appsettings.json
+    // Load appsettings from appsettings.json (generated at build time from environment variables)
     await loadAppSettingsBeforeBootstrap();
     
     // Bootstrap Angular application after settings are loaded

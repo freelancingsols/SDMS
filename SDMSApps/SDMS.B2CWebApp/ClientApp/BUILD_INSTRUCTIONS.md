@@ -7,16 +7,13 @@
 
 ## Build Commands
 
-### Development Build (Non-Prod)
+### Development Build
 ```bash
 npm run build
-# or
-npm run build:dev
 ```
 
 This will:
-- Inject environment variables
-- Build with development configuration (no optimization, source maps enabled)
+- Build with development configuration (default, no optimization, source maps enabled)
 - Output to `dist/sdms-b2c-webapp`
 
 ### Production Build
@@ -25,7 +22,7 @@ npm run build:prod
 ```
 
 This will:
-- Inject environment variables
+- Set production flag to true
 - Build with production configuration (optimized, minified, no source maps)
 - Enable service worker
 - Output to `dist/sdms-b2c-webapp`
@@ -87,5 +84,7 @@ If you encounter build errors:
 
 - The `defaultProject` warning is harmless and can be ignored
 - Build output is in `dist/sdms-b2c-webapp`
-- Environment variables are injected via `build-env.js` before build
+- Configuration flow: CI/CD sets env vars → CI/CD updates appsettings.json (file exists in source) → Build → Runtime loads appsettings.json
+- No separate script files: CI/CD uses inline commands to update the file
+- Simple and clean: File exists in source → CI/CD updates it → Build → Runtime reads it
 

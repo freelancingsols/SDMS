@@ -64,42 +64,41 @@ jobs:
         working-directory: SDMSApps/SDMS.AuthenticationWebApp
         run: |
           # Railway CLI automatically uses RAILWAY_TOKEN environment variable for authentication
-          # No need to call railway login when RAILWAY_TOKEN is set
-          
+          # Project token is already scoped to the project, so no need to specify --project
           # Set environment variables from GitHub secrets and variables
           # Connection String (Secret)
-          railway variables set SDMS_AuthenticationWebApp_ConnectionString="${{ secrets.SDMS_AuthenticationWebApp_ConnectionString }}" --project ${{ vars.RAILWAY_PROJECT_ID }} --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          railway variables set SDMS_AuthenticationWebApp_ConnectionString="${{ secrets.SDMS_AuthenticationWebApp_ConnectionString }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
           
           # Frontend Configuration (Variable)
-          railway variables set SDMS_AuthenticationWebApp_FrontendUrl="${{ vars.SDMS_AuthenticationWebApp_FrontendUrl }}" --project ${{ vars.RAILWAY_PROJECT_ID }} --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          railway variables set SDMS_AuthenticationWebApp_FrontendUrl="${{ vars.SDMS_AuthenticationWebApp_FrontendUrl }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
           
           # Authentication URLs (Variables)
-          railway variables set SDMS_AuthenticationWebApp_LoginUrl="${{ vars.SDMS_AuthenticationWebApp_LoginUrl }}" --project ${{ vars.RAILWAY_PROJECT_ID }} --service ${{ vars.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_LogoutUrl="${{ vars.SDMS_AuthenticationWebApp_LogoutUrl }}" --project ${{ vars.RAILWAY_PROJECT_ID }} --service ${{ vars.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_ErrorUrl="${{ vars.SDMS_AuthenticationWebApp_ErrorUrl }}" --project ${{ vars.RAILWAY_PROJECT_ID }} --service ${{ vars.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_ReturnUrlParameter="${{ vars.SDMS_AuthenticationWebApp_ReturnUrlParameter }}" --project ${{ vars.RAILWAY_PROJECT_ID }} --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          railway variables set SDMS_AuthenticationWebApp_LoginUrl="${{ vars.SDMS_AuthenticationWebApp_LoginUrl }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          railway variables set SDMS_AuthenticationWebApp_LogoutUrl="${{ vars.SDMS_AuthenticationWebApp_LogoutUrl }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          railway variables set SDMS_AuthenticationWebApp_ErrorUrl="${{ vars.SDMS_AuthenticationWebApp_ErrorUrl }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          railway variables set SDMS_AuthenticationWebApp_ReturnUrlParameter="${{ vars.SDMS_AuthenticationWebApp_ReturnUrlParameter }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
           
           # Server Configuration (Variables)
-          railway variables set SDMS_AuthenticationWebApp_ServerPort="${{ vars.SDMS_AuthenticationWebApp_ServerPort }}" --project ${{ vars.RAILWAY_PROJECT_ID }} --service ${{ vars.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_ServerUrls="${{ vars.SDMS_AuthenticationWebApp_ServerUrls }}" --project ${{ vars.RAILWAY_PROJECT_ID }} --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          railway variables set SDMS_AuthenticationWebApp_ServerPort="${{ vars.SDMS_AuthenticationWebApp_ServerPort }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          railway variables set SDMS_AuthenticationWebApp_ServerUrls="${{ vars.SDMS_AuthenticationWebApp_ServerUrls }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
           
           # External Authentication (Google) - ClientId is Variable, ClientSecret is Secret
-          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId="${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId }}" --project ${{ vars.RAILWAY_PROJECT_ID }} --service ${{ vars.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret="${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret }}" --project ${{ vars.RAILWAY_PROJECT_ID }} --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId="${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret="${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
           
           # External Authentication (Auth0) - Domain and ClientId are Variables, ClientSecret is Secret
-          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain="${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain }}" --project ${{ vars.RAILWAY_PROJECT_ID }} --service ${{ vars.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId="${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId }}" --project ${{ vars.RAILWAY_PROJECT_ID }} --service ${{ vars.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret="${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret }}" --project ${{ vars.RAILWAY_PROJECT_ID }} --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain="${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId="${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret="${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
           
           # External Authentication (Redirect URI) (Variable)
-          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri="${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri }}" --project ${{ vars.RAILWAY_PROJECT_ID }} --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri="${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
           
           # Webhook (Secret)
-          railway variables set SDMS_AuthenticationWebApp_WebhookSecret="${{ secrets.SDMS_AuthenticationWebApp_WebhookSecret }}" --project ${{ vars.RAILWAY_PROJECT_ID }} --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          railway variables set SDMS_AuthenticationWebApp_WebhookSecret="${{ secrets.SDMS_AuthenticationWebApp_WebhookSecret }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
           
           # Signing Key Path (Variable)
-          railway variables set SDMS_AuthenticationWebApp_SigningKeyPath="${{ vars.SDMS_AuthenticationWebApp_SigningKeyPath }}" --project ${{ vars.RAILWAY_PROJECT_ID }} --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          railway variables set SDMS_AuthenticationWebApp_SigningKeyPath="${{ vars.SDMS_AuthenticationWebApp_SigningKeyPath }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
           
           echo "✓ Environment variables set in Railway"
 
@@ -109,7 +108,7 @@ jobs:
         working-directory: SDMSApps/SDMS.AuthenticationWebApp
         run: |
           # Railway CLI automatically uses RAILWAY_TOKEN environment variable for authentication
-          # No need to call railway login when RAILWAY_TOKEN is set
-          # Deploy to Railway
-          railway up --project ${{ vars.RAILWAY_PROJECT_ID }} --service ${{ vars.RAILWAY_SERVICE_ID }}
+          # Project token is already scoped to the project, so no need to specify --project
+          # Deploy to Railway (service is specified if project has multiple services)
+          railway up --service ${{ vars.RAILWAY_SERVICE_ID }}
 

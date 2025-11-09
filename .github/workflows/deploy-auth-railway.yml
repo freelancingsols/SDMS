@@ -152,9 +152,13 @@ jobs:
           echo "✅ RAILWAY_TOKEN is set (length: ${#RAILWAY_TOKEN} characters)"
           echo ""
           
-          # Check Railway CLI env command syntax
-          echo "3. Railway CLI env command help:"
-          railway env --help 2>&1 | head -30 || echo "Help command not available"
+          # Check Railway CLI variables command syntax
+          echo "3. Checking Railway CLI variables commands:"
+          echo "   railway variables --help:"
+          railway variables --help 2>&1 | head -20 || echo "   railway variables command not found"
+          echo ""
+          echo "   railway variable --help:"
+          railway variable --help 2>&1 | head -20 || echo "   railway variable command not found"
           echo ""
           
           # Test authentication
@@ -168,11 +172,11 @@ jobs:
           fi
           echo ""
 
-      - name: Verify Railway CLI env command
+      - name: Discover Railway CLI variables command
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
-          echo "=== Verifying Railway CLI env Command ==="
+          echo "=== Discovering Railway CLI Variables Command ==="
           echo ""
           
           # Check Railway CLI version
@@ -180,14 +184,24 @@ jobs:
           railway --version || echo "Could not get version"
           echo ""
           
-          # Get Railway CLI help for env command
-          echo "Railway CLI env command help:"
-          railway env --help 2>&1 | head -30 || echo "Help not available"
+          # List all Railway CLI commands
+          echo "Available Railway CLI commands:"
+          railway --help 2>&1 | grep -A 50 "Commands:" || railway --help 2>&1 | head -50
           echo ""
           
-          # Check if 'set' subcommand exists
-          echo "Checking for 'env set' subcommand:"
-          railway env set --help 2>&1 | head -20 || echo "Checking env set command..."
+          # Check for variables command (plural)
+          echo "Checking 'railway variables' command:"
+          railway variables --help 2>&1 | head -30 || echo "railway variables command not found"
+          echo ""
+          
+          # Check for variable command (singular)
+          echo "Checking 'railway variable' command:"
+          railway variable --help 2>&1 | head -30 || echo "railway variable command not found"
+          echo ""
+          
+          # Check for variables set command
+          echo "Checking 'railway variables set' command:"
+          railway variables set --help 2>&1 | head -30 || echo "railway variables set command not found"
           echo ""
 
       - name: Set Railway environment variables using CLI with error checking
@@ -268,9 +282,8 @@ jobs:
             
             echo -n "Setting $VAR_TYPE $VAR_NAME... "
             
-            # Use railway env set command with proper error checking
-            # Run command and capture output and exit code separately
-            OUTPUT=$(railway env set "${VAR_NAME}=${VAR_VALUE}" --service "$SERVICE_ID" 2>&1)
+            # Use railway variables set command with both --service and --project flags
+            OUTPUT=$(railway variables set "${VAR_NAME}=${VAR_VALUE}" --service "$SERVICE_ID" --project "$PROJECT_ID" 2>&1)
             EXIT_CODE=$?
             
             if [ $EXIT_CODE -eq 0 ]; then
@@ -364,11 +377,18 @@ jobs:
             echo "   This is required for the application to work."
             echo ""
             echo "🔧 Solutions:"
-            echo "   1. Verify RAILWAY_TOKEN is a valid Project Token"
-            echo "   2. Check token permissions in Railway dashboard"
-            echo "   3. Set variable manually: https://railway.app/project/$PROJECT_ID/service/$SERVICE_ID/variables"
+            echo "   1. Railway CLI may not support setting variables via CLI"
+            echo "   2. Set variables manually in Railway dashboard:"
+            echo "      https://railway.app/project/$PROJECT_ID/service/$SERVICE_ID/variables"
+            echo "   3. Or use Railway's REST/GraphQL API (requires API token)"
             echo ""
-            echo "📖 See RAILWAY_TOKEN_GUIDE.md for help"
+            echo "📝 Manual Setup Steps:"
+            echo "   1. Go to Railway dashboard"
+            echo "   2. Navigate to your service → Variables tab"
+            echo "   3. Click 'New Variable' for each variable"
+            echo "   4. Copy variable names and values from GitHub secrets/variables"
+            echo ""
+            echo "⚠️  Note: Deployment will fail if connection string is not set"
             exit 1
           elif [ ${#FAILED_VARS[@]} -gt 0 ]; then
             echo "⚠️  Some variables failed to set, but deployment can continue"

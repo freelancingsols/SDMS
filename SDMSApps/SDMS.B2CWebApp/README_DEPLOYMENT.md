@@ -10,9 +10,11 @@ This Angular frontend application is configured to deploy on Vercel.
 
 Add the following secrets in your GitHub repository (Settings → Secrets and variables → Actions):
 
-- `API_URL` - Backend API URL (e.g., `https://your-api.railway.app`)
-- `AUTH_SERVER` - Authentication server URL (e.g., `https://your-auth.railway.app`)
-- `CLIENT_ID` - OAuth client ID (e.g., `sdms_frontend`)
+- `SDMS_B2CWebApp_url` - B2C WebApp URL (e.g., `https://your-app.vercel.app`)
+- `SDMS_AuthenticationWebApp_url` - Authentication server URL (e.g., `https://your-auth.railway.app`)
+- `SDMS_AuthenticationWebApp_clientid` - OAuth client ID (e.g., `sdms_frontend`)
+- `SDMS_AuthenticationWebApp_redirectUri` - OAuth redirect URI (e.g., `https://your-app.vercel.app/auth-callback`)
+- `SDMS_AuthenticationWebApp_scope` - OAuth scope (e.g., `openid profile email roles api`)
 - `VERCEL_TOKEN` - Vercel authentication token
 - `VERCEL_ORG_ID` - Vercel organization ID
 - `VERCEL_PROJECT_ID` - Vercel project ID
@@ -26,11 +28,13 @@ Add the following secrets in your GitHub repository (Settings → Secrets and va
 
 ### 3. Environment Variables
 
-The application uses environment variables that are injected at build time:
+The application uses environment variables that are injected at build time (using SDMS_* naming convention):
 
-- `API_URL` - Backend API endpoint
-- `AUTH_SERVER` - Authentication server endpoint  
-- `CLIENT_ID` - OAuth client identifier
+- `SDMS_B2CWebApp_url` - B2C WebApp URL
+- `SDMS_AuthenticationWebApp_url` - Authentication server endpoint
+- `SDMS_AuthenticationWebApp_clientid` - OAuth client identifier
+- `SDMS_AuthenticationWebApp_redirectUri` - OAuth redirect URI
+- `SDMS_AuthenticationWebApp_scope` - OAuth scope
 
 ### 4. Manual Deployment
 

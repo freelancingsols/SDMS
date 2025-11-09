@@ -1,14 +1,17 @@
 using System.Collections.Immutable;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
 using SDMS.AuthenticationWebApp.Constants;
 using SDMS.AuthenticationWebApp.Models;
+using SDMS.AuthenticationWebApp.Services;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace SDMS.AuthenticationWebApp.Controllers;
@@ -43,8 +46,31 @@ public class AuthorizationController : Controller
     [IgnoreAntiforgeryToken]
     public async Task<IActionResult> Authorize()
     {
-        var request = HttpContext.GetOpenIddictServerRequest() ??
+        // When passthrough is enabled, OpenIddict processes the request through middleware
+        // The request should be available in HttpContext.Items or Features
+        // For now, we'll access it via reflection as a fallback
+        var request = GetOpenIddictRequest() ??
             throw new InvalidOperationException("The OpenID Connect request cannot be retrieved.");
+        
+        OpenIddictRequest? GetOpenIddictRequest()
+        {
+            // Try to get request from HttpContext.Items (OpenIddict might store it there)
+            if (HttpContext.Items.TryGetValue("openiddict-request", out var item) && item is OpenIddictRequest req)
+                return req;
+            
+            // Try extension method via reflection
+            var extensionType = Type.GetType("OpenIddict.Server.AspNetCore.OpenIddictServerAspNetCoreHelpers, OpenIddict.Server.AspNetCore");
+            if (extensionType != null)
+            {
+                var method = extensionType.GetMethod("GetOpenIddictServerRequest", 
+                    System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public,
+                    null, new[] { typeof(HttpContext) }, null);
+                if (method != null)
+                    return method.Invoke(null, new[] { HttpContext }) as OpenIddictRequest;
+            }
+            
+            return null;
+        }
 
         // Retrieve the user principal stored in the authentication cookie.
         var result = await HttpContext.AuthenticateAsync(IdentityConstants.ApplicationScheme);
@@ -74,12 +100,17 @@ public class AuthorizationController : Controller
             throw new InvalidOperationException("Details concerning the calling client application cannot be found.");
 
         // Retrieve the permanent authorizations associated with the user and the calling client application.
-        var authorizations = await _authorizationManager.FindAsync(
+        var authorizationsList = new List<object>();
+        await foreach (var authorization in _authorizationManager.FindAsync(
             subject: await _userManager.GetUserIdAsync(user),
             client: await _applicationManager.GetIdAsync(application, CancellationToken.None) ?? string.Empty,
             status: Statuses.Valid,
             type: AuthorizationTypes.Permanent,
-            scopes: request.GetScopes()).ToListAsync();
+            scopes: request.GetScopes()))
+        {
+            authorizationsList.Add(authorization);
+        }
+        var authorizations = authorizationsList;
 
         switch (await _applicationManager.GetConsentTypeAsync(application, CancellationToken.None))
         {

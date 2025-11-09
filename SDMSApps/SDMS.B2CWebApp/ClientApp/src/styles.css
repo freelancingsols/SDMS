@@ -1,1 +1,47 @@
 /* You can add global styles to this file, and also import other style files */
+
+/* Angular Material Theme */
+@import '@angular/material/prebuilt-themes/indigo-pink.css';
+
+/* Global Styles */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Roboto, "Helvetica Neue", sans-serif;
+}
+
+/* Material Design Overrides */
+.mat-toolbar {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.mat-card {
+  margin: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  transition: box-shadow 0.3s ease;
+}
+
+.mat-card:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+}
+
+/* Custom button styles */
+.mat-raised-button {
+  margin: 8px;
+}
+
+/* Spacing utilities */
+.spacer {
+  flex: 1 1 auto;
+}
+
+/* Container */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
+}

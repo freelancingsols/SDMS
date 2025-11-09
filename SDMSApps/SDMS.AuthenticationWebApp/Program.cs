@@ -13,6 +13,7 @@ using SDMS.AuthenticationWebApp.Services;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 using Microsoft.Extensions.FileProviders;
 using System.Net;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,7 +22,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddEnvironmentVariables();
 
 // Configure server URLs from configuration
-// Priority: Environment Variable (PORT) > Configuration (Server:Port) > Configuration (Server:Urls) > Default
+// Priority: Environment Variable (PORT) > Configuration (SDMS_AuthenticationWebApp_ServerPort) > Configuration (SDMS_AuthenticationWebApp_ServerUrls) > Default
 var port = Environment.GetEnvironmentVariable("PORT") 
     ?? builder.Configuration[ConfigurationKeys.ServerPort];
 var urls = builder.Configuration[ConfigurationKeys.ServerUrls];
@@ -42,11 +43,15 @@ else if (!string.IsNullOrEmpty(urls))
 // Add services
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "SDMS Authentication API", Version = "v1" });
+});
 
-// Database - Load from environment variable (Railway provides POSTGRES_CONNECTION automatically)
-var connectionString = builder.Configuration[ConfigurationKeys.PostgresConnection] 
-    ?? builder.Configuration[ConfigurationKeys.DefaultConnection]
+// Database - Load from environment variable
+// Priority: SDMS_AuthenticationWebApp_ConnectionString > POSTGRES_CONNECTION (Railway) > Default
+var connectionString = builder.Configuration[ConfigurationKeys.ConnectionString]
+    ?? builder.Configuration[ConfigurationKeys.PostgresConnection]
     ?? "Host=localhost;Database=sdms_auth;Username=postgres;Password=postgres";
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -113,10 +118,10 @@ builder.Services.AddOpenIddict()
     });
 
 // Authentication - configure login interaction similar to IdentityServer4 UserInteraction
-var loginUrl = builder.Configuration[ConfigurationKeys.AuthenticationLoginUrl] ?? "/login";
-var logoutUrl = builder.Configuration[ConfigurationKeys.AuthenticationLogoutUrl] ?? "/logout";
-var errorUrl = builder.Configuration[ConfigurationKeys.AuthenticationErrorUrl] ?? "/login";
-var returnUrlParameter = builder.Configuration[ConfigurationKeys.AuthenticationReturnUrlParameter] ?? "ReturnUrl";
+var loginUrl = builder.Configuration[ConfigurationKeys.LoginUrl] ?? "/login";
+var logoutUrl = builder.Configuration[ConfigurationKeys.LogoutUrl] ?? "/logout";
+var errorUrl = builder.Configuration[ConfigurationKeys.ErrorUrl] ?? "/login";
+var returnUrlParameter = builder.Configuration[ConfigurationKeys.ReturnUrlParameter] ?? "ReturnUrl";
 
 builder.Services.AddAuthentication(options =>
 {
@@ -143,7 +148,8 @@ builder.Services.AddAuthentication(options =>
         options.ClientSecret = clientSecret;
         options.SignInScheme = IdentityConstants.ExternalScheme;
         options.SaveTokens = true;
-        options.GetClaimsFromUserInfoEndpoint = true;
+        // GetClaimsFromUserInfoEndpoint is automatically enabled in ASP.NET Core 8.0
+        // No need to set it explicitly
     }
 });
 
@@ -192,6 +198,7 @@ builder.Services.AddScoped<TokenService>();
 builder.Services.AddHttpClient();
 
 // CORS
+var frontendUrl = builder.Configuration[ConfigurationKeys.FrontendUrl] ?? "http://localhost:4200";
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -199,7 +206,7 @@ builder.Services.AddCors(options =>
         policy.WithOrigins(
             "http://localhost:4200",
             "https://localhost:4200",
-            builder.Configuration[ConfigurationKeys.FrontendUrl] ?? "http://localhost:4200")
+            frontendUrl)
             .AllowAnyMethod()
             .AllowAnyHeader()
             .AllowCredentials();
@@ -217,6 +224,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors();
+app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -240,6 +248,7 @@ app.Use(async (HttpContext context, Func<Task> next) =>
 {
     await next.Invoke();
     if (context.Response.StatusCode == (int)HttpStatusCode.NotFound 
+        && context.Request.Path.Value != null
         && !context.Request.Path.Value.StartsWith("/api")
         && !context.Request.Path.Value.StartsWith("/connect")
         && !context.Request.Path.Value.StartsWith("/swagger"))
@@ -283,7 +292,6 @@ using (var scope = app.Services.CreateScope())
                 Permissions.Endpoints.Authorization,
                 Permissions.Endpoints.Token,
                 Permissions.Endpoints.Logout,
-                Permissions.Endpoints.Userinfo,
                 Permissions.GrantTypes.AuthorizationCode,
                 Permissions.GrantTypes.RefreshToken,
                 Permissions.ResponseTypes.Code,

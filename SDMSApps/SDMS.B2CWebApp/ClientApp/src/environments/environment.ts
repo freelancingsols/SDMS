@@ -1,10 +1,8 @@
-// This file can be replaced during build by using the `fileReplacements` array.
-// `ng build` replaces `environment.ts` with `environment.prod.ts`.
-// The list of file replacements can be found in `angular.json`.
+// Environment configuration
+// Note: Application configuration (API URLs, etc.) is loaded from appsettings.json at runtime
+// This file only contains the production flag for Angular optimizations
+// The production flag is set at build time by CI/CD/Vercel
 
 export const environment = {
-  production: false,
-  apiUrl: 'https://localhost:7001',
-  authServer: 'https://localhost:7001',
-  clientId: 'sdms_frontend'
+  production: false // Updated at build time for production builds
 };

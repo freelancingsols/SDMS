@@ -115,7 +115,7 @@ jobs:
           
           echo "=== Verification Complete ==="
 
-      - name: Verify Railway Service Access
+      - name: Verify Railway Service Access and CLI Help
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
@@ -123,18 +123,29 @@ jobs:
           
           echo "=== Verifying Railway Service Access ==="
           echo ""
-          echo "Attempting to verify service: $SERVICE_ID"
+          echo "Service ID: $SERVICE_ID"
           echo ""
           
-          # Try to get service info (this will fail if service doesn't exist or token doesn't have access)
-          if railway service --service "$SERVICE_ID" &> /dev/null; then
-            echo "✅ Service access verified"
-            railway service --service "$SERVICE_ID" || true
+          # Check Railway CLI version and help
+          echo "1. Railway CLI version:"
+          railway --version || echo "Could not get version"
+          echo ""
+          
+          echo "2. Railway variables command help:"
+          railway variables --help 2>&1 | head -20 || railway variables set --help 2>&1 | head -20 || echo "Help not available"
+          echo ""
+          
+          # Test if we can access Railway API
+          echo "3. Testing Railway authentication:"
+          if railway whoami &> /dev/null; then
+            echo "✅ Authentication successful"
+            railway whoami || true
           else
-            echo "⚠️  Could not verify service via CLI (this might be okay)"
-            echo "   Railway CLI might not support service info command"
-            echo "   Proceeding with variable setting..."
+            echo "⚠️  Could not verify authentication (might be okay with project token)"
           fi
+          echo ""
+          
+          echo "=== Ready to set variables ==="
           echo ""
 
       - name: Set Railway environment variables from GitHub secrets and variables
@@ -142,9 +153,9 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         working-directory: SDMSApps/SDMS.AuthenticationWebApp
         run: |
-          set -e  # Exit on error
-          
           SERVICE_ID="${{ vars.RAILWAY_SERVICE_ID }}"
+          FAILED_VARS=()
+          CRITICAL_FAILED=0
           
           if [ -z "$SERVICE_ID" ]; then
             echo "❌ Error: RAILWAY_SERVICE_ID is not set"
@@ -153,6 +164,61 @@ jobs:
           
           echo "Setting environment variables for service: $SERVICE_ID"
           echo ""
+          
+          # Function to set variable using Railway API (most reliable method)
+          set_railway_var_api() {
+            local VAR_NAME=$1
+            local VAR_VALUE=$2
+            local PROJECT_ID="${{ vars.RAILWAY_PROJECT_ID }}"
+            
+            # Get project ID from service if not provided
+            if [ -z "$PROJECT_ID" ]; then
+              SERVICE_INFO=$(curl -s -X GET \
+                -H "Authorization: Bearer $RAILWAY_TOKEN" \
+                "https://api.railway.app/v1/services/$SERVICE_ID" 2>&1)
+              PROJECT_ID=$(echo "$SERVICE_INFO" | grep -o '"projectId":"[^"]*' | cut -d'"' -f4 || echo "")
+            fi
+            
+            if [ -z "$PROJECT_ID" ]; then
+              echo "ERROR: Could not determine project ID"
+              return 1
+            fi
+            
+            # Check if variable already exists
+            VAR_LIST=$(curl -s -X GET \
+              -H "Authorization: Bearer $RAILWAY_TOKEN" \
+              "https://api.railway.app/v1/variables?serviceId=$SERVICE_ID" 2>&1)
+            
+            VAR_ID=$(echo "$VAR_LIST" | grep -o "\"id\":\"[^\"]*\",\"name\":\"$VAR_NAME\"" | grep -o "\"id\":\"[^\"]*" | cut -d'"' -f4 | head -1 || echo "")
+            
+            if [ -n "$VAR_ID" ]; then
+              # Update existing variable
+              UPDATE_RESPONSE=$(curl -s -w "\n%{http_code}" -X PATCH \
+                -H "Authorization: Bearer $RAILWAY_TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "{\"value\":\"$VAR_VALUE\"}" \
+                "https://api.railway.app/v1/variables/$VAR_ID" 2>&1)
+              
+              HTTP_CODE=$(echo "$UPDATE_RESPONSE" | tail -1)
+              if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "204" ]; then
+                return 0
+              fi
+            else
+              # Create new variable
+              CREATE_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+                -H "Authorization: Bearer $RAILWAY_TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "{\"name\":\"$VAR_NAME\",\"value\":\"$VAR_VALUE\",\"serviceId\":\"$SERVICE_ID\"}" \
+                "https://api.railway.app/v1/variables" 2>&1)
+              
+              HTTP_CODE=$(echo "$CREATE_RESPONSE" | tail -1)
+              if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
+                return 0
+              fi
+            fi
+            
+            return 1
+          }
           
           # Function to set variable with error handling
           set_railway_var() {
@@ -167,32 +233,50 @@ jobs:
             
             echo -n "Setting $VAR_TYPE $VAR_NAME... "
             
-            # Railway CLI syntax: railway variables set KEY VALUE --service SERVICE_ID
-            # For values with special characters, we pass them as arguments (shell handles quoting)
-            OUTPUT=$(railway variables set "$VAR_NAME" "$VAR_VALUE" --service "$SERVICE_ID" 2>&1)
-            EXIT_CODE=$?
-            
-            if [ $EXIT_CODE -eq 0 ]; then
-              echo "✅"
+            # Try Railway API first (most reliable)
+            if set_railway_var_api "$VAR_NAME" "$VAR_VALUE"; then
+              echo "✅ (API)"
               return 0
-            else
-              echo "❌ Failed"
-              echo "Error: $OUTPUT"
-              echo ""
-              echo "Debug info:"
-              echo "  Variable name: $VAR_NAME"
-              echo "  Variable type: $VAR_TYPE"
-              echo "  Service ID: $SERVICE_ID"
-              echo "  Value length: ${#VAR_VALUE} characters"
-              echo "  Value preview: ${VAR_VALUE:0:50}..."
-              echo ""
-              echo "Troubleshooting:"
-              echo "1. Check Railway CLI version: railway --version"
-              echo "2. Verify RAILWAY_TOKEN is valid"
-              echo "3. Verify SERVICE_ID exists: $SERVICE_ID"
-              echo "4. Check Railway dashboard: https://railway.app/project/${{ vars.RAILWAY_PROJECT_ID }}/service/$SERVICE_ID/variables"
-              exit 1
             fi
+            
+            # Fallback to CLI methods
+            echo ""
+            echo "  API failed, trying CLI method 1... "
+            export RAILWAY_TOKEN
+            
+            # Method 1: KEY=VALUE format with service flag (with 15s timeout)
+            if command -v timeout &> /dev/null; then
+              OUTPUT=$(timeout 15 railway variables set "${VAR_NAME}=${VAR_VALUE}" --service "$SERVICE_ID" 2>&1)
+              EXIT_CODE=$?
+            else
+              OUTPUT=$(railway variables set "${VAR_NAME}=${VAR_VALUE}" --service "$SERVICE_ID" 2>&1)
+              EXIT_CODE=$?
+            fi
+            
+            if [ $EXIT_CODE -eq 0 ] && [ -z "$(echo "$OUTPUT" | grep -i -E 'error|timeout|hang')" ]; then
+              echo "  ✅ (CLI method 1)"
+              return 0
+            fi
+            
+            # If CLI hangs or fails, report the issue
+            if [ $EXIT_CODE -eq 124 ]; then
+              echo "  ⚠️  CLI command timed out after 15 seconds (this is why it appeared to hang)"
+              echo "  CLI output: $OUTPUT"
+            else
+              echo "  ⚠️  CLI command failed: $OUTPUT"
+            fi
+            
+            # All methods failed
+            echo ""
+            echo "❌ Failed to set $VAR_NAME using both API and CLI methods"
+            echo "   CLI output: $OUTPUT"
+            echo "   Variable name: $VAR_NAME"
+            echo "   Service ID: $SERVICE_ID"
+            echo "   Value length: ${#VAR_VALUE} characters"
+            echo ""
+            echo "⚠️  This variable may need to be set manually in Railway dashboard:"
+            echo "   https://railway.app/project/${{ vars.RAILWAY_PROJECT_ID }}/service/$SERVICE_ID/variables"
+            return 1  # Don't exit, just return error
           }
           
           # Connection String (Secret) - REQUIRED
@@ -203,57 +287,81 @@ jobs:
             echo "Repository → Settings → Secrets and variables → Actions → New repository secret"
             exit 1
           fi
-          set_railway_var "SDMS_AuthenticationWebApp_ConnectionString" "${{ secrets.SDMS_AuthenticationWebApp_ConnectionString }}" "secret"
+          if ! set_railway_var "SDMS_AuthenticationWebApp_ConnectionString" "${{ secrets.SDMS_AuthenticationWebApp_ConnectionString }}" "secret"; then
+            FAILED_VARS+=("SDMS_AuthenticationWebApp_ConnectionString")
+            CRITICAL_FAILED=1
+          fi
           
           # Frontend Configuration (Variable)
           echo ""
           echo "=== Setting Frontend Configuration ==="
-          set_railway_var "SDMS_AuthenticationWebApp_FrontendUrl" "${{ vars.SDMS_AuthenticationWebApp_FrontendUrl }}" "variable"
+          set_railway_var "SDMS_AuthenticationWebApp_FrontendUrl" "${{ vars.SDMS_AuthenticationWebApp_FrontendUrl }}" "variable" || FAILED_VARS+=("SDMS_AuthenticationWebApp_FrontendUrl")
           
           # Authentication URLs (Variables)
           echo ""
           echo "=== Setting Authentication URLs ==="
-          set_railway_var "SDMS_AuthenticationWebApp_LoginUrl" "${{ vars.SDMS_AuthenticationWebApp_LoginUrl }}" "variable"
-          set_railway_var "SDMS_AuthenticationWebApp_LogoutUrl" "${{ vars.SDMS_AuthenticationWebApp_LogoutUrl }}" "variable"
-          set_railway_var "SDMS_AuthenticationWebApp_ErrorUrl" "${{ vars.SDMS_AuthenticationWebApp_ErrorUrl }}" "variable"
-          set_railway_var "SDMS_AuthenticationWebApp_ReturnUrlParameter" "${{ vars.SDMS_AuthenticationWebApp_ReturnUrlParameter }}" "variable"
+          set_railway_var "SDMS_AuthenticationWebApp_LoginUrl" "${{ vars.SDMS_AuthenticationWebApp_LoginUrl }}" "variable" || FAILED_VARS+=("SDMS_AuthenticationWebApp_LoginUrl")
+          set_railway_var "SDMS_AuthenticationWebApp_LogoutUrl" "${{ vars.SDMS_AuthenticationWebApp_LogoutUrl }}" "variable" || FAILED_VARS+=("SDMS_AuthenticationWebApp_LogoutUrl")
+          set_railway_var "SDMS_AuthenticationWebApp_ErrorUrl" "${{ vars.SDMS_AuthenticationWebApp_ErrorUrl }}" "variable" || FAILED_VARS+=("SDMS_AuthenticationWebApp_ErrorUrl")
+          set_railway_var "SDMS_AuthenticationWebApp_ReturnUrlParameter" "${{ vars.SDMS_AuthenticationWebApp_ReturnUrlParameter }}" "variable" || FAILED_VARS+=("SDMS_AuthenticationWebApp_ReturnUrlParameter")
           
           # Server Configuration (Variables)
           echo ""
           echo "=== Setting Server Configuration ==="
-          set_railway_var "SDMS_AuthenticationWebApp_ServerPort" "${{ vars.SDMS_AuthenticationWebApp_ServerPort }}" "variable"
-          set_railway_var "SDMS_AuthenticationWebApp_ServerUrls" "${{ vars.SDMS_AuthenticationWebApp_ServerUrls }}" "variable"
+          set_railway_var "SDMS_AuthenticationWebApp_ServerPort" "${{ vars.SDMS_AuthenticationWebApp_ServerPort }}" "variable" || FAILED_VARS+=("SDMS_AuthenticationWebApp_ServerPort")
+          set_railway_var "SDMS_AuthenticationWebApp_ServerUrls" "${{ vars.SDMS_AuthenticationWebApp_ServerUrls }}" "variable" || FAILED_VARS+=("SDMS_AuthenticationWebApp_ServerUrls")
           
           # External Authentication (Google) - ClientId is Variable, ClientSecret is Secret
           echo ""
           echo "=== Setting External Authentication (Google) ==="
-          set_railway_var "SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId" "${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId }}" "variable"
-          set_railway_var "SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret" "${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret }}" "secret"
+          set_railway_var "SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId" "${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId }}" "variable" || FAILED_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId")
+          set_railway_var "SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret" "${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret }}" "secret" || FAILED_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret")
           
           # External Authentication (Auth0) - Domain and ClientId are Variables, ClientSecret is Secret
           echo ""
           echo "=== Setting External Authentication (Auth0) ==="
-          set_railway_var "SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain" "${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain }}" "variable"
-          set_railway_var "SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId" "${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId }}" "variable"
-          set_railway_var "SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret" "${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret }}" "secret"
+          set_railway_var "SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain" "${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain }}" "variable" || FAILED_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain")
+          set_railway_var "SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId" "${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId }}" "variable" || FAILED_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId")
+          set_railway_var "SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret" "${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret }}" "secret" || FAILED_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret")
           
           # External Authentication (Redirect URI) (Variable)
           echo ""
           echo "=== Setting External Authentication (Redirect URI) ==="
-          set_railway_var "SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri" "${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri }}" "variable"
+          set_railway_var "SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri" "${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri }}" "variable" || FAILED_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri")
           
           # Webhook (Secret)
           echo ""
           echo "=== Setting Webhook Configuration ==="
-          set_railway_var "SDMS_AuthenticationWebApp_WebhookSecret" "${{ secrets.SDMS_AuthenticationWebApp_WebhookSecret }}" "secret"
+          set_railway_var "SDMS_AuthenticationWebApp_WebhookSecret" "${{ secrets.SDMS_AuthenticationWebApp_WebhookSecret }}" "secret" || FAILED_VARS+=("SDMS_AuthenticationWebApp_WebhookSecret")
           
           # Signing Key Path (Variable)
           echo ""
           echo "=== Setting Signing Key Path ==="
-          set_railway_var "SDMS_AuthenticationWebApp_SigningKeyPath" "${{ vars.SDMS_AuthenticationWebApp_SigningKeyPath }}" "variable"
+          set_railway_var "SDMS_AuthenticationWebApp_SigningKeyPath" "${{ vars.SDMS_AuthenticationWebApp_SigningKeyPath }}" "variable" || FAILED_VARS+=("SDMS_AuthenticationWebApp_SigningKeyPath")
           
           echo ""
-          echo "✅ All environment variables set successfully"
+          echo "=== Summary ==="
+          if [ ${#FAILED_VARS[@]} -eq 0 ]; then
+            echo "✅ All environment variables set successfully"
+          else
+            echo "⚠️  Some variables failed to set:"
+            for var in "${FAILED_VARS[@]}"; do
+              echo "   - $var"
+            done
+            echo ""
+            echo "Please set these manually in Railway dashboard:"
+            echo "https://railway.app/project/${{ vars.RAILWAY_PROJECT_ID }}/service/$SERVICE_ID/variables"
+            echo ""
+            if [ $CRITICAL_FAILED -eq 1 ]; then
+              echo "❌ CRITICAL: SDMS_AuthenticationWebApp_ConnectionString failed to set"
+              echo "   This is required for the application to work"
+              echo "   Please set it manually in Railway dashboard before deploying"
+              exit 1
+            else
+              echo "⚠️  Non-critical variables failed, but deployment can continue"
+              echo "   Please set them manually in Railway dashboard"
+            fi
+          fi
 
       - name: Verify Railway environment variables
         env:

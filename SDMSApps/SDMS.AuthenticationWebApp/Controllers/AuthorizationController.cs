@@ -80,8 +80,8 @@ public class AuthorizationController : Controller
         {
             // Get configured login URL from configuration
             var configuration = HttpContext.RequestServices.GetRequiredService<IConfiguration>();
-            var loginUrl = configuration[ConfigurationKeys.AuthenticationLoginUrl] ?? "/login";
-            var returnUrlParameter = configuration[ConfigurationKeys.AuthenticationReturnUrlParameter] ?? "ReturnUrl";
+            var loginUrl = configuration[ConfigurationKeys.LoginUrl] ?? "/login";
+            var returnUrlParameter = configuration[ConfigurationKeys.ReturnUrlParameter] ?? "ReturnUrl";
             
             // Build return URL with all query parameters
             var returnUrl = Request.PathBase + Request.Path + QueryString.Create(

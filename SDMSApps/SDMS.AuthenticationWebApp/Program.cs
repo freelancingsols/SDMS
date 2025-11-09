@@ -120,23 +120,20 @@ builder.Services.AddOpenIddict()
     });
 
 // Authentication - configure login interaction similar to IdentityServer4 UserInteraction
+// Note: AddIdentity already registers Identity.Application scheme, so we don't need to add it again
+// We only need to add external authentication schemes and configure the Application cookie
 var loginUrl = builder.Configuration[ConfigurationKeys.LoginUrl] ?? "/login";
 var logoutUrl = builder.Configuration[ConfigurationKeys.LogoutUrl] ?? "/logout";
 var errorUrl = builder.Configuration[ConfigurationKeys.ErrorUrl] ?? "/login";
 var returnUrlParameter = builder.Configuration[ConfigurationKeys.ReturnUrlParameter] ?? "ReturnUrl";
 
+// Add external authentication schemes only
+// Identity.Application is already registered by AddIdentity
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultScheme = IdentityConstants.ApplicationScheme;
     options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
     options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme;
-})
-.AddCookie(IdentityConstants.ApplicationScheme, options =>
-{
-    options.LoginPath = loginUrl;
-    options.LogoutPath = logoutUrl;
-    options.AccessDeniedPath = errorUrl;
-    options.ReturnUrlParameter = returnUrlParameter;
 })
 .AddCookie(IdentityConstants.ExternalScheme)
 .AddGoogle(options =>

@@ -235,13 +235,27 @@ app.MapControllers();
 var angularDistPath = Path.Combine(builder.Environment.ContentRootPath, "ClientApp", "dist", "sdms-auth-client");
 var wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
 
-var fileProvider = new CompositeFileProvider(
-    new List<IFileProvider>()
-    {
-        new PhysicalFileProvider(angularDistPath),
-        new PhysicalFileProvider(wwwrootPath)
-    }
-);
+var fileProviders = new List<IFileProvider>();
+
+// Only add Angular dist file provider if directory exists
+if (Directory.Exists(angularDistPath))
+{
+    fileProviders.Add(new PhysicalFileProvider(angularDistPath));
+}
+else
+{
+    builder.Logging.CreateLogger("Program").LogWarning(
+        "Angular dist directory not found at {AngularDistPath}. Angular app will not be served.",
+        angularDistPath);
+}
+
+// Only add wwwroot file provider if directory exists
+if (Directory.Exists(wwwrootPath))
+{
+    fileProviders.Add(new PhysicalFileProvider(wwwrootPath));
+}
+
+var fileProvider = new CompositeFileProvider(fileProviders);
 
 // SPA fallback: redirect non-API routes to index.html
 app.Use(async (HttpContext context, Func<Task> next) =>

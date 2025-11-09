@@ -6,13 +6,13 @@ nixPkgs = ["dotnet-sdk_8", "nodejs-18_x"]
 
 [phases.install]
 cmds = [
-  "cd ClientApp && npm ci",
+  "cd ClientApp && npm install --legacy-peer-deps",
   "dotnet restore"
 ]
 
 [phases.build]
 cmds = [
-  "cd ClientApp && npm run build",
+  "cd ClientApp && npm run build -- --configuration production",
   "dotnet build -c Release",
   "dotnet publish -c Release -o ./publish"
 ]

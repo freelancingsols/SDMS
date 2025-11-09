@@ -15,6 +15,7 @@ using Microsoft.Extensions.FileProviders;
 using System.Net;
 using Microsoft.OpenApi.Models;
 using Microsoft.Extensions.Logging;
+using System.Linq;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -50,10 +51,62 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // Database - Load from environment variable
-// Priority: SDMS_AuthenticationWebApp_ConnectionString > POSTGRES_CONNECTION (Railway) > Default
+// Priority: SDMS_AuthenticationWebApp_ConnectionString > DATABASE_URL (Railway) > POSTGRES_URL (Railway) > POSTGRES_CONNECTION > Default
 var connectionString = builder.Configuration[ConfigurationKeys.ConnectionString]
+    ?? builder.Configuration["DATABASE_URL"]  // Railway standard
+    ?? builder.Configuration["POSTGRES_URL"]  // Railway alternative
     ?? builder.Configuration[ConfigurationKeys.PostgresConnection]
     ?? "Host=localhost;Database=sdms_auth;Username=postgres;Password=postgres";
+
+// Convert Railway DATABASE_URL format (postgresql://user:pass@host:port/db) to Npgsql format if needed
+if (connectionString.StartsWith("postgresql://") || connectionString.StartsWith("postgres://"))
+{
+    try
+    {
+        var uri = new Uri(connectionString);
+        var host = uri.Host;
+        var port = uri.Port > 0 ? uri.Port : 5432;
+        var database = uri.LocalPath.TrimStart('/');
+        var username = uri.UserInfo.Split(':')[0];
+        var password = uri.UserInfo.Split(':').Length > 1 ? uri.UserInfo.Split(':')[1] : "";
+        
+        connectionString = $"Host={host};Port={port};Database={database};Username={username};Password={password}";
+        Console.WriteLine($"Converted DATABASE_URL to Npgsql format (Host: {host}, Database: {database})");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error parsing DATABASE_URL: {ex.Message}");
+        throw new InvalidOperationException("Failed to parse DATABASE_URL. Please provide a valid PostgreSQL connection string.", ex);
+    }
+}
+
+// Validate connection string has required components
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    throw new InvalidOperationException(
+        "Database connection string is required. " +
+        "Set SDMS_AuthenticationWebApp_ConnectionString or DATABASE_URL environment variable. " +
+        "If using Railway, ensure a PostgreSQL service is attached to your project.");
+}
+
+// Validate that connection string contains Host (either in Npgsql format or URL format)
+var hasHost = connectionString.Contains("Host=") || 
+              connectionString.Contains("postgresql://") || 
+              connectionString.Contains("postgres://");
+
+if (!hasHost)
+{
+    throw new InvalidOperationException(
+        $"Database connection string is missing Host. " +
+        $"Current connection string: {(connectionString.Length > 50 ? connectionString.Substring(0, 50) + "..." : connectionString)}. " +
+        $"Please provide a valid PostgreSQL connection string with Host specified.");
+}
+
+// Log connection info (without exposing password)
+var logInfo = connectionString.Contains("Host=") 
+    ? connectionString.Split(';').Where(s => s.StartsWith("Host=") || s.StartsWith("Database=") || s.StartsWith("Port=")).Aggregate((a, b) => a + "; " + b)
+    : connectionString.Split('@')[0] + "@" + (connectionString.Contains("@") ? connectionString.Split('@')[1].Split('/')[0] : "host/database");
+Console.WriteLine($"Database connection configured: {logInfo}");
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {

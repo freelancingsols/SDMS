@@ -101,6 +101,31 @@ jobs:
 
           echo "Railway CLI version: $(railway --version)"
           echo ""
+          
+          # Verify token is set and show first few characters for debugging (not the full token)
+          echo "Token info:"
+          if [ -n "$RAILWAY_TOKEN" ]; then
+            TOKEN_PREFIX=$(echo "$RAILWAY_TOKEN" | cut -c1-8)
+            TOKEN_LENGTH=${#RAILWAY_TOKEN}
+            echo "  ✅ RAILWAY_TOKEN is set (length: $TOKEN_LENGTH, starts with: $TOKEN_PREFIX...)"
+          else
+            echo "  ❌ RAILWAY_TOKEN is not set"
+            exit 1
+          fi
+          echo ""
+          
+          # Test Railway CLI authentication
+          echo "Testing Railway CLI authentication..."
+          AUTH_TEST=$(railway whoami 2>&1)
+          if [ $? -eq 0 ]; then
+            echo "✅ Authentication successful"
+            echo "$AUTH_TEST"
+          else
+            echo "⚠️  Authentication test failed or not available"
+            echo "   Output: $AUTH_TEST"
+            echo "   Note: This might be normal for project tokens"
+          fi
+          echo ""
 
           set_railway_env() {
             local VAR_NAME=$1
@@ -114,14 +139,15 @@ jobs:
             echo -n "Setting $VAR_NAME... "
             
             # Use railway variables --set command (correct syntax)
+            # Note: Railway CLI uses RAILWAY_TOKEN environment variable automatically
             OUTPUT=$(railway variables --set "${VAR_NAME}=${VAR_VALUE}" --service "$SERVICE_ID" 2>&1)
             EXIT_CODE=$?
 
             if [ $EXIT_CODE -eq 0 ]; then
-              # Check if output contains error indicators
-              if echo "$OUTPUT" | grep -qiE "error|failed|invalid|unexpected"; then
+              # Check if output contains error indicators (including "not found" messages)
+              if echo "$OUTPUT" | grep -qiE "error|failed|invalid|unexpected|not found|token|permission|unauthorized"; then
                 echo "❌"
-                echo "   Error: $(echo "$OUTPUT" | head -2)"
+                echo "   Error: $(echo "$OUTPUT" | head -3 | tr '\n' ' ')"
                 return 1
               else
                 echo "✅"
@@ -130,7 +156,28 @@ jobs:
             else
               echo "❌"
               echo "   Error: Exit code $EXIT_CODE"
-              echo "   Output: $(echo "$OUTPUT" | head -2)"
+              if [ -n "$OUTPUT" ]; then
+                echo "   Output: $(echo "$OUTPUT" | head -3 | tr '\n' ' ')"
+              fi
+              
+              # Check for specific token-related errors and provide helpful messages
+              if echo "$OUTPUT" | grep -qiE "token.*not found|project token.*not found"; then
+                echo ""
+                echo "   💡 Troubleshooting 'Project Token not found' error:"
+                echo "   1. Verify the token is a Project Token (not Account Token)"
+                echo "   2. Generate a new Project Token:"
+                echo "      https://railway.app/project/$PROJECT_ID/settings/tokens"
+                echo "   3. Make sure the token has not expired"
+                echo "   4. Verify the token is correctly set in GitHub secrets"
+                echo "   5. Token should start with a UUID format (e.g., d799ae27-...)"
+              elif echo "$OUTPUT" | grep -qiE "invalid token|unauthorized|permission"; then
+                echo ""
+                echo "   💡 Token authentication error:"
+                echo "   1. Token might be invalid or expired"
+                echo "   2. Generate a new token: https://railway.app/project/$PROJECT_ID/settings/tokens"
+                echo "   3. Make sure token has 'Variables' permissions"
+              fi
+              
               return 1
             fi
           }

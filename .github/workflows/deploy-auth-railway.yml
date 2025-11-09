@@ -152,9 +152,9 @@ jobs:
           echo "✅ RAILWAY_TOKEN is set (length: ${#RAILWAY_TOKEN} characters)"
           echo ""
           
-          # Check Railway CLI variables command syntax
-          echo "3. Railway CLI variables command help:"
-          railway variables --help 2>&1 | head -30 || echo "Help command not available"
+          # Check Railway CLI env command syntax
+          echo "3. Railway CLI env command help:"
+          railway env --help 2>&1 | head -30 || echo "Help command not available"
           echo ""
           
           # Test authentication
@@ -168,26 +168,26 @@ jobs:
           fi
           echo ""
 
-      - name: Discover Railway CLI command syntax
+      - name: Verify Railway CLI env command
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
-          echo "=== Discovering Railway CLI Command Syntax ==="
+          echo "=== Verifying Railway CLI env Command ==="
           echo ""
           
-          # Get Railway CLI help for variables command
-          echo "Railway CLI variables command help:"
-          railway variables --help 2>&1 || railway variable --help 2>&1 || echo "Help not available"
+          # Check Railway CLI version
+          echo "Railway CLI version:"
+          railway --version || echo "Could not get version"
           echo ""
           
-          # Check if there's a 'set' subcommand
-          echo "Checking for 'set' subcommand:"
-          railway variables set --help 2>&1 | head -20 || echo "No 'set' subcommand found"
+          # Get Railway CLI help for env command
+          echo "Railway CLI env command help:"
+          railway env --help 2>&1 | head -30 || echo "Help not available"
           echo ""
           
-          # List available commands
-          echo "Available Railway CLI commands:"
-          railway --help 2>&1 | grep -A 20 "COMMANDS:" || railway --help 2>&1 | head -30
+          # Check if 'set' subcommand exists
+          echo "Checking for 'env set' subcommand:"
+          railway env set --help 2>&1 | head -20 || echo "Checking env set command..."
           echo ""
 
       - name: Set Railway environment variables using CLI with error checking
@@ -246,46 +246,16 @@ jobs:
           echo "Project ID: $PROJECT_ID"
           echo ""
           
-          # Determine which Railway CLI command syntax works
-          echo "Discovering Railway CLI syntax..."
-          RAILWAY_CMD=""
-          RAILWAY_CMD_TYPE="unknown"
-          
-          # Check if 'railway variables' (plural) command exists and has 'set' subcommand
-          if railway variables set --help &>/dev/null 2>&1; then
-            RAILWAY_CMD="variables set"
-            RAILWAY_CMD_TYPE="plural_with_set"
-            echo "✅ Found: railway variables set"
-          elif railway variables --help &>/dev/null 2>&1; then
-            # Check if variables command accepts KEY=VALUE directly
-            RAILWAY_CMD="variables"
-            RAILWAY_CMD_TYPE="plural_direct"
-            echo "✅ Found: railway variables (direct)"
-          fi
-          
-          # Check if 'railway variable' (singular) command exists
-          if [ -z "$RAILWAY_CMD" ]; then
-            if railway variable set --help &>/dev/null 2>&1; then
-              RAILWAY_CMD="variable set"
-              RAILWAY_CMD_TYPE="singular_with_set"
-              echo "✅ Found: railway variable set"
-            elif railway variable --help &>/dev/null 2>&1; then
-              RAILWAY_CMD="variable"
-              RAILWAY_CMD_TYPE="singular_direct"
-              echo "✅ Found: railway variable (direct)"
-            fi
-          fi
-          
-          if [ -z "$RAILWAY_CMD" ] || [ "$RAILWAY_CMD_TYPE" = "unknown" ]; then
-            echo "⚠️  Could not auto-detect Railway CLI command syntax"
-            echo "   Will try multiple syntax variations..."
-            RAILWAY_CMD_TYPE="unknown"
-          fi
-          
+          # Verify Railway CLI is installed and check version
+          echo "Checking Railway CLI..."
+          railway --version || {
+            echo "❌ Railway CLI is not installed"
+            exit 1
+          }
           echo ""
           
-          # Function to set variable with comprehensive error checking
-          set_railway_var() {
+          # Function to set environment variable with error checking
+          set_railway_env() {
             local VAR_NAME=$1
             local VAR_VALUE=$2
             local VAR_TYPE=${3:-"variable"}  # "secret" or "variable"
@@ -298,100 +268,29 @@ jobs:
             
             echo -n "Setting $VAR_TYPE $VAR_NAME... "
             
-            local SUCCESS=0
-            local LAST_ERROR=""
-            local OUTPUT=""
-            local EXIT_CODE=0
+            # Use railway env set command with proper error checking
+            # Run command and capture output and exit code separately
+            OUTPUT=$(railway env set "${VAR_NAME}=${VAR_VALUE}" --service "$SERVICE_ID" 2>&1)
+            EXIT_CODE=$?
             
-            # Try different command syntaxes based on discovered command type
-            if [ "$RAILWAY_CMD_TYPE" = "plural_with_set" ]; then
-              # Method 1: railway variables set KEY=VALUE --service SERVICE_ID
-              OUTPUT=$(railway variables set "${VAR_NAME}=${VAR_VALUE}" --service "$SERVICE_ID" 2>&1) || EXIT_CODE=$?
-              if [ $EXIT_CODE -eq 0 ] && ! echo "$OUTPUT" | grep -qiE "error|failed|invalid|unexpected|not found|permission|denied"; then
-                SUCCESS=1
-                METHOD_USED="railway variables set KEY=VALUE --service"
+            if [ $EXIT_CODE -eq 0 ]; then
+              # Command succeeded (exit code 0)
+              # Check if output contains error indicators (some commands return 0 but print errors)
+              if echo "$OUTPUT" | grep -qiE "error|failed|invalid|unexpected|not found|permission|denied"; then
+                echo "❌"
+                echo "   Error: $(echo "$OUTPUT" | head -2 | tr '\n' ' ')"
+                return 1
               else
-                LAST_ERROR="$(echo "$OUTPUT" | head -2 | tr '\n' ' ')"
-                
-                # Method 2: railway variables set KEY VALUE --service SERVICE_ID (space separated)
-                OUTPUT=$(railway variables set "$VAR_NAME" "$VAR_VALUE" --service "$SERVICE_ID" 2>&1) || EXIT_CODE=$?
-                if [ $EXIT_CODE -eq 0 ] && ! echo "$OUTPUT" | grep -qiE "error|failed|invalid|unexpected|not found|permission|denied"; then
-                  SUCCESS=1
-                  METHOD_USED="railway variables set KEY VALUE --service"
-                else
-                  LAST_ERROR="$(echo "$OUTPUT" | head -2 | tr '\n' ' ')"
-                fi
+                echo "✅"
+                return 0
               fi
-            elif [ "$RAILWAY_CMD_TYPE" = "singular_with_set" ]; then
-              # Method 3: railway variable set KEY=VALUE --service SERVICE_ID
-              OUTPUT=$(railway variable set "${VAR_NAME}=${VAR_VALUE}" --service "$SERVICE_ID" 2>&1) || EXIT_CODE=$?
-              if [ $EXIT_CODE -eq 0 ] && ! echo "$OUTPUT" | grep -qiE "error|failed|invalid|unexpected|not found|permission|denied"; then
-                SUCCESS=1
-                METHOD_USED="railway variable set KEY=VALUE --service"
-              else
-                LAST_ERROR="$(echo "$OUTPUT" | head -2 | tr '\n' ' ')"
-                
-                # Method 4: railway variable set KEY VALUE --service SERVICE_ID (space separated)
-                OUTPUT=$(railway variable set "$VAR_NAME" "$VAR_VALUE" --service "$SERVICE_ID" 2>&1) || EXIT_CODE=$?
-                if [ $EXIT_CODE -eq 0 ] && ! echo "$OUTPUT" | grep -qiE "error|failed|invalid|unexpected|not found|permission|denied"; then
-                  SUCCESS=1
-                  METHOD_USED="railway variable set KEY VALUE --service"
-                else
-                  LAST_ERROR="$(echo "$OUTPUT" | head -2 | tr '\n' ' ')"
-                fi
-              fi
-            elif [ "$RAILWAY_CMD_TYPE" = "plural_direct" ]; then
-              # Method 5: railway variables KEY=VALUE --service SERVICE_ID
-              OUTPUT=$(railway variables "${VAR_NAME}=${VAR_VALUE}" --service "$SERVICE_ID" 2>&1) || EXIT_CODE=$?
-              if [ $EXIT_CODE -eq 0 ] && ! echo "$OUTPUT" | grep -qiE "error|failed|invalid|unexpected|not found|permission|denied"; then
-                SUCCESS=1
-                METHOD_USED="railway variables KEY=VALUE --service"
-              else
-                LAST_ERROR="$(echo "$OUTPUT" | head -2 | tr '\n' ' ')"
-              fi
-            fi
-            
-            # Fallback: Try common syntaxes if auto-detection didn't work
-            if [ $SUCCESS -eq 0 ]; then
-              # Try: railway variable set KEY VALUE (without --service, project token scopes it)
-              OUTPUT=$(railway variable set "$VAR_NAME" "$VAR_VALUE" 2>&1) || EXIT_CODE=$?
-              if [ $EXIT_CODE -eq 0 ] && ! echo "$OUTPUT" | grep -qiE "error|failed|invalid|unexpected|not found|permission|denied"; then
-                SUCCESS=1
-                METHOD_USED="railway variable set KEY VALUE (no --service)"
-              else
-                LAST_ERROR="$(echo "$OUTPUT" | head -2 | tr '\n' ' ')"
-              fi
-            fi
-            
-            if [ $SUCCESS -eq 0 ]; then
-              # Try: railway variables set KEY=VALUE (without --service)
-              OUTPUT=$(railway variables set "${VAR_NAME}=${VAR_VALUE}" 2>&1) || EXIT_CODE=$?
-              if [ $EXIT_CODE -eq 0 ] && ! echo "$OUTPUT" | grep -qiE "error|failed|invalid|unexpected|not found|permission|denied"; then
-                SUCCESS=1
-                METHOD_USED="railway variables set KEY=VALUE (no --service)"
-              else
-                LAST_ERROR="$(echo "$OUTPUT" | head -2 | tr '\n' ' ')"
-              fi
-            fi
-            
-            if [ $SUCCESS -eq 0 ]; then
-              # Try: stdin pipe method (for special characters)
-              OUTPUT=$(echo -n "$VAR_VALUE" | railway variable set "$VAR_NAME" --service "$SERVICE_ID" 2>&1) || EXIT_CODE=$?
-              if [ $EXIT_CODE -eq 0 ] && ! echo "$OUTPUT" | grep -qiE "error|failed|invalid|unexpected|not found|permission|denied"; then
-                SUCCESS=1
-                METHOD_USED="stdin pipe method"
-              else
-                LAST_ERROR="$(echo "$OUTPUT" | head -2 | tr '\n' ' ')"
-              fi
-            fi
-            
-            # Return result
-            if [ $SUCCESS -eq 1 ]; then
-              echo "✅"
-              return 0
             else
+              # Command failed (non-zero exit code)
               echo "❌"
-              echo "   Error: $(echo "$LAST_ERROR" | head -1)"
+              echo "   Error: Command failed with exit code $EXIT_CODE"
+              if [ -n "$OUTPUT" ]; then
+                echo "   Output: $(echo "$OUTPUT" | head -2 | tr '\n' ' ')"
+              fi
               return 1
             fi
           }
@@ -408,7 +307,7 @@ jobs:
             exit 1
           fi
           
-          if set_railway_var "SDMS_AuthenticationWebApp_ConnectionString" "$SDMS_AuthenticationWebApp_ConnectionString" "secret"; then
+          if set_railway_env "SDMS_AuthenticationWebApp_ConnectionString" "$SDMS_AuthenticationWebApp_ConnectionString" "secret"; then
             SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ConnectionString")
           else
             FAILED_VARS+=("SDMS_AuthenticationWebApp_ConnectionString")
@@ -417,24 +316,24 @@ jobs:
           
           echo ""
           echo "=== Setting Configuration Variables ==="
-          set_railway_var "SDMS_AuthenticationWebApp_FrontendUrl" "$SDMS_AuthenticationWebApp_FrontendUrl" "variable" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_FrontendUrl") || FAILED_VARS+=("SDMS_AuthenticationWebApp_FrontendUrl")
-          set_railway_var "SDMS_AuthenticationWebApp_LoginUrl" "$SDMS_AuthenticationWebApp_LoginUrl" "variable" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_LoginUrl") || FAILED_VARS+=("SDMS_AuthenticationWebApp_LoginUrl")
-          set_railway_var "SDMS_AuthenticationWebApp_LogoutUrl" "$SDMS_AuthenticationWebApp_LogoutUrl" "variable" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_LogoutUrl") || FAILED_VARS+=("SDMS_AuthenticationWebApp_LogoutUrl")
-          set_railway_var "SDMS_AuthenticationWebApp_ErrorUrl" "$SDMS_AuthenticationWebApp_ErrorUrl" "variable" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ErrorUrl") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ErrorUrl")
-          set_railway_var "SDMS_AuthenticationWebApp_ReturnUrlParameter" "$SDMS_AuthenticationWebApp_ReturnUrlParameter" "variable" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ReturnUrlParameter") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ReturnUrlParameter")
-          set_railway_var "SDMS_AuthenticationWebApp_ServerPort" "$SDMS_AuthenticationWebApp_ServerPort" "variable" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ServerPort") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ServerPort")
-          set_railway_var "SDMS_AuthenticationWebApp_ServerUrls" "$SDMS_AuthenticationWebApp_ServerUrls" "variable" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ServerUrls") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ServerUrls")
-          set_railway_var "SDMS_AuthenticationWebApp_SigningKeyPath" "$SDMS_AuthenticationWebApp_SigningKeyPath" "variable" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_SigningKeyPath") || FAILED_VARS+=("SDMS_AuthenticationWebApp_SigningKeyPath")
+          set_railway_env "SDMS_AuthenticationWebApp_FrontendUrl" "$SDMS_AuthenticationWebApp_FrontendUrl" "variable" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_FrontendUrl") || FAILED_VARS+=("SDMS_AuthenticationWebApp_FrontendUrl")
+          set_railway_env "SDMS_AuthenticationWebApp_LoginUrl" "$SDMS_AuthenticationWebApp_LoginUrl" "variable" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_LoginUrl") || FAILED_VARS+=("SDMS_AuthenticationWebApp_LoginUrl")
+          set_railway_env "SDMS_AuthenticationWebApp_LogoutUrl" "$SDMS_AuthenticationWebApp_LogoutUrl" "variable" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_LogoutUrl") || FAILED_VARS+=("SDMS_AuthenticationWebApp_LogoutUrl")
+          set_railway_env "SDMS_AuthenticationWebApp_ErrorUrl" "$SDMS_AuthenticationWebApp_ErrorUrl" "variable" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ErrorUrl") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ErrorUrl")
+          set_railway_env "SDMS_AuthenticationWebApp_ReturnUrlParameter" "$SDMS_AuthenticationWebApp_ReturnUrlParameter" "variable" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ReturnUrlParameter") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ReturnUrlParameter")
+          set_railway_env "SDMS_AuthenticationWebApp_ServerPort" "$SDMS_AuthenticationWebApp_ServerPort" "variable" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ServerPort") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ServerPort")
+          set_railway_env "SDMS_AuthenticationWebApp_ServerUrls" "$SDMS_AuthenticationWebApp_ServerUrls" "variable" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ServerUrls") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ServerUrls")
+          set_railway_env "SDMS_AuthenticationWebApp_SigningKeyPath" "$SDMS_AuthenticationWebApp_SigningKeyPath" "variable" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_SigningKeyPath") || FAILED_VARS+=("SDMS_AuthenticationWebApp_SigningKeyPath")
           
           echo ""
           echo "=== Setting External Auth Variables ==="
-          set_railway_var "SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId" "$SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId" "variable" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId")
-          set_railway_var "SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret" "$SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret" "secret" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret")
-          set_railway_var "SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain" "$SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain" "variable" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain")
-          set_railway_var "SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId" "$SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId" "variable" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId")
-          set_railway_var "SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret" "$SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret" "secret" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret")
-          set_railway_var "SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri" "$SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri" "variable" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri")
-          set_railway_var "SDMS_AuthenticationWebApp_WebhookSecret" "$SDMS_AuthenticationWebApp_WebhookSecret" "secret" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_WebhookSecret") || FAILED_VARS+=("SDMS_AuthenticationWebApp_WebhookSecret")
+          set_railway_env "SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId" "$SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId" "variable" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId")
+          set_railway_env "SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret" "$SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret" "secret" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret")
+          set_railway_env "SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain" "$SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain" "variable" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain")
+          set_railway_env "SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId" "$SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId" "variable" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId")
+          set_railway_env "SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret" "$SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret" "secret" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret")
+          set_railway_env "SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri" "$SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri" "variable" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri")
+          set_railway_env "SDMS_AuthenticationWebApp_WebhookSecret" "$SDMS_AuthenticationWebApp_WebhookSecret" "secret" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_WebhookSecret") || FAILED_VARS+=("SDMS_AuthenticationWebApp_WebhookSecret")
           
           echo ""
           echo "=== Summary ==="

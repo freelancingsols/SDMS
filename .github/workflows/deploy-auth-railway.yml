@@ -112,37 +112,90 @@ jobs:
             fi
 
             echo -n "Setting $VAR_NAME... "
-            OUTPUT=$(railway variables set "${VAR_NAME}=${VAR_VALUE}" --service "$SERVICE_ID" --project "$PROJECT_ID" 2>&1)
+            
+            # Use railway variables --set command (correct syntax)
+            OUTPUT=$(railway variables --set "${VAR_NAME}=${VAR_VALUE}" --service "$SERVICE_ID" 2>&1)
             EXIT_CODE=$?
 
             if [ $EXIT_CODE -eq 0 ]; then
-              echo "✅"
+              # Check if output contains error indicators
+              if echo "$OUTPUT" | grep -qiE "error|failed|invalid|unexpected"; then
+                echo "❌"
+                echo "   Error: $(echo "$OUTPUT" | head -2)"
+                return 1
+              else
+                echo "✅"
+                return 0
+              fi
             else
               echo "❌"
-              echo "   Error: $(echo "$OUTPUT" | head -2)"
+              echo "   Error: Exit code $EXIT_CODE"
+              echo "   Output: $(echo "$OUTPUT" | head -2)"
+              return 1
             fi
           }
 
-          echo "=== Setting Variables ==="
-          set_railway_env "SDMS_AuthenticationWebApp_ConnectionString" "$SDMS_AuthenticationWebApp_ConnectionString"
-          set_railway_env "SDMS_AuthenticationWebApp_FrontendUrl" "$SDMS_AuthenticationWebApp_FrontendUrl"
-          set_railway_env "SDMS_AuthenticationWebApp_LoginUrl" "$SDMS_AuthenticationWebApp_LoginUrl"
-          set_railway_env "SDMS_AuthenticationWebApp_LogoutUrl" "$SDMS_AuthenticationWebApp_LogoutUrl"
-          set_railway_env "SDMS_AuthenticationWebApp_ErrorUrl" "$SDMS_AuthenticationWebApp_ErrorUrl"
-          set_railway_env "SDMS_AuthenticationWebApp_ReturnUrlParameter" "$SDMS_AuthenticationWebApp_ReturnUrlParameter"
-          set_railway_env "SDMS_AuthenticationWebApp_ServerPort" "$SDMS_AuthenticationWebApp_ServerPort"
-          set_railway_env "SDMS_AuthenticationWebApp_ServerUrls" "$SDMS_AuthenticationWebApp_ServerUrls"
-          set_railway_env "SDMS_AuthenticationWebApp_SigningKeyPath" "$SDMS_AuthenticationWebApp_SigningKeyPath"
-          set_railway_env "SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId" "$SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId"
-          set_railway_env "SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret" "$SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret"
-          set_railway_env "SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain" "$SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain"
-          set_railway_env "SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId" "$SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId"
-          set_railway_env "SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret" "$SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret"
-          set_railway_env "SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri" "$SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri"
-          set_railway_env "SDMS_AuthenticationWebApp_WebhookSecret" "$SDMS_AuthenticationWebApp_WebhookSecret"
+          # Track results
+          FAILED_VARS=()
+          SUCCESS_VARS=()
+          CRITICAL_FAILED=0
+
+          echo "=== Setting Critical Variables ==="
+          if set_railway_env "SDMS_AuthenticationWebApp_ConnectionString" "$SDMS_AuthenticationWebApp_ConnectionString"; then
+            SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ConnectionString")
+          else
+            FAILED_VARS+=("SDMS_AuthenticationWebApp_ConnectionString")
+            CRITICAL_FAILED=1
+          fi
 
           echo ""
-          echo "✅ Environment variables setup completed."
+          echo "=== Setting Configuration Variables ==="
+          set_railway_env "SDMS_AuthenticationWebApp_FrontendUrl" "$SDMS_AuthenticationWebApp_FrontendUrl" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_FrontendUrl") || FAILED_VARS+=("SDMS_AuthenticationWebApp_FrontendUrl")
+          set_railway_env "SDMS_AuthenticationWebApp_LoginUrl" "$SDMS_AuthenticationWebApp_LoginUrl" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_LoginUrl") || FAILED_VARS+=("SDMS_AuthenticationWebApp_LoginUrl")
+          set_railway_env "SDMS_AuthenticationWebApp_LogoutUrl" "$SDMS_AuthenticationWebApp_LogoutUrl" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_LogoutUrl") || FAILED_VARS+=("SDMS_AuthenticationWebApp_LogoutUrl")
+          set_railway_env "SDMS_AuthenticationWebApp_ErrorUrl" "$SDMS_AuthenticationWebApp_ErrorUrl" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ErrorUrl") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ErrorUrl")
+          set_railway_env "SDMS_AuthenticationWebApp_ReturnUrlParameter" "$SDMS_AuthenticationWebApp_ReturnUrlParameter" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ReturnUrlParameter") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ReturnUrlParameter")
+          set_railway_env "SDMS_AuthenticationWebApp_ServerPort" "$SDMS_AuthenticationWebApp_ServerPort" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ServerPort") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ServerPort")
+          set_railway_env "SDMS_AuthenticationWebApp_ServerUrls" "$SDMS_AuthenticationWebApp_ServerUrls" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ServerUrls") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ServerUrls")
+          set_railway_env "SDMS_AuthenticationWebApp_SigningKeyPath" "$SDMS_AuthenticationWebApp_SigningKeyPath" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_SigningKeyPath") || FAILED_VARS+=("SDMS_AuthenticationWebApp_SigningKeyPath")
+
+          echo ""
+          echo "=== Setting External Auth Variables ==="
+          set_railway_env "SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId" "$SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId")
+          set_railway_env "SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret" "$SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret")
+          set_railway_env "SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain" "$SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain")
+          set_railway_env "SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId" "$SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId")
+          set_railway_env "SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret" "$SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret")
+          set_railway_env "SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri" "$SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri") || FAILED_VARS+=("SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri")
+          set_railway_env "SDMS_AuthenticationWebApp_WebhookSecret" "$SDMS_AuthenticationWebApp_WebhookSecret" && SUCCESS_VARS+=("SDMS_AuthenticationWebApp_WebhookSecret") || FAILED_VARS+=("SDMS_AuthenticationWebApp_WebhookSecret")
+
+          echo ""
+          echo "=== Summary ==="
+          echo "✅ Successfully set: ${#SUCCESS_VARS[@]} variable(s)"
+          echo "❌ Failed to set: ${#FAILED_VARS[@]} variable(s)"
+          echo ""
+
+          if [ ${#FAILED_VARS[@]} -gt 0 ]; then
+            echo "Failed variables:"
+            for var in "${FAILED_VARS[@]}"; do
+              echo "   - $var"
+            done
+            echo ""
+          fi
+
+          if [ $CRITICAL_FAILED -eq 1 ]; then
+            echo "❌ CRITICAL ERROR: Connection string failed to set"
+            echo "   Deployment cannot proceed without the connection string."
+            echo "   Please set SDMS_AuthenticationWebApp_ConnectionString manually in Railway dashboard:"
+            echo "   https://railway.app/project/$PROJECT_ID/service/$SERVICE_ID/variables"
+            exit 1
+          elif [ ${#FAILED_VARS[@]} -gt 0 ]; then
+            echo "⚠️  Some variables failed to set, but deployment can continue"
+            echo "   Please set failed variables manually in Railway dashboard:"
+            echo "   https://railway.app/project/$PROJECT_ID/service/$SERVICE_ID/variables"
+          else
+            echo "✅ All environment variables set successfully!"
+          fi
 
       - name: Deploy to Railway
         env:

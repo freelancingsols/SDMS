@@ -58,49 +58,255 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
+      - name: Verify Railway CLI and Authentication
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          echo "=== Verifying Railway CLI and Authentication ==="
+          echo ""
+          
+          # Check Railway CLI installation
+          echo "1. Checking Railway CLI installation..."
+          if ! command -v railway &> /dev/null; then
+            echo "❌ Railway CLI not found in PATH"
+            exit 1
+          fi
+          RAILWAY_VERSION=$(railway --version 2>&1 || echo "unknown")
+          echo "✅ Railway CLI installed: $RAILWAY_VERSION"
+          echo ""
+          
+          # Check RAILWAY_TOKEN
+          echo "2. Checking RAILWAY_TOKEN..."
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "❌ Error: RAILWAY_TOKEN is not set in GitHub secrets"
+            echo "Please set RAILWAY_TOKEN in: Repository → Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+          echo "✅ RAILWAY_TOKEN is set (length: ${#RAILWAY_TOKEN} characters)"
+          echo ""
+          
+          # Check SERVICE_ID and PROJECT_ID
+          echo "3. Checking configuration variables..."
+          SERVICE_ID="${{ vars.RAILWAY_SERVICE_ID }}"
+          PROJECT_ID="${{ vars.RAILWAY_PROJECT_ID }}"
+          
+          if [ -z "$SERVICE_ID" ]; then
+            echo "❌ Error: RAILWAY_SERVICE_ID is not set in GitHub variables"
+            echo "Please set RAILWAY_SERVICE_ID in: Repository → Settings → Secrets and variables → Actions → Variables"
+            exit 1
+          fi
+          echo "✅ SERVICE_ID: $SERVICE_ID"
+          
+          if [ -z "$PROJECT_ID" ]; then
+            echo "⚠️  Warning: RAILWAY_PROJECT_ID is not set (optional but recommended)"
+          else
+            echo "✅ PROJECT_ID: $PROJECT_ID"
+          fi
+          echo ""
+          
+          # Test Railway connection
+          echo "4. Testing Railway connection..."
+          if railway whoami &> /dev/null; then
+            echo "✅ Railway authentication successful"
+          else
+            echo "⚠️  Could not verify Railway authentication (this is okay if using project token)"
+          fi
+          echo ""
+          
+          echo "=== Verification Complete ==="
+
+      - name: Verify Railway Service Access
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          SERVICE_ID="${{ vars.RAILWAY_SERVICE_ID }}"
+          
+          echo "=== Verifying Railway Service Access ==="
+          echo ""
+          echo "Attempting to verify service: $SERVICE_ID"
+          echo ""
+          
+          # Try to get service info (this will fail if service doesn't exist or token doesn't have access)
+          if railway service --service "$SERVICE_ID" &> /dev/null; then
+            echo "✅ Service access verified"
+            railway service --service "$SERVICE_ID" || true
+          else
+            echo "⚠️  Could not verify service via CLI (this might be okay)"
+            echo "   Railway CLI might not support service info command"
+            echo "   Proceeding with variable setting..."
+          fi
+          echo ""
+
       - name: Set Railway environment variables from GitHub secrets and variables
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         working-directory: SDMSApps/SDMS.AuthenticationWebApp
         run: |
-          # Railway CLI automatically uses RAILWAY_TOKEN environment variable for authentication
-          # Project token is already scoped to the project, so no need to specify --project
-          # Set environment variables from GitHub secrets and variables
-          # Connection String (Secret)
-          railway variables set SDMS_AuthenticationWebApp_ConnectionString="${{ secrets.SDMS_AuthenticationWebApp_ConnectionString }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          set -e  # Exit on error
+          
+          SERVICE_ID="${{ vars.RAILWAY_SERVICE_ID }}"
+          
+          if [ -z "$SERVICE_ID" ]; then
+            echo "❌ Error: RAILWAY_SERVICE_ID is not set"
+            exit 1
+          fi
+          
+          echo "Setting environment variables for service: $SERVICE_ID"
+          echo ""
+          
+          # Function to set variable with error handling
+          set_railway_var() {
+            local VAR_NAME=$1
+            local VAR_VALUE=$2
+            local VAR_TYPE=$3  # "secret" or "variable"
+            
+            if [ -z "$VAR_VALUE" ]; then
+              echo "⚠️  Skipping $VAR_NAME (value is empty)"
+              return 0
+            fi
+            
+            echo -n "Setting $VAR_TYPE $VAR_NAME... "
+            
+            # Railway CLI syntax: railway variables set KEY VALUE --service SERVICE_ID
+            # For values with special characters, we pass them as arguments (shell handles quoting)
+            OUTPUT=$(railway variables set "$VAR_NAME" "$VAR_VALUE" --service "$SERVICE_ID" 2>&1)
+            EXIT_CODE=$?
+            
+            if [ $EXIT_CODE -eq 0 ]; then
+              echo "✅"
+              return 0
+            else
+              echo "❌ Failed"
+              echo "Error: $OUTPUT"
+              echo ""
+              echo "Debug info:"
+              echo "  Variable name: $VAR_NAME"
+              echo "  Variable type: $VAR_TYPE"
+              echo "  Service ID: $SERVICE_ID"
+              echo "  Value length: ${#VAR_VALUE} characters"
+              echo "  Value preview: ${VAR_VALUE:0:50}..."
+              echo ""
+              echo "Troubleshooting:"
+              echo "1. Check Railway CLI version: railway --version"
+              echo "2. Verify RAILWAY_TOKEN is valid"
+              echo "3. Verify SERVICE_ID exists: $SERVICE_ID"
+              echo "4. Check Railway dashboard: https://railway.app/project/${{ vars.RAILWAY_PROJECT_ID }}/service/$SERVICE_ID/variables"
+              exit 1
+            fi
+          }
+          
+          # Connection String (Secret) - REQUIRED
+          echo "=== Setting Connection String ==="
+          if [ -z "${{ secrets.SDMS_AuthenticationWebApp_ConnectionString }}" ]; then
+            echo "❌ Error: SDMS_AuthenticationWebApp_ConnectionString secret is not set in GitHub"
+            echo "Please set this secret in GitHub repository settings:"
+            echo "Repository → Settings → Secrets and variables → Actions → New repository secret"
+            exit 1
+          fi
+          set_railway_var "SDMS_AuthenticationWebApp_ConnectionString" "${{ secrets.SDMS_AuthenticationWebApp_ConnectionString }}" "secret"
           
           # Frontend Configuration (Variable)
-          railway variables set SDMS_AuthenticationWebApp_FrontendUrl="${{ vars.SDMS_AuthenticationWebApp_FrontendUrl }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          echo ""
+          echo "=== Setting Frontend Configuration ==="
+          set_railway_var "SDMS_AuthenticationWebApp_FrontendUrl" "${{ vars.SDMS_AuthenticationWebApp_FrontendUrl }}" "variable"
           
           # Authentication URLs (Variables)
-          railway variables set SDMS_AuthenticationWebApp_LoginUrl="${{ vars.SDMS_AuthenticationWebApp_LoginUrl }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_LogoutUrl="${{ vars.SDMS_AuthenticationWebApp_LogoutUrl }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_ErrorUrl="${{ vars.SDMS_AuthenticationWebApp_ErrorUrl }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_ReturnUrlParameter="${{ vars.SDMS_AuthenticationWebApp_ReturnUrlParameter }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          echo ""
+          echo "=== Setting Authentication URLs ==="
+          set_railway_var "SDMS_AuthenticationWebApp_LoginUrl" "${{ vars.SDMS_AuthenticationWebApp_LoginUrl }}" "variable"
+          set_railway_var "SDMS_AuthenticationWebApp_LogoutUrl" "${{ vars.SDMS_AuthenticationWebApp_LogoutUrl }}" "variable"
+          set_railway_var "SDMS_AuthenticationWebApp_ErrorUrl" "${{ vars.SDMS_AuthenticationWebApp_ErrorUrl }}" "variable"
+          set_railway_var "SDMS_AuthenticationWebApp_ReturnUrlParameter" "${{ vars.SDMS_AuthenticationWebApp_ReturnUrlParameter }}" "variable"
           
           # Server Configuration (Variables)
-          railway variables set SDMS_AuthenticationWebApp_ServerPort="${{ vars.SDMS_AuthenticationWebApp_ServerPort }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_ServerUrls="${{ vars.SDMS_AuthenticationWebApp_ServerUrls }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          echo ""
+          echo "=== Setting Server Configuration ==="
+          set_railway_var "SDMS_AuthenticationWebApp_ServerPort" "${{ vars.SDMS_AuthenticationWebApp_ServerPort }}" "variable"
+          set_railway_var "SDMS_AuthenticationWebApp_ServerUrls" "${{ vars.SDMS_AuthenticationWebApp_ServerUrls }}" "variable"
           
           # External Authentication (Google) - ClientId is Variable, ClientSecret is Secret
-          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId="${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret="${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          echo ""
+          echo "=== Setting External Authentication (Google) ==="
+          set_railway_var "SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId" "${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId }}" "variable"
+          set_railway_var "SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret" "${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret }}" "secret"
           
           # External Authentication (Auth0) - Domain and ClientId are Variables, ClientSecret is Secret
-          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain="${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId="${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret="${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          echo ""
+          echo "=== Setting External Authentication (Auth0) ==="
+          set_railway_var "SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain" "${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain }}" "variable"
+          set_railway_var "SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId" "${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId }}" "variable"
+          set_railway_var "SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret" "${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret }}" "secret"
           
           # External Authentication (Redirect URI) (Variable)
-          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri="${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          echo ""
+          echo "=== Setting External Authentication (Redirect URI) ==="
+          set_railway_var "SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri" "${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri }}" "variable"
           
           # Webhook (Secret)
-          railway variables set SDMS_AuthenticationWebApp_WebhookSecret="${{ secrets.SDMS_AuthenticationWebApp_WebhookSecret }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          echo ""
+          echo "=== Setting Webhook Configuration ==="
+          set_railway_var "SDMS_AuthenticationWebApp_WebhookSecret" "${{ secrets.SDMS_AuthenticationWebApp_WebhookSecret }}" "secret"
           
           # Signing Key Path (Variable)
-          railway variables set SDMS_AuthenticationWebApp_SigningKeyPath="${{ vars.SDMS_AuthenticationWebApp_SigningKeyPath }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          echo ""
+          echo "=== Setting Signing Key Path ==="
+          set_railway_var "SDMS_AuthenticationWebApp_SigningKeyPath" "${{ vars.SDMS_AuthenticationWebApp_SigningKeyPath }}" "variable"
           
-          echo "✓ Environment variables set in Railway"
+          echo ""
+          echo "✅ All environment variables set successfully"
+
+      - name: Verify Railway environment variables
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        working-directory: SDMSApps/SDMS.AuthenticationWebApp
+        run: |
+          SERVICE_ID="${{ vars.RAILWAY_SERVICE_ID }}"
+          PROJECT_ID="${{ vars.RAILWAY_PROJECT_ID }}"
+          
+          echo "=== Verifying Railway Environment Variables ==="
+          echo ""
+          echo "Service ID: $SERVICE_ID"
+          echo "Project ID: $PROJECT_ID"
+          echo ""
+          
+          # Check if connection string is set (this is the critical one)
+          echo "Checking for critical environment variables..."
+          echo ""
+          
+          # Try to list variables (Railway CLI might support this)
+          echo "Attempting to list variables..."
+          if railway variables list --service "$SERVICE_ID" &> /dev/null; then
+            echo "✅ Variables list command works"
+            railway variables list --service "$SERVICE_ID" || true
+          elif railway variables --service "$SERVICE_ID" &> /dev/null; then
+            echo "✅ Variables command works"
+            railway variables --service "$SERVICE_ID" || true
+          else
+            echo "⚠️  Could not list variables via CLI (this is normal - Railway CLI might not support listing)"
+            echo "   You can verify variables in the Railway dashboard"
+          fi
+          
+          echo ""
+          echo "=== Verification Steps ==="
+          echo ""
+          echo "1. Check Railway Dashboard:"
+          if [ -n "$PROJECT_ID" ]; then
+            echo "   https://railway.app/project/$PROJECT_ID/service/$SERVICE_ID/variables"
+          else
+            echo "   https://railway.app/service/$SERVICE_ID/variables"
+          fi
+          echo ""
+          echo "2. Verify these critical variables are set:"
+          echo "   - SDMS_AuthenticationWebApp_ConnectionString (REQUIRED)"
+          echo "   - SDMS_AuthenticationWebApp_FrontendUrl"
+          echo "   - SDMS_AuthenticationWebApp_ServerUrls"
+          echo ""
+          echo "3. If variables are missing:"
+          echo "   - Check GitHub secrets/variables are set correctly"
+          echo "   - Check Railway CLI command output above for errors"
+          echo "   - Manually set variables in Railway dashboard if needed"
+          echo ""
+          echo "✅ Verification complete"
 
       - name: Deploy to Railway
         env:

@@ -282,9 +282,9 @@ jobs:
             
             echo -n "Setting $VAR_TYPE $VAR_NAME... "
             
-            # Use railway variables command (correct syntax for v4.11.0)
-            # Note: No "set" subcommand - just "railway variables KEY=VALUE"
-            OUTPUT=$(railway variables "${VAR_NAME}=${VAR_VALUE}" --service "$SERVICE_ID" --project "$PROJECT_ID" 2>&1)
+            # Use railway variable set command (correct syntax for v4.11.0)
+            # Note: Singular "variable" (not "variables"), with "set" subcommand, KEY=VALUE format
+            OUTPUT=$(railway variable set "${VAR_NAME}=${VAR_VALUE}" --service "$SERVICE_ID" --project "$PROJECT_ID" 2>&1)
             EXIT_CODE=$?
             
             if [ $EXIT_CODE -eq 0 ]; then

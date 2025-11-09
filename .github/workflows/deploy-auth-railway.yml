@@ -189,19 +189,19 @@ jobs:
           railway --help 2>&1 | grep -A 50 "Commands:" || railway --help 2>&1 | head -50
           echo ""
           
-          # Check for variables command (plural)
+          # Check for variables command (plural) - this is the most likely command
           echo "Checking 'railway variables' command:"
-          railway variables --help 2>&1 | head -30 || echo "railway variables command not found"
+          railway variables --help 2>&1 | head -40 || echo "railway variables command not found"
           echo ""
           
           # Check for variable command (singular)
           echo "Checking 'railway variable' command:"
-          railway variable --help 2>&1 | head -30 || echo "railway variable command not found"
+          railway variable --help 2>&1 | head -40 || echo "railway variable command not found"
           echo ""
           
-          # Check for variables set command
-          echo "Checking 'railway variables set' command:"
-          railway variables set --help 2>&1 | head -30 || echo "railway variables set command not found"
+          # Try to see if there are any examples or usage patterns
+          echo "Checking Railway CLI help for variable-related commands:"
+          railway --help 2>&1 | grep -i "variable\|env" || echo "No variable commands found in main help"
           echo ""
 
       - name: Set Railway environment variables using CLI with error checking
@@ -282,8 +282,9 @@ jobs:
             
             echo -n "Setting $VAR_TYPE $VAR_NAME... "
             
-            # Use railway variables set command with both --service and --project flags
-            OUTPUT=$(railway variables set "${VAR_NAME}=${VAR_VALUE}" --service "$SERVICE_ID" --project "$PROJECT_ID" 2>&1)
+            # Use railway variables command (correct syntax for v4.11.0)
+            # Note: No "set" subcommand - just "railway variables KEY=VALUE"
+            OUTPUT=$(railway variables "${VAR_NAME}=${VAR_VALUE}" --service "$SERVICE_ID" --project "$PROJECT_ID" 2>&1)
             EXIT_CODE=$?
             
             if [ $EXIT_CODE -eq 0 ]; then

@@ -6,39 +6,51 @@ This .NET 8.0 backend application is configured to deploy on Railway.
 
 ## Configuration Setup
 
-### 1. GitHub Secrets
+### 1. Railway Configuration Secrets
 
 Add the following secrets in your GitHub repository (Settings → Secrets and variables → Actions):
 
 - `RAILWAY_TOKEN` - Railway authentication token
+- `RAILWAY_PROJECT_ID` - Railway project ID
 - `RAILWAY_SERVICE_ID` - Railway service ID
 
-### 2. Railway Environment Variables
+### 2. Application Configuration Secrets
 
-Set the following environment variables in Railway dashboard:
+Add the following secrets in your GitHub repository (Settings → Secrets and variables → Actions):
 
-#### Database
-- `POSTGRES_CONNECTION` - PostgreSQL connection string
+#### Connection String
+- `SDMS_AuthenticationWebApp_ConnectionString` - PostgreSQL connection string (preferred)
   - Format: `Host=host;Database=db;Username=user;Password=pass;Port=5432`
-  - Or use Railway's PostgreSQL plugin which auto-generates this
+  - Note: If not set, the application will fall back to `POSTGRES_CONNECTION` (Railway automatic env var)
 
-#### Authentication
-- `Authentication:LoginUrl` - Login page URL (default: `/login`)
-- `Authentication:LogoutUrl` - Logout page URL (default: `/logout`)
-- `Authentication:ErrorUrl` - Error page URL (default: `/login`)
+#### Frontend Configuration
+- `SDMS_AuthenticationWebApp_FrontendUrl` - Frontend application URL (for CORS)
 
-#### External Auth
-- `ExternalAuth:Google:ClientId` - Google OAuth Client ID
-- `ExternalAuth:Google:ClientSecret` - Google OAuth Client Secret
-- `ExternalAuth:Auth0:Domain` - Auth0 domain (if using)
-- `ExternalAuth:Auth0:ClientId` - Auth0 Client ID
-- `ExternalAuth:Auth0:ClientSecret` - Auth0 Client Secret
+#### Authentication URLs
+- `SDMS_AuthenticationWebApp_LoginUrl` - Login page URL (default: `/login`)
+- `SDMS_AuthenticationWebApp_LogoutUrl` - Logout page URL (default: `/logout`)
+- `SDMS_AuthenticationWebApp_ErrorUrl` - Error page URL (default: `/login`)
+- `SDMS_AuthenticationWebApp_ReturnUrlParameter` - Return URL parameter name (default: `ReturnUrl`)
 
-#### Frontend
-- `Frontend:Url` - Frontend application URL (for CORS)
+#### External Auth (Google)
+- `SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId` - Google OAuth Client ID
+- `SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret` - Google OAuth Client Secret
+
+#### External Auth (Auth0) - Optional
+- `SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain` - Auth0 domain
+- `SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId` - Auth0 Client ID
+- `SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret` - Auth0 Client Secret
+
+#### External Auth (Redirect URI)
+- `SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri` - OAuth redirect URI
 
 #### Webhook
-- `Webhook:Secret` - Webhook secret for external user sync
+- `SDMS_AuthenticationWebApp_WebhookSecret` - Webhook secret for external user sync (optional)
+
+#### Signing Key
+- `SDMS_AuthenticationWebApp_SigningKeyPath` - Path to signing key file (default: `signing-key.pem`)
+
+**Note:** The GitHub Actions workflow automatically sets these secrets as Railway environment variables during deployment. You don't need to set them manually in Railway dashboard.
 
 ### 3. Getting Railway Credentials
 
@@ -58,9 +70,12 @@ Set the following environment variables in Railway dashboard:
 ## Configuration Priority
 
 The application loads configuration in this order:
-1. Environment variables (highest priority)
-2. `appsettings.Production.json`
-3. `appsettings.json` (default/fallback)
+1. Environment variables (from Railway, set by GitHub Actions from GitHub Secrets) - Highest Priority
+2. `appsettings.Production.json` - Production defaults
+3. `appsettings.json` - Base defaults
+4. Hardcoded defaults - Fallback
+
+**All configuration keys use the `SDMS_AuthenticationWebApp_` prefix for consistency.**
 
 ## Alternative Platforms
 

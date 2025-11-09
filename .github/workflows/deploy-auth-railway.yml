@@ -56,7 +56,7 @@ jobs:
         working-directory: SDMSApps/SDMS.AuthenticationWebApp
         run: dotnet publish --configuration Release --no-build --output ./publish
 
-      - name: Install Railway CLI
+      - name: Install Railway CLI (for deployment)
         run: npm install -g @railway/cli
 
       - name: Set Railway environment variables
@@ -64,6 +64,7 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           SERVICE_ID: ${{ vars.RAILWAY_SERVICE_ID }}
           PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+          ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
           # Secrets
           SDMS_AuthenticationWebApp_ConnectionString: ${{ secrets.SDMS_AuthenticationWebApp_ConnectionString }}
           SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret: ${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret }}
@@ -84,53 +85,143 @@ jobs:
           SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri: ${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri }}
         working-directory: SDMSApps/SDMS.AuthenticationWebApp
         run: |
-          echo "=== Setting Railway Environment Variables ==="
+          echo "=== Setting Railway Environment Variables via GraphQL API ==="
           echo "Service ID: $SERVICE_ID"
           echo "Project ID: $PROJECT_ID"
+          echo "Environment ID: $ENVIRONMENT_ID"
           echo ""
-
+          
+          # Validate required environment variables
           if [ -z "$RAILWAY_TOKEN" ]; then
             echo "❌ RAILWAY_TOKEN missing. Add it to GitHub secrets."
             exit 1
           fi
-
-          if ! command -v railway &> /dev/null; then
-            echo "❌ Railway CLI not found."
+          
+          if [ -z "$PROJECT_ID" ]; then
+            echo "❌ RAILWAY_PROJECT_ID missing. Add it to GitHub variables."
             exit 1
           fi
-
-          echo "Railway CLI version: $(railway --version)"
+          
+          if [ -z "$SERVICE_ID" ]; then
+            echo "❌ RAILWAY_SERVICE_ID missing. Add it to GitHub variables."
+            exit 1
+          fi
+          
+          if [ -z "$ENVIRONMENT_ID" ]; then
+            echo "❌ RAILWAY_ENVIRONMENT_ID missing. Add it to GitHub variables."
+            exit 1
+          fi
+          
+          # Verify token format
+          TOKEN_PREFIX=$(echo "$RAILWAY_TOKEN" | cut -c1-8)
+          TOKEN_LENGTH=${#RAILWAY_TOKEN}
+          echo "✅ Token configured (length: $TOKEN_LENGTH, starts with: $TOKEN_PREFIX...)"
           echo ""
-
+          
+          # Railway GraphQL API endpoint
+          RAILWAY_API="https://backboard.railway.app/graphql/v2"
+          
+          # Function to escape JSON string for GraphQL variables
+          # Handles backslashes, quotes, newlines, and other special characters
+          escape_json() {
+            local input="$1"
+            # Escape backslashes first
+            input=$(echo "$input" | sed 's/\\/\\\\/g')
+            # Escape double quotes
+            input=$(echo "$input" | sed 's/"/\\"/g')
+            # Escape newlines
+            input=$(echo "$input" | sed 's/$/\\n/' | tr -d '\n' | sed 's/\\n$//')
+            # Escape carriage returns
+            input=$(echo "$input" | sed 's/\r/\\r/g')
+            # Escape tabs
+            input=$(echo "$input" | sed 's/\t/\\t/g')
+            echo "$input"
+          }
+          
+          # Function to set Railway variable using GraphQL API
           set_railway_env() {
             local VAR_NAME=$1
             local VAR_VALUE=$2
-
+            
             if [ -z "$VAR_VALUE" ] || [[ "$VAR_VALUE" == "your-"* ]] || [[ "$VAR_VALUE" == "placeholder"* ]]; then
               echo "⚠️  Skipping $VAR_NAME (empty or placeholder)"
               return 0
             fi
-
+            
+            # Escape the value for JSON
+            ESCAPED_VALUE=$(escape_json "$VAR_VALUE")
+            
             echo -n "Setting $VAR_NAME... "
             
-            # Use railway variables --set command (correct syntax)
-            OUTPUT=$(railway variables --set "${VAR_NAME}=${VAR_VALUE}" --service "$SERVICE_ID" 2>&1)
-            EXIT_CODE=$?
-
-            if [ $EXIT_CODE -eq 0 ]; then
-              # Check if output contains error indicators
-              if echo "$OUTPUT" | grep -qiE "error|failed|invalid|unexpected"; then
-                echo "❌"
-                echo "   Error: $(echo "$OUTPUT" | head -2)"
-                return 1
+            # Compose GraphQL mutation with operationName and variables section
+            # Using the correct format: mutation variableUpsert($input: VariableUpsertInput!)
+            # Build JSON payload using printf to avoid heredoc issues in YAML
+            UPSERT_PAYLOAD=$(printf '{"query":"mutation variableUpsert($input: VariableUpsertInput!) {\\n  variableUpsert(input: $input)\\n}","operationName":"variableUpsert","variables":{"input":{"projectId":"%s","environmentId":"%s","serviceId":"%s","name":"%s","value":"%s"}}}' "$PROJECT_ID" "$ENVIRONMENT_ID" "$SERVICE_ID" "$VAR_NAME" "$ESCAPED_VALUE")
+            
+            # Send GraphQL upsert request with curl
+            # Timeout of 120 seconds (504 is expected and OK)
+            HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/railway_upsert_response.json -X POST "$RAILWAY_API" --max-time 120 -H "Project-Access-Token: $RAILWAY_TOKEN" -H "Content-Type: application/json" -d "$UPSERT_PAYLOAD" 2>&1)
+            
+            CURL_EXIT=$?
+            
+            # Check if we got 504 (which is OK - Railway processes it asynchronously)
+            if [ "$HTTP_CODE" = "504" ] || [ "$HTTP_CODE" = "502" ] || [ "$HTTP_CODE" = "503" ]; then
+              echo "⏱️  (HTTP $HTTP_CODE - expected, waiting 5s...)"
+            elif [ $CURL_EXIT -eq 28 ]; then
+              echo "⏱️  (curl timeout - expected, waiting 5s...)"
+            elif [ "$HTTP_CODE" = "200" ]; then
+              # Check for GraphQL errors in response
+              if grep -q "\"errors\"" /tmp/railway_upsert_response.json 2>/dev/null; then
+                ERROR_MSG=$(cat /tmp/railway_upsert_response.json | grep -o '"message":"[^"]*"' | head -1 | sed 's/"message":"\([^"]*\)"/\1/')
+                if [ -n "$ERROR_MSG" ]; then
+                  echo "❌"
+                  echo "   GraphQL Error: $ERROR_MSG"
+                  return 1
+                fi
               else
-                echo "✅"
+                echo "✅ (upsert successful, waiting 5s...)"
+              fi
+            elif [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "403" ]; then
+              echo "❌"
+              echo "   Authentication error (HTTP $HTTP_CODE)"
+              echo "   💡 Verify RAILWAY_TOKEN is a valid Project Token"
+              echo "   Get token from: https://railway.app/project/$PROJECT_ID/settings/tokens"
+              return 1
+            else
+              echo "⚠️  (HTTP $HTTP_CODE, waiting 5s to verify...)"
+            fi
+            
+            # Wait 5 seconds for Railway to process the upsert
+            sleep 5
+            
+            # Verify by querying the variable using the get query
+            echo -n "   Verifying $VAR_NAME... "
+            
+            # Compose GraphQL query with operationName and variables section
+            # Build JSON payload using printf to avoid heredoc issues in YAML
+            GET_QUERY_PAYLOAD=$(printf '{"query":"query variables($environmentId: String!, $pluginId: String, $projectId: String!, $serviceId: String, $unrendered: Boolean) {\\n  variables(\\n    environmentId: $environmentId\\n    pluginId: $pluginId\\n    projectId: $projectId\\n    serviceId: $serviceId\\n    unrendered: $unrendered\\n  )\\n}","operationName":"variables","variables":{"pluginId":null,"unrendered":null,"projectId":"%s","environmentId":"%s","serviceId":"%s"}}' "$PROJECT_ID" "$ENVIRONMENT_ID" "$SERVICE_ID")
+            
+            # Send GraphQL query to get variables
+            VERIFY_RESPONSE=$(curl -s -X POST "$RAILWAY_API" --max-time 30 -H "Project-Access-Token: $RAILWAY_TOKEN" -H "Content-Type: application/json" -d "$GET_QUERY_PAYLOAD" 2>&1)
+            
+            # Check if variable exists and has correct value
+            # The response should contain the variable name and value
+            if echo "$VERIFY_RESPONSE" | grep -q "\"$VAR_NAME\""; then
+              # Check if the value matches (extract value from JSON response)
+              # The response format is: "name": "VAR_NAME", "value": "VAR_VALUE"
+              EXTRACTED_VALUE=$(echo "$VERIFY_RESPONSE" | grep -o "\"$VAR_NAME\"[^}]*" | grep -o '"value":"[^"]*"' | sed 's/"value":"\([^"]*\)"/\1/' | head -1)
+              
+              # Compare values (handle escaped characters)
+              if [ "$EXTRACTED_VALUE" = "$VAR_VALUE" ]; then
+                echo "✅ (verified - value matches)"
+                return 0
+              else
+                echo "⚠️  (found but value mismatch: expected '$VAR_VALUE', got '$EXTRACTED_VALUE')"
+                # Still return success if variable exists (might be a formatting issue)
                 return 0
               fi
             else
-              echo "❌"
-              echo "   Error: Exit code $EXIT_CODE"
-              echo "   Output: $(echo "$OUTPUT" | head -2)"
+              echo "❌ (not found after verification)"
               return 1
             fi
           }

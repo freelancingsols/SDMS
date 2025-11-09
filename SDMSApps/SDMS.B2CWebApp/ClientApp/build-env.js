@@ -1,39 +1,10 @@
 // Build-time environment variable replacement script
 // This script replaces environment variables in appsettings.json during build
 // Vercel will set these environment variables during deployment
+// Uses SDMS_* naming convention for all configuration keys
 
 const fs = require('fs');
 const path = require('path');
-
-const envFile = path.join(__dirname, 'src', 'environments', 'environment.prod.ts');
-
-// Read environment variables with fallbacks (Vercel will provide these)
-const apiUrl = process.env.API_URL || process.env.SDMS_AuthenticationWebApp_url || 'https://localhost:7001';
-const authServer = process.env.AUTH_SERVER || process.env.SDMS_AuthenticationWebApp_url || 'https://localhost:7001';
-const clientId = process.env.CLIENT_ID || process.env.SDMS_AuthenticationWebApp_clientid || 'sdms_frontend';
-
-// Update environment.prod.ts (for backward compatibility)
-if (fs.existsSync(envFile)) {
-  let content = fs.readFileSync(envFile, 'utf8');
-
-  // Replace placeholders or update values
-  content = content.replace(
-    /apiUrl:\s*['"`].*?['"`]/,
-    `apiUrl: '${apiUrl}'`
-  );
-  content = content.replace(
-    /authServer:\s*['"`].*?['"`]/,
-    `authServer: '${authServer}'`
-  );
-  content = content.replace(
-    /clientId:\s*['"`].*?['"`]/,
-    `clientId: '${clientId}'`
-  );
-
-  // Write back
-  fs.writeFileSync(envFile, content, 'utf8');
-  console.log('Environment variables injected into environment.prod.ts');
-}
 
 // Generate appsettings.json for runtime loading
 // Read from root appsettings.json as template and replace values from environment variables
@@ -92,8 +63,5 @@ fs.writeFileSync(appSettingsPath, JSON.stringify(appSettingsConfig, null, 2), 'u
 console.log('appsettings.json generated in src/assets');
 
 console.log('Build environment setup completed successfully');
-console.log('  - API URL:', apiUrl);
-console.log('  - Auth Server:', authServer);
-console.log('  - Client ID:', clientId);
 console.log('  - AppSettings:', JSON.stringify(appSettingsConfig, null, 2));
 

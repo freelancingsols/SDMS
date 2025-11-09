@@ -1,6 +1,18 @@
 /**
  * Static AppSettings class that holds application configuration
- * Values are loaded from GitHub secrets during application bootstrap
+ * 
+ * CONFIGURATION FLOW:
+ * 1. Build-time: build-env.js reads environment variables (from Vercel/GitHub secrets)
+ *    and generates src/assets/appsettings.json
+ * 2. Runtime: main.ts calls loadAppSettingsBeforeBootstrap() before Angular bootstrap
+ *    - Loads /assets/appsettings.json (or /appsettings.json as fallback)
+ *    - Initializes AppSettings via AppSettings.initialize()
+ * 3. Usage: Services and components import and use AppSettings directly
+ * 
+ * CONFIGURATION SOURCES (priority order):
+ * 1. Environment variables (SDMS_AuthenticationWebApp_url, etc.) - set during build
+ * 2. appsettings.json files - development/local values
+ * 3. Default hardcoded values - fallback if nothing else is available
  * 
  * Usage example:
  * ```typescript
@@ -13,6 +25,7 @@
  * 
  * Note: AppSettings is initialized before Angular bootstrap in main.ts
  * You can use it anywhere in the application by importing and accessing the static properties
+ * DO NOT use app.config.ts - use AppSettings directly
  */
 export class AppSettings {
   private static _sdmsB2CWebAppUrl: string = 'http://localhost:4200';

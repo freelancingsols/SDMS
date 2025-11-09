@@ -37,9 +37,11 @@ jobs:
       - name: Build Angular app (Production)
         working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
         env:
-          API_URL: ${{ secrets.API_URL }}
-          AUTH_SERVER: ${{ secrets.AUTH_SERVER }}
-          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          SDMS_B2CWebApp_url: ${{ secrets.SDMS_B2CWebApp_url }}
+          SDMS_AuthenticationWebApp_url: ${{ secrets.SDMS_AuthenticationWebApp_url }}
+          SDMS_AuthenticationWebApp_clientid: ${{ secrets.SDMS_AuthenticationWebApp_clientid }}
+          SDMS_AuthenticationWebApp_redirectUri: ${{ secrets.SDMS_AuthenticationWebApp_redirectUri }}
+          SDMS_AuthenticationWebApp_scope: ${{ secrets.SDMS_AuthenticationWebApp_scope }}
         run: |
           node build-env.js
           npm run build:prod

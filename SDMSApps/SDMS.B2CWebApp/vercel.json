@@ -30,9 +30,6 @@
     }
   ],
   "env": {
-    "API_URL": "@api_url",
-    "AUTH_SERVER": "@auth_server",
-    "CLIENT_ID": "@client_id",
     "SDMS_B2CWebApp_url": "@sdms_b2cwebapp_url",
     "SDMS_AuthenticationWebApp_url": "@sdms_authenticationwebapp_url",
     "SDMS_AuthenticationWebApp_clientid": "@sdms_authenticationwebapp_clientid",

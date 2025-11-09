@@ -58,48 +58,48 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
-      - name: Set Railway environment variables from GitHub secrets
+      - name: Set Railway environment variables from GitHub secrets and variables
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         working-directory: SDMSApps/SDMS.AuthenticationWebApp
         run: |
           railway login --token $RAILWAY_TOKEN
-          railway link ${{ secrets.RAILWAY_PROJECT_ID }}
+          railway link ${{ vars.RAILWAY_PROJECT_ID }}
           
-          # Set environment variables from GitHub secrets
-          # Connection String
-          railway variables set SDMS_AuthenticationWebApp_ConnectionString="${{ secrets.SDMS_AuthenticationWebApp_ConnectionString }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
+          # Set environment variables from GitHub secrets and variables
+          # Connection String (Secret)
+          railway variables set SDMS_AuthenticationWebApp_ConnectionString="${{ secrets.SDMS_AuthenticationWebApp_ConnectionString }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
           
-          # Frontend Configuration
-          railway variables set SDMS_AuthenticationWebApp_FrontendUrl="${{ secrets.SDMS_AuthenticationWebApp_FrontendUrl }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
+          # Frontend Configuration (Variable)
+          railway variables set SDMS_AuthenticationWebApp_FrontendUrl="${{ vars.SDMS_AuthenticationWebApp_FrontendUrl }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
           
-          # Authentication URLs
-          railway variables set SDMS_AuthenticationWebApp_LoginUrl="${{ secrets.SDMS_AuthenticationWebApp_LoginUrl }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_LogoutUrl="${{ secrets.SDMS_AuthenticationWebApp_LogoutUrl }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_ErrorUrl="${{ secrets.SDMS_AuthenticationWebApp_ErrorUrl }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_ReturnUrlParameter="${{ secrets.SDMS_AuthenticationWebApp_ReturnUrlParameter }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
+          # Authentication URLs (Variables)
+          railway variables set SDMS_AuthenticationWebApp_LoginUrl="${{ vars.SDMS_AuthenticationWebApp_LoginUrl }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          railway variables set SDMS_AuthenticationWebApp_LogoutUrl="${{ vars.SDMS_AuthenticationWebApp_LogoutUrl }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          railway variables set SDMS_AuthenticationWebApp_ErrorUrl="${{ vars.SDMS_AuthenticationWebApp_ErrorUrl }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          railway variables set SDMS_AuthenticationWebApp_ReturnUrlParameter="${{ vars.SDMS_AuthenticationWebApp_ReturnUrlParameter }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
           
-          # Server Configuration
-          railway variables set SDMS_AuthenticationWebApp_ServerPort="${{ secrets.SDMS_AuthenticationWebApp_ServerPort }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_ServerUrls="${{ secrets.SDMS_AuthenticationWebApp_ServerUrls }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
+          # Server Configuration (Variables)
+          railway variables set SDMS_AuthenticationWebApp_ServerPort="${{ vars.SDMS_AuthenticationWebApp_ServerPort }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          railway variables set SDMS_AuthenticationWebApp_ServerUrls="${{ vars.SDMS_AuthenticationWebApp_ServerUrls }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
           
-          # External Authentication (Google)
-          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId="${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret="${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
+          # External Authentication (Google) - ClientId is Variable, ClientSecret is Secret
+          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId="${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret="${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
           
-          # External Authentication (Auth0)
-          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain="${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId="${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret="${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
+          # External Authentication (Auth0) - Domain and ClientId are Variables, ClientSecret is Secret
+          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain="${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId="${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
+          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret="${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
           
-          # External Authentication (Redirect URI)
-          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri="${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
+          # External Authentication (Redirect URI) (Variable)
+          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri="${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
           
-          # Webhook
-          railway variables set SDMS_AuthenticationWebApp_WebhookSecret="${{ secrets.SDMS_AuthenticationWebApp_WebhookSecret }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
+          # Webhook (Secret)
+          railway variables set SDMS_AuthenticationWebApp_WebhookSecret="${{ secrets.SDMS_AuthenticationWebApp_WebhookSecret }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
           
-          # Signing Key Path
-          railway variables set SDMS_AuthenticationWebApp_SigningKeyPath="${{ secrets.SDMS_AuthenticationWebApp_SigningKeyPath }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
+          # Signing Key Path (Variable)
+          railway variables set SDMS_AuthenticationWebApp_SigningKeyPath="${{ vars.SDMS_AuthenticationWebApp_SigningKeyPath }}" --service ${{ vars.RAILWAY_SERVICE_ID }} || true
           
           echo "✓ Environment variables set in Railway"
 
@@ -109,6 +109,6 @@ jobs:
         working-directory: SDMSApps/SDMS.AuthenticationWebApp
         run: |
           railway login --token $RAILWAY_TOKEN
-          railway link ${{ secrets.RAILWAY_PROJECT_ID }}
-          railway up --service ${{ secrets.RAILWAY_SERVICE_ID }}
+          railway link ${{ vars.RAILWAY_PROJECT_ID }}
+          railway up --service ${{ vars.RAILWAY_SERVICE_ID }}
 

@@ -14,6 +14,7 @@ using static OpenIddict.Abstractions.OpenIddictConstants;
 using Microsoft.Extensions.FileProviders;
 using System.Net;
 using Microsoft.OpenApi.Models;
+using Microsoft.Extensions.Logging;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -244,9 +245,8 @@ if (Directory.Exists(angularDistPath))
 }
 else
 {
-    builder.Logging.CreateLogger("Program").LogWarning(
-        "Angular dist directory not found at {AngularDistPath}. Angular app will not be served.",
-        angularDistPath);
+    // Log warning to console (will be logged properly after app is built)
+    Console.WriteLine($"Warning: Angular dist directory not found at {angularDistPath}. Angular app will not be served.");
 }
 
 // Only add wwwroot file provider if directory exists

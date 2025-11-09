@@ -19,8 +19,8 @@ WORKDIR "/src"
 WORKDIR "/src/ClientApp"
 RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
     apt-get install -y nodejs && \
-    npm ci && \
-    npm run build
+    npm install --legacy-peer-deps && \
+    npm run build -- --configuration production
 
 # Build .NET app
 WORKDIR "/src"

@@ -1,18 +1,21 @@
 /**
  * Static AppSettings class that holds application configuration
  * 
- * CONFIGURATION FLOW:
- * 1. Build-time: build-env.js reads environment variables (from Vercel/GitHub secrets)
- *    and generates src/assets/appsettings.json
- * 2. Runtime: main.ts calls loadAppSettingsBeforeBootstrap() before Angular bootstrap
- *    - Loads /assets/appsettings.json (or /appsettings.json as fallback)
- *    - Initializes AppSettings via AppSettings.initialize()
- * 3. Usage: Services and components import and use AppSettings directly
+ * CONFIGURATION FLOW (Simple):
+ * 1. Build: CI/CD/Vercel reads process.env → updates src/assets/appsettings.json (file already exists in source)
+ * 2. Runtime: loadAppSettingsBeforeBootstrap() reads /assets/appsettings.json → AppSettings.initialize()
+ * 3. Usage: Services/components import and use AppSettings directly
  * 
- * CONFIGURATION SOURCES (priority order):
- * 1. Environment variables (SDMS_AuthenticationWebApp_url, etc.) - set during build
- * 2. appsettings.json files - development/local values
- * 3. Default hardcoded values - fallback if nothing else is available
+ * CONFIGURATION SOURCES:
+ * 1. Environment variables (process.env.SDMS_*) - Set by CI/CD/Vercel, override file values at build time
+ * 2. src/assets/appsettings.json - Template file (committed to repo) with default values
+ * 3. Default hardcoded values - Fallback if file not found
+ * 
+ * HOW IT WORKS:
+ * - src/assets/appsettings.json exists in source (template with defaults)
+ * - CI/CD/Vercel: Sets environment variables from GitHub secrets
+ * - Build: CI/CD/Vercel reads process.env → Updates appsettings.json file in place (inline command, no separate script)
+ * - Runtime: loadAppSettingsBeforeBootstrap() → Reads appsettings.json → Initializes AppSettings
  * 
  * Usage example:
  * ```typescript

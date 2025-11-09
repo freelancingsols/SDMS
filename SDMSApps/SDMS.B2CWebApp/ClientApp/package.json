@@ -4,10 +4,9 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
-    "build": "node build-env.js && ng build --configuration development",
-    "build:dev": "node build-env.js && ng build --configuration development",
-    "build:prod": "node build-env.js && ng build --configuration production",
-    "watch": "ng build --watch --configuration development",
+    "build": "ng build",
+    "build:prod": "node -e \"const fs=require('fs');const p='src/environments/environment.ts';let c=fs.readFileSync(p,'utf8');c=c.replace(/production: false/,'production: true');fs.writeFileSync(p,c,'utf8');\" && ng build --configuration production",
+    "watch": "ng build --watch",
     "test": "ng test",
     "test:ci": "ng test --karma-config=karma.conf.ci.js --watch=false --browsers=ChromeHeadless --code-coverage",
     "lint": "ng lint",

@@ -4,9 +4,10 @@ This document explains how application configuration is loaded and used in the S
 
 ## Overview
 
-The configuration system uses a two-phase approach:
-1. **Build-time**: Environment variables are injected into `appsettings.json` during the build process
-2. **Runtime**: Configuration is loaded from `appsettings.json` before Angular bootstrap and stored in the `AppSettings` static class
+The configuration system uses a **simple 3-step approach**:
+1. **CI/CD/Vercel**: Reads GitHub secrets → Sets environment variables → Updates `src/assets/appsettings.json` (file already exists in source)
+2. **Build**: Angular build copies `src/assets/appsettings.json` → `dist/assets/appsettings.json`
+3. **Runtime**: `loadAppSettingsBeforeBootstrap()` reads `/assets/appsettings.json` → Initializes `AppSettings`
 
 ---
 
@@ -14,34 +15,52 @@ The configuration system uses a two-phase approach:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                          BUILD-TIME PHASE                                │
+│                          STEP 1: CI/CD/Vercel                           │
 └─────────────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────┐
 │  GitHub Secrets  │  (SDMS_AuthenticationWebApp_url, etc.)
-│  or Vercel Env   │
 └────────┬─────────┘
          │
-         │ Environment Variables
-         │
-         ▼
-┌──────────────────┐
-│   build-env.js   │  Reads process.env.SDMS_*
-│   (Node.js)      │  Reads appsettings.json (template)
-└────────┬─────────┘
-         │
-         │ Generates
+         │ Sets environment variables
          │
          ▼
 ┌─────────────────────────────────────┐
-│  src/assets/appsettings.json        │  (Generated file)
+│  Environment Variables              │
+│  process.env.SDMS_*                 │
+│  (Available during build)           │
+└────────┬────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          STEP 2: Build Time                             │
+└─────────────────────────────────────────────────────────────────────────┘
+
+         │
+         │ CI/CD/Vercel updates file
+         │ (inline node command, no separate script)
+         │
+         ▼
+┌─────────────────────────────────────┐
+│  CI/CD/Vercel                       │
+│  Reads process.env.SDMS_*           │
+│  Updates src/assets/appsettings.json│
+│  (file already exists in source)    │
+└────────┬────────────────────────────┘
+         │
+         │ Updates file in place
+         │
+         ▼
+┌─────────────────────────────────────┐
+│  src/assets/appsettings.json        │
 │  {                                  │
 │    "SDMS_B2CWebApp_url": "...",    │
 │    "SDMS_AuthenticationWebApp_...": │
 │  }                                  │
+│  (Updated with env vars)            │
 └────────┬────────────────────────────┘
          │
-         │ Copied to dist during Angular build
+         │ Angular build copies to dist
          │
          ▼
 ┌─────────────────────────────────────┐
@@ -51,7 +70,7 @@ The configuration system uses a two-phase approach:
 
 
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                          RUNTIME PHASE                                   │
+│                          STEP 3: Runtime (Browser)                      │
 └─────────────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────┐
@@ -81,18 +100,12 @@ The configuration system uses a two-phase approach:
 │     │                                │                       │
 │     └─► Fail                         │                       │
 │         │                            │                       │
-│         2. Try fetch('/appsettings.json')                    │
-│            │                                                 │
-│            ├─► Success ──────────────┼──────────────────┐   │
-│            │                          │                  │   │
-│            └─► Fail                   │                  │   │
-│                │                      │                  │   │
-│                3. Use hardcoded defaults                  │   │
-│                   │                    │                  │   │
-└───────────────────┼────────────────────┼──────────────────┼───┘
-                    │                    │                  │
-                    │                    │                  │
-                    ▼                    ▼                  ▼
+│         2. Use hardcoded defaults    │                       │
+│            │                         │                       │
+└────────────┼─────────────────────────┼───────────────────────┘
+             │                         │
+             │                         │
+             ▼                         ▼
             ┌───────────────────────────────────────────┐
             │  AppSettings.initialize(config)           │
             │  (app-settings.ts)                        │
@@ -147,21 +160,18 @@ The configuration system uses a two-phase approach:
 
 ## Detailed Configuration Priority Chain
 
-### Build-Time Priority (in `build-env.js`)
+### Build-Time Priority (in CI/CD/Vercel - inline update)
 
 ```
 Priority Order (Highest to Lowest):
 ┌─────────────────────────────────────────────────────────────┐
 │ 1. Environment Variables (process.env.SDMS_*)              │
-│    - From GitHub Secrets (CI/CD)                           │
-│    - From Vercel Environment Variables                     │
-│    - From local shell environment                          │
+│    - Set by CI/CD/Vercel from GitHub Secrets              │
+│    - Available during build time                           │
 │                                                             │
-│ 2. Root appsettings.json values                            │
-│    - SDMSApps/SDMS.B2CWebApp/appsettings.json             │
-│                                                             │
-│ 3. Hardcoded defaults (in build-env.js)                    │
-│    - Fallback values for local development                 │
+│ 2. src/assets/appsettings.json (existing file in source)   │
+│    - Template file with default values                     │
+│    - Updated in place by CI/CD with env vars               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -171,15 +181,13 @@ Priority Order (Highest to Lowest):
 Priority Order (Highest to Lowest):
 ┌─────────────────────────────────────────────────────────────┐
 │ 1. /assets/appsettings.json                                 │
-│    - Generated during build                                 │
-│    - Contains values from build-time environment variables  │
+│    - Updated at build time from environment variables       │
+│    - File exists in source, updated in place by CI/CD       │
+│    - Contains values from process.env.SDMS_* (overrides)    │
 │                                                             │
-│ 2. /appsettings.json (root)                                 │
-│    - Fallback if assets/appsettings.json not found         │
-│                                                             │
-│ 3. Hardcoded defaults (in AppSettings class)                │
-│    - Used if JSON files cannot be loaded                    │
-│    - Same defaults as build-env.js                          │
+│ 2. Hardcoded defaults (in loadAppSettingsBeforeBootstrap)   │
+│    - Used if appsettings.json not found                     │
+│    - Same defaults as src/assets/appsettings.json           │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -210,12 +218,11 @@ All configuration keys follow the `SDMS_*` naming convention:
        # ... etc
      ```
 
-2. **Build Script** (`build-env.js`)
-   - Runs before Angular build: `node build-env.js`
-   - Reads environment variables: `process.env.SDMS_*`
-   - Reads template: `appsettings.json` (root)
-   - Merges values (environment vars override template)
-   - Generates: `src/assets/appsettings.json`
+2. **Update appsettings.json** (CI/CD/Vercel)
+   - CI/CD/Vercel reads `process.env.SDMS_*` (from GitHub secrets/Vercel env vars)
+   - Updates `src/assets/appsettings.json` in place (file already exists in source)
+   - Uses inline node command (no separate script file needed)
+   - File values are overridden by env vars (env vars take precedence)
 
 3. **Angular Build**
    - Compiles Angular application
@@ -268,12 +275,12 @@ All configuration keys follow the `SDMS_*` naming convention:
 
 ```
 SDMSApps/SDMS.B2CWebApp/
-├── appsettings.json                          # Template (root)
 ├── ClientApp/
-│   ├── build-env.js                          # Build-time script
 │   ├── src/
 │   │   ├── assets/
-│   │   │   └── appsettings.json              # Generated (build-time)
+│   │   │   └── appsettings.json              # Template file (exists in source, updated at build)
+│   │   ├── environments/
+│   │   │   └── environment.ts                # Single environment file (production flag only)
 │   │   ├── app/
 │   │   │   ├── config/
 │   │   │   │   └── app-settings.ts           # AppSettings class
@@ -301,14 +308,21 @@ SDMSApps/SDMS.B2CWebApp/
    env:
      SDMS_AuthenticationWebApp_url: ${{ secrets.SDMS_AuthenticationWebApp_url }}
      # ... other secrets
-   run: node build-env.js && npm run build:prod
+   run: npm run build:prod
    ```
 
-3. **build-env.js:**
-   ```javascript
-   // Reads: process.env.SDMS_AuthenticationWebApp_url = "https://prod-auth.example.com"
-   // Reads: appsettings.json (template)
-   // Generates: src/assets/appsettings.json with production values
+3. **Update appsettings.json** (CI/CD/Vercel):
+   ```bash
+   # CI/CD reads process.env and updates existing file
+   node -e "
+   const fs = require('fs');
+   const existing = JSON.parse(fs.readFileSync('src/assets/appsettings.json', 'utf8'));
+   const updated = {
+     SDMS_B2CWebApp_url: process.env.SDMS_B2CWebApp_url || existing.SDMS_B2CWebApp_url,
+     // ... etc (env vars override file values)
+   };
+   fs.writeFileSync('src/assets/appsettings.json', JSON.stringify(updated, null, 2));
+   "
    ```
 
 4. **Angular Build:**
@@ -360,19 +374,26 @@ SDMSApps/SDMS.B2CWebApp/
 
 ### Configuration Not Loading
 
-1. **Check build-env.js output**
-   - Look for console logs during build
-   - Verify environment variables are set
+1. **Check environment variables**
+   - Verify environment variables are set in GitHub Secrets
+   - Check Vercel dashboard for environment variables
+   - Verify `process.env.SDMS_*` are available during build
 
-2. **Check browser console**
-   - Look for "AppSettings loaded from..." messages
+2. **Check appsettings.json update** (CI/CD)
+   - Look for "Updated appsettings.json" message in CI/CD logs
+   - Verify `src/assets/appsettings.json` is updated with env vars
+   - Check file contains correct values (env vars should override defaults)
+
+3. **Check browser console**
+   - Look for "AppSettings loaded from /assets/appsettings.json" message
    - Check for fetch errors
+   - Verify AppSettings values are correct
 
-3. **Verify appsettings.json exists**
+4. **Verify appsettings.json exists**
    - Check `dist/assets/appsettings.json` after build
    - Verify file is being served correctly
 
-4. **Check GitHub Secrets**
+5. **Check GitHub Secrets**
    - Verify secrets are set in GitHub repository
    - Verify secret names match workflow file
 
@@ -388,11 +409,24 @@ Check the priority chain above to determine which source should be used.
 
 ## Summary
 
-The configuration system uses a **build-time injection** and **runtime loading** approach:
+The configuration system uses a **simple 3-step approach**:
 
-1. **Build-time**: Environment variables → `build-env.js` → `assets/appsettings.json`
-2. **Runtime**: `main.ts` → `loadAppSettingsBeforeBootstrap()` → `AppSettings.initialize()`
-3. **Usage**: Services/Components → `AppSettings` static properties
+1. **CI/CD/Vercel**: Reads GitHub secrets → Sets environment variables → Updates `src/assets/appsettings.json` (file exists in source, updated in place)
+2. **Build**: Angular build copies `src/assets/appsettings.json` → `dist/assets/appsettings.json`
+3. **Runtime**: `loadAppSettingsBeforeBootstrap()` reads `/assets/appsettings.json` → `AppSettings.initialize()`
+4. **Usage**: Services/Components → `AppSettings` static properties
+
+**Key Benefits**: 
+- No separate script files needed (inline commands in CI/CD)
+- No separate environment files (single environment.ts for production flag only)
+- File exists in source (easy to see defaults)
+- Simple: CI/CD updates files → Build → Runtime reads file
+
+**Simplified Architecture**:
+- `environment.ts` - Single file, only contains `production` flag (for Angular optimizations)
+- `appsettings.json` - Contains all application configuration (API URLs, etc.)
+- No file replacements needed - files updated at build time by CI/CD
+- Configuration loaded from `appsettings.json` at runtime via `AppSettings` class
 
 This ensures configuration is available immediately when the application starts, with proper fallback mechanisms and environment-specific values.
 

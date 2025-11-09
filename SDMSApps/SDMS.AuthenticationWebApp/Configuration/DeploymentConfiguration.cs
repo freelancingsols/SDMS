@@ -21,11 +21,92 @@ public static class DeploymentConfiguration
         // 4. Platform-agnostic POSTGRES_CONNECTION
         // 5. Default local development connection string
         
-        var connectionString = configuration[ConfigurationKeys.ConnectionString]
-            ?? configuration["DATABASE_URL"]  // Railway standard
-            ?? configuration["POSTGRES_URL"]  // Railway alternative
-            ?? configuration[ConfigurationKeys.PostgresConnection]
-            ?? "Host=localhost;Database=sdms_auth;Username=postgres;Password=postgres";
+        // Helper method to get non-empty configuration value
+        string? GetConfigValue(string key) 
+        {
+            var value = configuration[key];
+            var isNullOrEmpty = string.IsNullOrWhiteSpace(value);
+            
+            // Log for debugging (only in development or if logger is available)
+            if (logger != null && !isNullOrEmpty)
+            {
+                logger.LogDebug("Found configuration value for key: {Key}", key);
+            }
+            else if (logger != null && isNullOrEmpty && !string.IsNullOrEmpty(key))
+            {
+                logger.LogDebug("Configuration key {Key} is not set or is empty", key);
+            }
+            
+            return isNullOrEmpty ? null : value;
+        }
+        
+        // Determine if we're in a production/deployed environment
+        // Check for common cloud platform indicators
+        var isProduction = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("RAILWAY_ENVIRONMENT"))
+            || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("RAILWAY_PROJECT_ID"))
+            || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AZURE_ENVIRONMENT"))
+            || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AWS_REGION"))
+            || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DYNO")) // Heroku
+            || Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Production"
+            || (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") != "Development" 
+                && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("PORT"))); // Railway/cloud platforms set PORT
+        
+        // Try to get connection string from various sources
+        var connectionString = GetConfigValue(ConfigurationKeys.ConnectionString)
+            ?? GetConfigValue("DATABASE_URL")  // Railway standard (auto-injected when PostgreSQL service is attached)
+            ?? GetConfigValue("POSTGRES_URL")  // Railway alternative
+            ?? GetConfigValue("POSTGRES_CONNECTION")  // Platform-agnostic
+            ?? GetConfigValue(ConfigurationKeys.PostgresConnection);
+        
+        // Use default only for local development
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            if (isProduction)
+            {
+                // In production, require a database connection string
+                var errorMessage = "Database connection string is required in production environment. " +
+                    "Please set one of the following environment variables: " +
+                    "SDMS_AuthenticationWebApp_ConnectionString, DATABASE_URL, POSTGRES_URL, or POSTGRES_CONNECTION. " +
+                    "If using Railway, ensure a PostgreSQL service is attached to your project.";
+                
+                if (logger != null)
+                {
+                    logger.LogError(errorMessage);
+                }
+                else
+                {
+                    Console.WriteLine($"Error: {errorMessage}");
+                }
+                
+                throw new InvalidOperationException(errorMessage);
+            }
+            else
+            {
+                // Local development: use default
+                connectionString = "Host=localhost;Database=sdms_auth;Username=postgres;Password=postgres";
+                
+                if (logger != null)
+                {
+                    logger.LogWarning("Using default localhost database connection string for local development");
+                }
+                else
+                {
+                    Console.WriteLine("Warning: Using default localhost database connection string for local development");
+                }
+            }
+        }
+        else
+        {
+            // Log which source was used
+            if (logger != null)
+            {
+                logger.LogInformation("Database connection string found in environment/configuration");
+            }
+            else
+            {
+                Console.WriteLine("Database connection string found in environment/configuration");
+            }
+        }
 
         // Convert URL format (postgresql://user:pass@host:port/db) to Npgsql format if needed
         connectionString = NormalizeConnectionString(connectionString, logger);

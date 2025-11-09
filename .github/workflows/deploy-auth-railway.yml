@@ -102,28 +102,79 @@ jobs:
           echo "Railway CLI version: $(railway --version)"
           echo ""
           
+          # Explicitly export RAILWAY_TOKEN to ensure it's available to Railway CLI
+          # Railway CLI automatically uses RAILWAY_TOKEN environment variable for authentication
+          export RAILWAY_TOKEN="$RAILWAY_TOKEN"
+          
           # Verify token is set and show first few characters for debugging (not the full token)
-          echo "Token info:"
+          echo "Token verification:"
           if [ -n "$RAILWAY_TOKEN" ]; then
             TOKEN_PREFIX=$(echo "$RAILWAY_TOKEN" | cut -c1-8)
             TOKEN_LENGTH=${#RAILWAY_TOKEN}
-            echo "  ✅ RAILWAY_TOKEN is set (length: $TOKEN_LENGTH, starts with: $TOKEN_PREFIX...)"
+            echo "  ✅ RAILWAY_TOKEN environment variable is set"
+            echo "  ✅ Token length: $TOKEN_LENGTH characters"
+            echo "  ✅ Token prefix: $TOKEN_PREFIX..."
+            
+            # Verify the environment variable is accessible
+            if [ "$RAILWAY_TOKEN" = "$(echo $RAILWAY_TOKEN)" ]; then
+              echo "  ✅ Token is properly exported and accessible"
+            else
+              echo "  ⚠️  Warning: Token may not be properly exported"
+            fi
           else
             echo "  ❌ RAILWAY_TOKEN is not set"
             exit 1
           fi
           echo ""
           
-          # Test Railway CLI authentication
+          # Verify Railway CLI can see the token
+          echo "Verifying Railway CLI can access token..."
+          if env | grep -q "^RAILWAY_TOKEN="; then
+            echo "  ✅ RAILWAY_TOKEN is present in environment"
+          else
+            echo "  ❌ RAILWAY_TOKEN is not found in environment variables"
+            exit 1
+          fi
+          echo ""
+          
+          # Test Railway CLI authentication and service access
           echo "Testing Railway CLI authentication..."
           AUTH_TEST=$(railway whoami 2>&1)
-          if [ $? -eq 0 ]; then
+          AUTH_EXIT=$?
+          
+          if [ $AUTH_EXIT -eq 0 ]; then
             echo "✅ Authentication successful"
             echo "$AUTH_TEST"
           else
-            echo "⚠️  Authentication test failed or not available"
+            echo "⚠️  'railway whoami' failed (exit code: $AUTH_EXIT)"
             echo "   Output: $AUTH_TEST"
-            echo "   Note: This might be normal for project tokens"
+            echo "   Note: This might be normal for project tokens (whoami may not work)"
+          fi
+          
+          # Test if we can access the service (this is the critical test)
+          echo ""
+          echo "Testing service access..."
+          SERVICE_TEST=$(railway variables --service "$SERVICE_ID" --json 2>&1 | head -10)
+          SERVICE_EXIT=$?
+          
+          if [ $SERVICE_EXIT -eq 0 ]; then
+            echo "✅ Service access verified - token can access service $SERVICE_ID"
+            echo "   Current variables: $(echo "$SERVICE_TEST" | wc -l) line(s) of JSON"
+          else
+            echo "❌ CRITICAL: Cannot access service $SERVICE_ID"
+            echo "   Exit code: $SERVICE_EXIT"
+            echo "   Output: $(echo "$SERVICE_TEST" | head -5)"
+            echo ""
+            echo "   This usually means:"
+            echo "   1. Token is not a Project Token (might be Account Token)"
+            echo "   2. Token doesn't have access to this project/service"
+            echo "   3. Token is invalid or expired"
+            echo ""
+            echo "   💡 Solution: Generate a NEW Project Token from:"
+            echo "   https://railway.app/project/$PROJECT_ID/settings/tokens"
+            echo "   Then update RAILWAY_TOKEN in GitHub secrets"
+            echo ""
+            exit 1
           fi
           echo ""
 

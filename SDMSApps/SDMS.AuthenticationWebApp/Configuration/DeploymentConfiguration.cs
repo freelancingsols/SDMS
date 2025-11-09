@@ -9,65 +9,60 @@ namespace SDMS.AuthenticationWebApp.Configuration;
 public static class DeploymentConfiguration
 {
     /// <summary>
-    /// Gets the database connection string from various sources
-    /// Priority: Custom Connection String > Platform-specific URLs > Default
+    /// Gets the database connection string from SDMS_AuthenticationWebApp_ConnectionString environment variable.
+    /// 
+    /// CONVERTING RAILWAY DATABASE_URL FORMAT TO NPGQL FORMAT:
+    /// -------------------------------------------------------------------------
+    /// Railway provides DATABASE_URL in this format:
+    ///   postgresql://username:password@host:port/database
+    /// 
+    /// Convert it to Npgsql format:
+    ///   Host=host;Port=port;Database=database;Username=username;Password=password
+    /// 
+    /// Example conversion:
+    ///   Railway format:  postgresql://postgres:password123@postgres.railway.internal:5432/railway
+    ///   Npgsql format:   Host=postgres.railway.internal;Port=5432;Database=railway;Username=postgres;Password=password123
+    /// 
+    /// Step-by-step conversion:
+    ///   1. Extract host from URL: postgres.railway.internal
+    ///   2. Extract port (default 5432 if not specified)
+    ///   3. Extract database name: railway
+    ///   4. Extract username: postgres
+    ///   5. Extract password: password123
+    ///   6. Combine: Host=host;Port=port;Database=database;Username=username;Password=password
+    /// 
+    /// Note: This method also accepts URL format and will automatically convert it to Npgsql format.
     /// </summary>
     public static string GetDatabaseConnectionString(IConfiguration configuration, ILogger? logger = null)
     {
-        // Priority order:
-        // 1. Custom application connection string (SDMS_AuthenticationWebApp_ConnectionString)
-        // 2. Railway DATABASE_URL (standard for Railway deployments)
-        // 3. Railway POSTGRES_URL (alternative)
-        // 4. Platform-agnostic POSTGRES_CONNECTION
-        // 5. Default local development connection string
+        // Only use SDMS_AuthenticationWebApp_ConnectionString - no fallbacks
+        // This provides explicit control over the connection string
         
-        // Helper method to get non-empty configuration value
-        string? GetConfigValue(string key) 
-        {
-            var value = configuration[key];
-            var isNullOrEmpty = string.IsNullOrWhiteSpace(value);
-            
-            // Log for debugging (only in development or if logger is available)
-            if (logger != null && !isNullOrEmpty)
-            {
-                logger.LogDebug("Found configuration value for key: {Key}", key);
-            }
-            else if (logger != null && isNullOrEmpty && !string.IsNullOrEmpty(key))
-            {
-                logger.LogDebug("Configuration key {Key} is not set or is empty", key);
-            }
-            
-            return isNullOrEmpty ? null : value;
-        }
+        var connectionString = configuration[ConfigurationKeys.ConnectionString];
         
-        // Determine if we're in a production/deployed environment
-        // Check for common cloud platform indicators
-        var isProduction = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("RAILWAY_ENVIRONMENT"))
-            || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("RAILWAY_PROJECT_ID"))
-            || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AZURE_ENVIRONMENT"))
-            || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AWS_REGION"))
-            || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DYNO")) // Heroku
-            || Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Production"
-            || (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") != "Development" 
-                && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("PORT"))); // Railway/cloud platforms set PORT
-        
-        // Try to get connection string from various sources
-        var connectionString = GetConfigValue(ConfigurationKeys.ConnectionString)
-            ?? GetConfigValue("DATABASE_URL")  // Railway standard (auto-injected when PostgreSQL service is attached)
-            ?? GetConfigValue("POSTGRES_URL")  // Railway alternative
-            ?? GetConfigValue("POSTGRES_CONNECTION")  // Platform-agnostic
-            ?? GetConfigValue(ConfigurationKeys.PostgresConnection);
-        
-        // Use default only for local development
+        // Check if connection string is null or empty
         if (string.IsNullOrWhiteSpace(connectionString))
         {
+            // Determine if we're in a production/deployed environment
+            var isProduction = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("RAILWAY_ENVIRONMENT"))
+                || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("RAILWAY_PROJECT_ID"))
+                || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AZURE_ENVIRONMENT"))
+                || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AWS_REGION"))
+                || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DYNO")) // Heroku
+                || Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Production"
+                || (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") != "Development" 
+                    && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("PORT"))); // Railway/cloud platforms set PORT
+            
             if (isProduction)
             {
-                // In production, require a database connection string
-                var errorMessage = "Database connection string is required in production environment. " +
-                    "Please set one of the following environment variables: " +
-                    "SDMS_AuthenticationWebApp_ConnectionString, DATABASE_URL, POSTGRES_URL, or POSTGRES_CONNECTION. " +
-                    "If using Railway, ensure a PostgreSQL service is attached to your project.";
+                // Log available environment variables for debugging
+                LogAvailableEnvironmentVariables(configuration, logger);
+                
+                var errorMessage = "SDMS_AuthenticationWebApp_ConnectionString environment variable is required. " +
+                    "Please set this variable with your PostgreSQL connection string. " +
+                    "If you have Railway's DATABASE_URL, convert it to Npgsql format: " +
+                    "Railway format: postgresql://user:pass@host:port/db → " +
+                    "Npgsql format: Host=host;Port=port;Database=db;Username=user;Password=pass";
                 
                 if (logger != null)
                 {
@@ -97,16 +92,17 @@ public static class DeploymentConfiguration
         }
         else
         {
-            // Log which source was used
+            // Log that connection string was found
             if (logger != null)
             {
-                logger.LogInformation("Database connection string found in environment/configuration");
+                logger.LogInformation("Database connection string found in SDMS_AuthenticationWebApp_ConnectionString");
             }
             else
             {
-                Console.WriteLine("Database connection string found in environment/configuration");
+                Console.WriteLine("Database connection string found in SDMS_AuthenticationWebApp_ConnectionString");
             }
         }
+        
 
         // Convert URL format (postgresql://user:pass@host:port/db) to Npgsql format if needed
         connectionString = NormalizeConnectionString(connectionString, logger);
@@ -186,7 +182,7 @@ public static class DeploymentConfiguration
         {
             throw new InvalidOperationException(
                 "Database connection string is required. " +
-                "Set SDMS_AuthenticationWebApp_ConnectionString, DATABASE_URL, or POSTGRES_URL environment variable.");
+                "Set SDMS_AuthenticationWebApp_ConnectionString environment variable.");
         }
 
         // Validate that connection string contains Host
@@ -203,7 +199,7 @@ public static class DeploymentConfiguration
             throw new InvalidOperationException(
                 $"Database connection string is missing Host. " +
                 $"Current connection string: {preview}. " +
-                $"Please provide a valid PostgreSQL connection string with Host specified.");
+                $"Please provide a valid PostgreSQL connection string in SDMS_AuthenticationWebApp_ConnectionString with Host specified.");
         }
     }
 
@@ -259,6 +255,28 @@ public static class DeploymentConfiguration
             {
                 Console.WriteLine($"Warning: {warningMessage}");
             }
+        }
+    }
+
+    /// <summary>
+    /// Logs available environment variables for debugging (without exposing sensitive data)
+    /// </summary>
+    private static void LogAvailableEnvironmentVariables(IConfiguration configuration, ILogger? logger)
+    {
+        var connectionStringKey = ConfigurationKeys.ConnectionString;
+        var connectionStringValue = configuration[connectionStringKey];
+        
+        var message = string.IsNullOrWhiteSpace(connectionStringValue)
+            ? $"SDMS_AuthenticationWebApp_ConnectionString is not set. Please set this environment variable with your PostgreSQL connection string."
+            : $"SDMS_AuthenticationWebApp_ConnectionString is set (value hidden for security).";
+
+        if (logger != null)
+        {
+            logger.LogDebug(message);
+        }
+        else
+        {
+            Console.WriteLine($"Debug: {message}");
         }
     }
 }

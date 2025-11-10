@@ -37,7 +37,7 @@ export interface IUser {
 })
 export class AuthorizeService {
   constructor(
-    @Inject('BASE_URL') private baseUrl: string,
+    @Inject('BASE_URL') private _baseUrl: string,
     private oauthService: OAuthService
   ) {
   }

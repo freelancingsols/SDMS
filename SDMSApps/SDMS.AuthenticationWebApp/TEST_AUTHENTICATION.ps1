@@ -62,34 +62,47 @@ Write-Host ""
 Write-Host "4. Testing /connect/token endpoint (password grant)..." -ForegroundColor Green
 try {
     # Password grant requires form-urlencoded format
-    $tokenParams = @{
+    # Build form data manually
+    $body = @{
         grant_type = "password"
         username = $username
         password = $password
         client_id = $clientId
         client_secret = $clientSecret
-        scope = "openid profile email roles"
+        scope = "openid profile email roles offline_access"
     }
     
-    $tokenBody = ($tokenParams.GetEnumerator() | ForEach-Object { "$($_.Key)=$([System.Web.HttpUtility]::UrlEncode($_.Value))" }) -join "&"
+    # Use Invoke-RestMethod which handles form encoding automatically
+    $tokenResponse = Invoke-RestMethod -Uri "$baseUrl/connect/token" -Method POST -Body $body -ContentType "application/x-www-form-urlencoded" -ErrorAction Stop
     
-    $tokenResponse = Invoke-WebRequest -Uri "$baseUrl/connect/token" -Method POST -ContentType "application/x-www-form-urlencoded" -Body $tokenBody
-    Write-Host "   Status: $($tokenResponse.StatusCode)" -ForegroundColor Green
-    $tokenData = $tokenResponse.Content | ConvertFrom-Json
-    Write-Host "   Access Token: $($tokenData.access_token.Substring(0, [Math]::Min(50, $tokenData.access_token.Length)))..." -ForegroundColor Gray
-    Write-Host "   Token Type: $($tokenData.token_type)" -ForegroundColor Gray
-    Write-Host "   Expires In: $($tokenData.expires_in) seconds" -ForegroundColor Gray
-    if ($tokenData.refresh_token) {
-        Write-Host "   Refresh Token: $($tokenData.refresh_token.Substring(0, [Math]::Min(50, $tokenData.refresh_token.Length)))..." -ForegroundColor Gray
+    Write-Host "   Status: Success" -ForegroundColor Green
+    Write-Host "   Access Token: $($tokenResponse.access_token.Substring(0, [Math]::Min(50, $tokenResponse.access_token.Length)))..." -ForegroundColor Gray
+    Write-Host "   Token Type: $($tokenResponse.token_type)" -ForegroundColor Gray
+    Write-Host "   Expires In: $($tokenResponse.expires_in) seconds" -ForegroundColor Gray
+    if ($tokenResponse.refresh_token) {
+        Write-Host "   Refresh Token: $($tokenResponse.refresh_token.Substring(0, [Math]::Min(50, $tokenResponse.refresh_token.Length)))..." -ForegroundColor Gray
+    }
+    if ($tokenResponse.id_token) {
+        Write-Host "   ID Token: $($tokenResponse.id_token.Substring(0, [Math]::Min(50, $tokenResponse.id_token.Length)))..." -ForegroundColor Gray
     }
     
-    $accessToken = $tokenData.access_token
+    $accessToken = $tokenResponse.access_token
 } catch {
     Write-Host "   ERROR: $($_.Exception.Message)" -ForegroundColor Red
+    if ($_.ErrorDetails) {
+        Write-Host "   Error Details: $($_.ErrorDetails.Message)" -ForegroundColor Red
+    }
     if ($_.Exception.Response) {
-        $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
-        $responseBody = $reader.ReadToEnd()
-        Write-Host "   Response: $responseBody" -ForegroundColor Red
+        try {
+            $stream = $_.Exception.Response.GetResponseStream()
+            $reader = New-Object System.IO.StreamReader($stream)
+            $responseBody = $reader.ReadToEnd()
+            Write-Host "   Response: $responseBody" -ForegroundColor Red
+            $reader.Close()
+            $stream.Close()
+        } catch {
+            Write-Host "   Could not read error response" -ForegroundColor Yellow
+        }
     }
     $accessToken = $null
 }

@@ -79,7 +79,7 @@ jobs:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          vercel-args: '--prod'
+          vercel-args: '--prod --yes'
           working-directory: SDMSApps/SDMS.B2CWebApp
           vercel-config-path: SDMSApps/SDMS.B2CWebApp/vercel.json
           scope: ${{ secrets.VERCEL_ORG_ID }}

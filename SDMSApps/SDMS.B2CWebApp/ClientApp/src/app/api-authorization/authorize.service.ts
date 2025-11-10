@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@angular/core';
+import { Injectable } from '@angular/core';
 import { BehaviorSubject, concat, Observable, of } from 'rxjs';
 import { filter, map, take, tap } from 'rxjs/operators';
 import { OAuthService } from 'angular-oauth2-oidc';
@@ -37,7 +37,6 @@ export interface IUser {
 })
 export class AuthorizeService {
   constructor(
-    @Inject('BASE_URL') private _baseUrl: string,
     private oauthService: OAuthService
   ) {
   }

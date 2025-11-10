@@ -1,5 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -49,6 +51,39 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "SDMS Authentication API", Version = "v1" });
+});
+
+// Configure DataProtection for persistent key storage
+// For Railway/container deployments, consider using a volume or database storage
+// For now, use the app directory (Railway can mount a volume if persistence is needed)
+try
+{
+    var dataProtectionKeysPath = Path.Combine(builder.Environment.ContentRootPath, "DataProtection-Keys");
+    if (!Directory.Exists(dataProtectionKeysPath))
+    {
+        Directory.CreateDirectory(dataProtectionKeysPath);
+    }
+    
+    builder.Services.AddDataProtection()
+        .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath))
+        .SetApplicationName("SDMS.AuthenticationWebApp");
+}
+catch (Exception ex)
+{
+    // If we can't create the directory, DataProtection will use default in-memory storage
+    // This is acceptable for single-instance deployments but keys will be lost on restart
+    Console.WriteLine($"Warning: Could not configure DataProtection key storage: {ex.Message}");
+    Console.WriteLine("DataProtection will use default storage (keys may be lost on restart)");
+}
+
+// Configure ForwardedHeaders for reverse proxy support (Railway, etc.)
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor 
+        | ForwardedHeaders.XForwardedProto 
+        | ForwardedHeaders.XForwardedHost;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
 });
 
 // Database - Get connection string from deployment configuration
@@ -217,13 +252,24 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // Configure HTTP pipeline
+// ForwardedHeaders must be first to handle reverse proxy headers correctly (Railway, etc.)
+app.UseForwardedHeaders();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+// Only use HTTPS redirection in development
+// In production behind a reverse proxy (like Railway), the proxy handles HTTPS termination
+// Railway terminates SSL at the proxy level, so HTTPS redirection is not needed
+if (app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
+// In production (Railway), skip HTTPS redirection as the proxy handles SSL/TLS
+
 app.UseCors();
 app.UseRouting();
 app.UseAuthentication();

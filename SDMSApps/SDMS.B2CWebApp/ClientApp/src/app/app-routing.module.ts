@@ -1,11 +1,11 @@
 import { NgModule } from '@angular/core';
 import { Routes, RouterModule } from '@angular/router';
-
+import { TestComponent } from './Components/test/test.component';
 
 const routes: Routes = [
-  // otherwise redirect to /
-  //{ path: '**', redirectTo: '' }
- //{ path: 'login', loadChildren: 'src/app/api-authorization/api-authorization.module#ApiAuthorizationModule' }
+  { path: 'test', component: TestComponent },
+  { path: '', redirectTo: '/test', pathMatch: 'full' },
+  { path: '**', redirectTo: '/test' }
 ];
 
 @NgModule({

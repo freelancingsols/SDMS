@@ -41,11 +41,7 @@ import { MatSortModule } from '@angular/material/sort';
     HttpClientModule,
     FormsModule,
     ReactiveFormsModule,
-    RouterModule.forRoot([
-      { path: 'test', component: TestComponent },
-      { path: '', redirectTo: '/test', pathMatch: 'full' },
-      { path: '**', redirectTo: '/test' }
-    ]),
+    // Routes are defined in AppRoutingModule to avoid duplication
     ServiceWorkerModule.register('ngsw-worker.js', { 
       enabled: environment.production,
       registrationStrategy: 'registerWhenStable:30000'

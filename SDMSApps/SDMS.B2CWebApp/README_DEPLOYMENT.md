@@ -8,13 +8,16 @@ This Angular frontend application is configured to deploy on Vercel.
 
 ### 1. GitHub Secrets
 
-Add the following secrets in your GitHub repository (Settings → Secrets and variables → Actions):
+Add the following secrets in your GitHub repository (Settings → Secrets and variables → Actions → Secrets):
 
+**Application Configuration Secrets:**
 - `SDMS_B2CWebApp_url` - B2C WebApp URL (e.g., `https://your-app.vercel.app`)
 - `SDMS_AuthenticationWebApp_url` - Authentication server URL (e.g., `https://your-auth.railway.app`)
 - `SDMS_AuthenticationWebApp_clientid` - OAuth client ID (e.g., `sdms_frontend`)
 - `SDMS_AuthenticationWebApp_redirectUri` - OAuth redirect URI (e.g., `https://your-app.vercel.app/auth-callback`)
 - `SDMS_AuthenticationWebApp_scope` - OAuth scope (e.g., `openid profile email roles api`)
+
+**Vercel Deployment Secrets:**
 - `VERCEL_TOKEN` - Vercel authentication token
 - `VERCEL_ORG_ID` - Vercel organization ID
 - `VERCEL_PROJECT_ID` - Vercel project ID
@@ -26,15 +29,16 @@ Add the following secrets in your GitHub repository (Settings → Secrets and va
 3. Copy the token to `VERCEL_TOKEN` secret
 4. Go to your project settings to find `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`
 
-### 3. Environment Variables
+### 3. How Environment Variables Work
 
-The application uses environment variables that are injected at build time (using SDMS_* naming convention):
+The GitHub Actions workflow automatically:
+1. Reads secrets from GitHub Secrets
+2. Updates `src/assets/appsettings.json` with the secret values at build time
+3. Sets the production flag in `src/environments/environment.ts`
+4. Builds the Angular app with the updated configuration
+5. Deploys to Vercel
 
-- `SDMS_B2CWebApp_url` - B2C WebApp URL
-- `SDMS_AuthenticationWebApp_url` - Authentication server endpoint
-- `SDMS_AuthenticationWebApp_clientid` - OAuth client identifier
-- `SDMS_AuthenticationWebApp_redirectUri` - OAuth redirect URI
-- `SDMS_AuthenticationWebApp_scope` - OAuth scope
+**Note:** The secrets are loaded from GitHub Secrets during the CI/CD pipeline and injected into the appsettings.json file before the Angular build. This ensures sensitive configuration is not committed to the repository.
 
 ### 4. Manual Deployment
 

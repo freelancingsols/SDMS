@@ -120,6 +120,77 @@ public class TokenController : ControllerBase
             return SignIn(new ClaimsPrincipal(identity), OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         }
 
+        else if (request.IsPasswordGrantType())
+        {
+            // Password grant type - validate username/email and password
+            // Try to find user by username first, then by email (since users can login with email)
+            var username = request.Username ?? string.Empty;
+            var user = await _userManager.FindByNameAsync(username);
+            if (user == null)
+            {
+                // Try finding by email if username lookup fails
+                user = await _userManager.FindByEmailAsync(username);
+            }
+            
+            if (user == null)
+            {
+                return Forbid(
+                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+                    properties: new AuthenticationProperties(new Dictionary<string, string?>
+                    {
+                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = Errors.InvalidGrant,
+                        [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "The username/password couple is invalid."
+                    }));
+            }
+
+            // Validate the password
+            if (!await _userManager.CheckPasswordAsync(user, request.Password ?? string.Empty))
+            {
+                return Forbid(
+                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+                    properties: new AuthenticationProperties(new Dictionary<string, string?>
+                    {
+                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = Errors.InvalidGrant,
+                        [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "The username/password couple is invalid."
+                    }));
+            }
+
+            // Ensure the user is still allowed to sign in.
+            if (!await _signInManager.CanSignInAsync(user))
+            {
+                return Forbid(
+                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+                    properties: new AuthenticationProperties(new Dictionary<string, string?>
+                    {
+                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = Errors.InvalidGrant,
+                        [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "The user is no longer allowed to sign in."
+                    }));
+            }
+
+            // Update last login date
+            user.LastLoginDate = DateTime.UtcNow;
+            await _userManager.UpdateAsync(user);
+
+            // Create a new ClaimsIdentity containing the claims that will be used to create tokens.
+            var identity = new ClaimsIdentity(
+                authenticationType: TokenValidationParameters.DefaultAuthenticationType,
+                nameType: Claims.Name,
+                roleType: Claims.Role);
+
+            // Add the claims that will be persisted in the tokens.
+            identity.SetClaim(Claims.Subject, await _userManager.GetUserIdAsync(user))
+                    .SetClaim(Claims.Email, await _userManager.GetEmailAsync(user) ?? string.Empty)
+                    .SetClaim(Claims.Name, await _userManager.GetUserNameAsync(user) ?? string.Empty)
+                    .SetClaims(Claims.Role, (await _userManager.GetRolesAsync(user)).ToImmutableArray());
+
+            // Set the list of scopes granted to the client application.
+            identity.SetScopes(request.GetScopes());
+            identity.SetResources(await GetResourcesAsync(request.GetScopes()));
+            identity.SetDestinations(GetDestinations);
+
+            return SignIn(new ClaimsPrincipal(identity), OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+        }
+
         else if (request.IsClientCredentialsGrantType())
         {
             // Note: the client credentials are automatically validated by OpenIddict:

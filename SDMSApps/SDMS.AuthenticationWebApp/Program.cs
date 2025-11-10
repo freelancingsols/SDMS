@@ -146,6 +146,7 @@ builder.Services.AddOpenIddict()
 
         options.AllowRefreshTokenFlow();
         options.AllowClientCredentialsFlow();
+        options.AllowPasswordFlow(); // Allow password grant for testing and API access
 
         options.RegisterScopes(Scopes.Email, Scopes.Profile, Scopes.Roles, "api");
 
@@ -384,6 +385,7 @@ using (var scope = app.Services.CreateScope())
                 Permissions.Endpoints.Logout,
                 Permissions.GrantTypes.AuthorizationCode,
                 Permissions.GrantTypes.RefreshToken,
+                Permissions.GrantTypes.Password, // Allow password grant for API access
                 Permissions.ResponseTypes.Code,
                 Permissions.Scopes.Email,
                 Permissions.Scopes.Profile,

@@ -28,13 +28,6 @@
         }
       ]
     }
-  ],
-  "env": {
-    "SDMS_B2CWebApp_url": "@sdms_b2cwebapp_url",
-    "SDMS_AuthenticationWebApp_url": "@sdms_authenticationwebapp_url",
-    "SDMS_AuthenticationWebApp_clientid": "@sdms_authenticationwebapp_clientid",
-    "SDMS_AuthenticationWebApp_redirectUri": "@sdms_authenticationwebapp_redirecturi",
-    "SDMS_AuthenticationWebApp_scope": "@sdms_authenticationwebapp_scope"
-  }
+  ]
 }
 

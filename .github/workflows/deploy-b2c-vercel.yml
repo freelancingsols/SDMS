@@ -30,10 +30,6 @@ jobs:
           rm -f package-lock.json
           rm -rf node_modules || true
 
-      - name: Install dependencies
-        working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
-        run: npm install --legacy-peer-deps
-
       - name: Create Vercel project configuration
         working-directory: SDMSApps/SDMS.B2CWebApp
         env:
@@ -42,6 +38,56 @@ jobs:
         run: |
           mkdir -p .vercel
           echo "{\"orgId\":\"$VERCEL_ORG_ID\",\"projectId\":\"$VERCEL_PROJECT_ID\"}" > .vercel/project.json
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Sync Vercel Environment Variables from GitHub Secrets
+        working-directory: SDMSApps/SDMS.B2CWebApp
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          # Verify project is linked
+          if [ ! -f ".vercel/project.json" ]; then
+            echo "Error: .vercel/project.json not found. Project must be linked first."
+            exit 1
+          fi
+          
+          # Function to sync environment variable
+          sync_env_var() {
+            local var_name=$1
+            local var_value=$2
+            local environment=$3
+            
+            echo "Syncing $var_name for $environment..."
+            
+            # Remove existing variable if it exists (ignore errors if it doesn't exist)
+            echo "y" | vercel env rm $var_name $environment --token=$VERCEL_TOKEN --yes 2>/dev/null || echo "  (variable doesn't exist, will create)"
+            
+            # Add the environment variable (this ensures it's always up-to-date)
+            echo "$var_value" | vercel env add $var_name $environment --token=$VERCEL_TOKEN --yes
+            echo "  ✓ $var_name synced for $environment"
+          }
+          
+          # Sync environment variables for production
+          echo "=== Syncing production environment variables ==="
+          sync_env_var "SDMS_B2CWebApp_url" "${{ secrets.SDMS_B2CWebApp_url }}" "production"
+          sync_env_var "SDMS_AuthenticationWebApp_url" "${{ secrets.SDMS_AuthenticationWebApp_url }}" "production"
+          sync_env_var "SDMS_AuthenticationWebApp_clientid" "${{ secrets.SDMS_AuthenticationWebApp_clientid }}" "production"
+          sync_env_var "SDMS_AuthenticationWebApp_redirectUri" "${{ secrets.SDMS_AuthenticationWebApp_redirectUri }}" "production"
+          sync_env_var "SDMS_AuthenticationWebApp_scope" "${{ secrets.SDMS_AuthenticationWebApp_scope }}" "production"
+          
+          # Also sync for preview environments
+          echo "=== Syncing preview environment variables ==="
+          sync_env_var "SDMS_B2CWebApp_url" "${{ secrets.SDMS_B2CWebApp_url }}" "preview"
+          sync_env_var "SDMS_AuthenticationWebApp_url" "${{ secrets.SDMS_AuthenticationWebApp_url }}" "preview"
+          sync_env_var "SDMS_AuthenticationWebApp_clientid" "${{ secrets.SDMS_AuthenticationWebApp_clientid }}" "preview"
+          sync_env_var "SDMS_AuthenticationWebApp_redirectUri" "${{ secrets.SDMS_AuthenticationWebApp_redirectUri }}" "preview"
+          sync_env_var "SDMS_AuthenticationWebApp_scope" "${{ secrets.SDMS_AuthenticationWebApp_scope }}" "preview"
+          
+          echo "✓ Environment variables synchronized"
 
       - name: Deploy to Vercel
         uses: amondnet/vercel-action@v25

@@ -3,8 +3,6 @@ import { CommonModule } from '@angular/common';
 import { LoginMenuComponent } from './login-menu/login-menu.component';
 import { LoginComponent } from './login/login.component';
 import { LogoutComponent } from './logout/logout.component';
-import { RouterModule } from '@angular/router';
-import { ApplicationPaths } from './api-authorization.constants';
 import { HttpClientModule } from '@angular/common/http';
 import { ApiAuthorizationRoutingModule } from './api-authorization.routing.module';
 

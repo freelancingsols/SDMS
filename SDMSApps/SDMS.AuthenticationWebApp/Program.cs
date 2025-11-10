@@ -53,8 +53,10 @@ builder.Services.AddSwaggerGen(c =>
 
 // Database - Get connection string from deployment configuration
 // Supports multiple platforms: Railway, Azure, AWS, Local Development, etc.
-// Logger is optional - will log to console if not provided
-var connectionString = DeploymentConfiguration.GetDatabaseConnectionString(builder.Configuration, logger: null);
+// Create a logger for connection string conversion logging
+var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Information));
+var configLogger = loggerFactory.CreateLogger("DeploymentConfiguration");
+var connectionString = DeploymentConfiguration.GetDatabaseConnectionString(builder.Configuration, configLogger);
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
@@ -120,22 +122,22 @@ builder.Services.AddOpenIddict()
     });
 
 // Authentication - configure login interaction similar to IdentityServer4 UserInteraction
-// Note: AddIdentity already registers Identity.Application scheme, so we don't need to add it again
-// We only need to add external authentication schemes and configure the Application cookie
+// Note: AddIdentity already registers Identity.Application and Identity.External schemes
+// We only need to configure authentication defaults and add external authentication providers
 var loginUrl = builder.Configuration[ConfigurationKeys.LoginUrl] ?? "/login";
 var logoutUrl = builder.Configuration[ConfigurationKeys.LogoutUrl] ?? "/logout";
 var errorUrl = builder.Configuration[ConfigurationKeys.ErrorUrl] ?? "/login";
 var returnUrlParameter = builder.Configuration[ConfigurationKeys.ReturnUrlParameter] ?? "ReturnUrl";
 
-// Add external authentication schemes only
-// Identity.Application is already registered by AddIdentity
+// Configure authentication defaults
+// AddIdentity already registers Identity.Application and Identity.External schemes
+// Do NOT add them again here to avoid duplicate scheme registration
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultScheme = IdentityConstants.ApplicationScheme;
     options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
     options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme;
 })
-.AddCookie(IdentityConstants.ExternalScheme)
 .AddGoogle(options =>
 {
     var clientId = builder.Configuration[ConfigurationKeys.ExternalAuthGoogleClientId];

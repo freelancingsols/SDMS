@@ -53,6 +53,21 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "SDMS Authentication API", Version = "v1" });
 });
 
+// Database - Get connection string from deployment configuration FIRST
+// This is needed for both DbContext and health checks
+var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Information));
+var configLogger = loggerFactory.CreateLogger("DeploymentConfiguration");
+var connectionString = DeploymentConfiguration.GetDatabaseConnectionString(builder.Configuration, configLogger);
+
+// Add health checks for Railway and other platforms
+// Include database connection check to verify database connectivity
+builder.Services.AddHealthChecks()
+    .AddNpgSql(
+        connectionString: connectionString,
+        name: "database",
+        failureStatus: Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Unhealthy,
+        tags: new[] { "db", "sql", "postgresql" });
+
 // Configure DataProtection for persistent key storage
 // For Railway/container deployments, consider using a volume or database storage
 // For now, use the app directory (Railway can mount a volume if persistence is needed)
@@ -86,13 +101,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownProxies.Clear();
 });
 
-// Database - Get connection string from deployment configuration
-// Supports multiple platforms: Railway, Azure, AWS, Local Development, etc.
-// Create a logger for connection string conversion logging
-var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Information));
-var configLogger = loggerFactory.CreateLogger("DeploymentConfiguration");
-var connectionString = DeploymentConfiguration.GetDatabaseConnectionString(builder.Configuration, configLogger);
-
+// Configure DbContext with the connection string (already retrieved above for health checks)
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
     options.UseNpgsql(connectionString);
@@ -272,6 +281,23 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors();
 app.UseRouting();
+
+// Map health check, ping, and root endpoints BEFORE authentication/authorization
+// This allows Railway and other platforms to check if the container is healthy
+app.MapHealthChecks("/health").AllowAnonymous();
+app.MapGet("/ping", () => Results.Ok(new { 
+    status = "ok",
+    message = "pong",
+    timestamp = DateTime.UtcNow
+})).AllowAnonymous();
+app.MapGet("/", () => Results.Json(new { 
+    status = "ok", 
+    service = "SDMS Authentication API", 
+    version = "1.0",
+    timestamp = DateTime.UtcNow,
+    environment = app.Environment.EnvironmentName
+})).AllowAnonymous();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -304,14 +330,18 @@ if (Directory.Exists(wwwrootPath))
 var fileProvider = new CompositeFileProvider(fileProviders);
 
 // SPA fallback: redirect non-API routes to index.html
+// Exclude health check, root, and API endpoints from SPA fallback
 app.Use(async (HttpContext context, Func<Task> next) =>
 {
     await next.Invoke();
+    var path = context.Request.Path.Value ?? "";
     if (context.Response.StatusCode == (int)HttpStatusCode.NotFound 
-        && context.Request.Path.Value != null
-        && !context.Request.Path.Value.StartsWith("/api")
-        && !context.Request.Path.Value.StartsWith("/connect")
-        && !context.Request.Path.Value.StartsWith("/swagger"))
+        && !path.StartsWith("/api")
+        && !path.StartsWith("/connect")
+        && !path.StartsWith("/swagger")
+        && path != "/"
+        && path != "/health"
+        && path != "/ping")
     {
         context.Request.Path = new PathString("/index.html");
         await next.Invoke();

@@ -375,6 +375,7 @@ using (var scope = app.Services.CreateScope())
     {
         ClientId = "sdms_frontend",
         ClientSecret = "sdms_frontend_secret",
+        ClientType = ClientTypes.Confidential, // Required: Confidential client (has secret)
         DisplayName = "SDMS Frontend Application",
         Permissions =
         {

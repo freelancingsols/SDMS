@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { AuthenticationResultStatus, AuthorizeService } from '../authorize.service';
-import { BehaviorSubject } from 'rxjs';
+import { BehaviorSubject, firstValueFrom } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
 import { take } from 'rxjs/operators';
 import { LogoutActions, ApplicationPaths, ReturnUrlType } from '../api-authorization.constants';
@@ -46,9 +46,9 @@ export class LogoutComponent implements OnInit {
 
   private async logout(returnUrl: string): Promise<void> {
     const state: INavigationState = { returnUrl };
-    const isauthenticated = await this.authorizeService.isAuthenticated().pipe(
-      take(1)
-    ).toPromise();
+    const isauthenticated = await firstValueFrom(
+      this.authorizeService.isAuthenticated().pipe(take(1))
+    );
     if (isauthenticated) {
       const result = await this.authorizeService.signOut(state);
       switch (result.status) {

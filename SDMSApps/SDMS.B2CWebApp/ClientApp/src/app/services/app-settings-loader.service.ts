@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 import { AppSettings } from '../config/app-settings';
 
 export interface AppSettingsConfig {
@@ -37,7 +38,9 @@ export class AppSettingsLoaderService {
     try {
       // Try assets/appsettings.json first
       try {
-        const config = await this.http.get<AppSettingsConfig>('/assets/appsettings.json').toPromise();
+        const config = await firstValueFrom(
+          this.http.get<AppSettingsConfig>('/assets/appsettings.json')
+        );
         if (config) {
           console.log('✓ AppSettings loaded from /assets/appsettings.json');
           const mergedConfig = { ...defaultConfig, ...config };
@@ -47,7 +50,9 @@ export class AppSettingsLoaderService {
       } catch (error1) {
         // Try root appsettings.json as fallback
         try {
-          const rootConfig = await this.http.get<any>('/appsettings.json').toPromise();
+          const rootConfig = await firstValueFrom(
+            this.http.get<any>('/appsettings.json')
+          );
           if (rootConfig) {
             console.log('✓ AppSettings loaded from /appsettings.json');
             const appConfig: AppSettingsConfig = {

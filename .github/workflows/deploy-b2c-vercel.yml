@@ -30,52 +30,69 @@ jobs:
           rm -f package-lock.json
           rm -rf node_modules || true
 
-      - name: Install dependencies
-        working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
-        run: npm install --legacy-peer-deps
-
-      - name: Update configuration files from GitHub secrets
-        working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
+      - name: Create Vercel project configuration
+        working-directory: SDMSApps/SDMS.B2CWebApp
         env:
-          SDMS_B2CWebApp_url: ${{ secrets.SDMS_B2CWebApp_url }}
-          SDMS_AuthenticationWebApp_url: ${{ secrets.SDMS_AuthenticationWebApp_url }}
-          SDMS_AuthenticationWebApp_clientid: ${{ secrets.SDMS_AuthenticationWebApp_clientid }}
-          SDMS_AuthenticationWebApp_redirectUri: ${{ secrets.SDMS_AuthenticationWebApp_redirectUri }}
-          SDMS_AuthenticationWebApp_scope: ${{ secrets.SDMS_AuthenticationWebApp_scope }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          # Update appsettings.json with env vars
-          node -e "
-          const fs = require('fs');
-          const path = 'src/assets/appsettings.json';
-          const existing = JSON.parse(fs.readFileSync(path, 'utf8'));
-          const updated = {
-            SDMS_B2CWebApp_url: process.env.SDMS_B2CWebApp_url || existing.SDMS_B2CWebApp_url,
-            SDMS_AuthenticationWebApp_url: process.env.SDMS_AuthenticationWebApp_url || existing.SDMS_AuthenticationWebApp_url,
-            SDMS_AuthenticationWebApp_clientid: process.env.SDMS_AuthenticationWebApp_clientid || existing.SDMS_AuthenticationWebApp_clientid,
-            SDMS_AuthenticationWebApp_redirectUri: process.env.SDMS_AuthenticationWebApp_redirectUri || existing.SDMS_AuthenticationWebApp_redirectUri,
-            SDMS_AuthenticationWebApp_scope: process.env.SDMS_AuthenticationWebApp_scope || existing.SDMS_AuthenticationWebApp_scope
-          };
-          fs.writeFileSync(path, JSON.stringify(updated, null, 2));
-          console.log('✓ Updated appsettings.json from environment variables');
-          "
-          
-          # Set production flag to true for production build
-          node -e "
-          const fs = require('fs');
-          const path = 'src/environments/environment.ts';
-          let content = fs.readFileSync(path, 'utf8');
-          content = content.replace(/production: false/, 'production: true');
-          fs.writeFileSync(path, content, 'utf8');
-          console.log('✓ Set production flag to true');
-          "
+          mkdir -p .vercel
+          echo "{\"orgId\":\"$VERCEL_ORG_ID\",\"projectId\":\"$VERCEL_PROJECT_ID\"}" > .vercel/project.json
 
-      - name: Build Angular app (Production)
-        working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
-        run: npm run build:prod
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Sync Vercel Environment Variables from GitHub Secrets
+        working-directory: SDMSApps/SDMS.B2CWebApp
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          # Verify project is linked
+          if [ ! -f ".vercel/project.json" ]; then
+            echo "Error: .vercel/project.json not found. Project must be linked first."
+            exit 1
+          fi
+          
+          # Function to sync environment variable
+          sync_env_var() {
+            local var_name=$1
+            local var_value=$2
+            local environment=$3
+            
+            echo "Syncing $var_name for $environment..."
+            
+            # Remove existing variable if it exists (ignore errors if it doesn't exist)
+            echo "y" | vercel env rm $var_name $environment --token=$VERCEL_TOKEN --yes 2>/dev/null || echo "  (variable doesn't exist, will create)"
+            
+            # Add the environment variable (this ensures it's always up-to-date)
+            echo "$var_value" | vercel env add $var_name $environment --token=$VERCEL_TOKEN --yes
+            echo "  ✓ $var_name synced for $environment"
+          }
+          
+          # Sync environment variables for production
+          echo "=== Syncing production environment variables ==="
+          sync_env_var "SDMS_B2CWebApp_url" "${{ secrets.SDMS_B2CWebApp_url }}" "production"
+          sync_env_var "SDMS_AuthenticationWebApp_url" "${{ secrets.SDMS_AuthenticationWebApp_url }}" "production"
+          sync_env_var "SDMS_AuthenticationWebApp_clientid" "${{ secrets.SDMS_AuthenticationWebApp_clientid }}" "production"
+          sync_env_var "SDMS_AuthenticationWebApp_redirectUri" "${{ secrets.SDMS_AuthenticationWebApp_redirectUri }}" "production"
+          sync_env_var "SDMS_AuthenticationWebApp_scope" "${{ secrets.SDMS_AuthenticationWebApp_scope }}" "production"
+          
+          # Also sync for preview environments
+          echo "=== Syncing preview environment variables ==="
+          sync_env_var "SDMS_B2CWebApp_url" "${{ secrets.SDMS_B2CWebApp_url }}" "preview"
+          sync_env_var "SDMS_AuthenticationWebApp_url" "${{ secrets.SDMS_AuthenticationWebApp_url }}" "preview"
+          sync_env_var "SDMS_AuthenticationWebApp_clientid" "${{ secrets.SDMS_AuthenticationWebApp_clientid }}" "preview"
+          sync_env_var "SDMS_AuthenticationWebApp_redirectUri" "${{ secrets.SDMS_AuthenticationWebApp_redirectUri }}" "preview"
+          sync_env_var "SDMS_AuthenticationWebApp_scope" "${{ secrets.SDMS_AuthenticationWebApp_scope }}" "preview"
+          
+          echo "✓ Environment variables synchronized"
 
       - name: Deploy to Vercel
         uses: amondnet/vercel-action@v25
         env:
+          CI: 'true'
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         with:
@@ -84,6 +101,5 @@ jobs:
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
           vercel-args: '--prod'
           working-directory: SDMSApps/SDMS.B2CWebApp
-          vercel-config-path: SDMSApps/SDMS.B2CWebApp/vercel.json
           scope: ${{ secrets.VERCEL_ORG_ID }}
 

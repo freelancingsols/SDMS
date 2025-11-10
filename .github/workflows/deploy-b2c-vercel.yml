@@ -34,12 +34,39 @@ jobs:
           restore-keys: |
             vercel-cli-${{ runner.os }}-
 
-      - name: Validate Secrets
+      - name: Validate Secrets and Variables
         run: |
-          if [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then echo "❌ Missing VERCEL_TOKEN"; exit 1; fi
-          if [ -z "${{ secrets.VERCEL_ORG_ID }}" ]; then echo "❌ Missing VERCEL_ORG_ID"; exit 1; fi
-          if [ -z "${{ secrets.VERCEL_PROJECT_ID }}" ]; then echo "❌ Missing VERCEL_PROJECT_ID"; exit 1; fi
-          echo "✅ All required secrets are present"
+          echo "🔍 Validating required secrets and variables..."
+          echo ""
+          
+          # Check VERCEL_TOKEN (secret - required)
+          if [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then
+            echo "❌ Missing VERCEL_TOKEN (secret)"
+            echo "   Go to: Settings → Secrets and variables → Actions → Secrets"
+            exit 1
+          fi
+          echo "✅ VERCEL_TOKEN: present (secret)"
+          
+          # Check VERCEL_ORG_ID (variable)
+          if [ -z "${{ vars.VERCEL_ORG_ID }}" ]; then
+            echo "❌ Missing VERCEL_ORG_ID (variable)"
+            echo "   Go to: Settings → Secrets and variables → Actions → Variables"
+            echo "   Add variable: VERCEL_ORG_ID = team_hZOl45sIAl2taEe4o51fm6e1"
+            exit 1
+          fi
+          echo "✅ VERCEL_ORG_ID: present (variable)"
+          
+          # Check VERCEL_PROJECT_ID (variable)
+          if [ -z "${{ vars.VERCEL_PROJECT_ID }}" ]; then
+            echo "❌ Missing VERCEL_PROJECT_ID (variable)"
+            echo "   Go to: Settings → Secrets and variables → Actions → Variables"
+            echo "   Add variable: VERCEL_PROJECT_ID = prj_JSJBXH8IRehWd6mzt5FXKWy8InHG"
+            exit 1
+          fi
+          echo "✅ VERCEL_PROJECT_ID: present (variable)"
+          
+          echo ""
+          echo "✅ All required secrets and variables are present"
         shell: bash
 
       - name: Clean modules only
@@ -49,11 +76,12 @@ jobs:
       - name: Create Vercel project configuration
         working-directory: SDMSApps/SDMS.B2CWebApp
         env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
         run: |
           mkdir -p .vercel
           echo "{\"orgId\":\"$VERCEL_ORG_ID\",\"projectId\":\"$VERCEL_PROJECT_ID\"}" > .vercel/project.json
+          echo "✅ Created .vercel/project.json"
 
       - name: Install Vercel CLI
         run: npm install -g vercel@latest
@@ -62,8 +90,8 @@ jobs:
         working-directory: SDMSApps/SDMS.B2CWebApp
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
           CI: 'true'
         run: |
           # Verify project is linked
@@ -117,6 +145,7 @@ jobs:
           sync_env_var "SDMS_AuthenticationWebApp_scope" "${{ secrets.SDMS_AuthenticationWebApp_scope }}" "preview"
           
           echo "✓ Environment variables synchronized"
+        shell: bash
 
       - name: Build WebApp
         working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
@@ -126,13 +155,11 @@ jobs:
         uses: amondnet/vercel-action@v25
         env:
           CI: 'true'
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          vercel-org-id: ${{ vars.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ vars.VERCEL_PROJECT_ID }}
           vercel-args: '--prod --yes'
           working-directory: SDMSApps/SDMS.B2CWebApp
-          scope: ${{ secrets.VERCEL_ORG_ID }}
+          scope: ${{ vars.VERCEL_ORG_ID }}
 

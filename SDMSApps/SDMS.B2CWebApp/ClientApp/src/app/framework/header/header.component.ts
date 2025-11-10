@@ -99,9 +99,13 @@ export class HeaderComponent implements OnInit {
         ].join(" ");
       }
   
-      (infowindowContent.children["place-icon"] as HTMLImageElement).src = place.icon;
-      (infowindowContent.children["place-name"] as HTMLElement).textContent = place.name;
-      (infowindowContent.children["place-address"] as HTMLElement).textContent = address;
+      const placeIcon = infowindowContent.querySelector('#place-icon') as HTMLImageElement;
+      const placeName = infowindowContent.querySelector('#place-name') as HTMLElement;
+      const placeAddress = infowindowContent.querySelector('#place-address') as HTMLElement;
+      
+      if (placeIcon) placeIcon.src = place.icon;
+      if (placeName) placeName.textContent = place.name;
+      if (placeAddress) placeAddress.textContent = address;
       infowindow.open(map, marker);
     });
   

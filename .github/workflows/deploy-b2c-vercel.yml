@@ -66,7 +66,52 @@ jobs:
           echo "✅ VERCEL_PROJECT_ID: present (variable)"
           
           echo ""
-          echo "✅ All required secrets and variables are present"
+          echo "🔍 Checking application secrets (SDMS_*)..."
+          echo ""
+          
+          # Check application secrets (warn if empty, but don't fail)
+          check_secret() {
+            local secret_name=$1
+            local secret_value=$2
+            
+            # Store original for debugging
+            local original_length=${#secret_value}
+            
+            # Trim whitespace and newlines
+            local trimmed_value=$(printf '%s' "$secret_value" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | tr -d '\n\r\t')
+            local trimmed_length=${#trimmed_value}
+            
+            if [ -z "$trimmed_value" ] || [ "$trimmed_length" -eq 0 ]; then
+              echo "⚠️  $secret_name: EMPTY or only whitespace"
+              echo "   Original length: $original_length chars"
+              echo "   After trimming: $trimmed_length chars"
+              echo "   → This secret will be SKIPPED during environment variable sync"
+              echo "   → Please set a valid value in GitHub Secrets"
+              return 1
+            else
+              echo "✅ $secret_name: present"
+              echo "   Original length: $original_length chars"
+              echo "   After trimming: $trimmed_length chars"
+              # Show masked preview
+              if [ "$trimmed_length" -gt 20 ]; then
+                local preview="${trimmed_value:0:3}***${trimmed_value: -3}"
+              else
+                local preview="${trimmed_value:0:10}***"
+              fi
+              echo "   Preview: $preview"
+              return 0
+            fi
+          }
+          
+          check_secret "SDMS_B2CWebApp_url" "${{ secrets.SDMS_B2CWebApp_url }}"
+          check_secret "SDMS_AuthenticationWebApp_url" "${{ secrets.SDMS_AuthenticationWebApp_url }}"
+          check_secret "SDMS_AuthenticationWebApp_clientid" "${{ secrets.SDMS_AuthenticationWebApp_clientid }}"
+          check_secret "SDMS_AuthenticationWebApp_redirectUri" "${{ secrets.SDMS_AuthenticationWebApp_redirectUri }}"
+          check_secret "SDMS_AuthenticationWebApp_scope" "${{ secrets.SDMS_AuthenticationWebApp_scope }}"
+          
+          echo ""
+          echo "✅ Validation complete"
+          echo "⚠️  Note: Empty secrets will be skipped during sync (check warnings above)"
         shell: bash
 
       - name: Clean modules only
@@ -107,24 +152,84 @@ jobs:
             local var_value=$2
             local environment=$3
             
+            # Store original value for debugging
+            local original_length=${#var_value}
+            local original_preview=""
+            if [ "$original_length" -gt 0 ]; then
+              # Show first few chars for debugging (masked)
+              if [ "$original_length" -gt 10 ]; then
+                original_preview="${var_value:0:3}***${var_value: -3}"
+              else
+                original_preview="${var_value:0:5}***"
+              fi
+            fi
+            
+            echo "Processing $var_name for $environment..."
+            echo "  Original value length: $original_length chars"
+            if [ "$original_length" -gt 0 ]; then
+              echo "  Original preview: $original_preview"
+            else
+              echo "  Original value: (empty)"
+            fi
+            
+            # Trim whitespace and newlines from value
+            # Use a more robust method to handle all types of whitespace
+            var_value=$(printf '%s' "$var_value" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | tr -d '\n\r\t')
+            local trimmed_length=${#var_value}
+            
+            # Check if value is empty after trimming
+            if [ -z "${var_value}" ] || [ "$trimmed_length" -eq 0 ]; then
+              echo "⚠️  SKIPPING $var_name for $environment: value is empty or only whitespace"
+              echo "   Original length: $original_length chars"
+              echo "   After trimming: $trimmed_length chars"
+              echo "::error::$var_name is empty or contains only whitespace in GitHub secrets for $environment"
+              echo "::error::Please set a valid value for $var_name in GitHub repository secrets"
+              return 0
+            fi
+            
             echo "Syncing $var_name for $environment environment..."
+            echo "  Value length: ${#var_value} chars"
+            # Show masked preview (first 3 chars + ... + last 3 chars, or first 20 if shorter)
+            if [ ${#var_value} -gt 20 ]; then
+              local preview="${var_value:0:3}...${var_value: -3}"
+            else
+              local preview="${var_value:0:20}"
+            fi
+            echo "  Value preview: $preview"
             
             # Remove existing variable if it exists (ignore errors - it's fine if it doesn't exist)
-            printf "y\n" | vercel env rm "$var_name" "$environment" --token="$VERCEL_TOKEN" 2>&1 | grep -v "error" || echo "    (variable doesn't exist, will create new)"
+            # Note: vercel env rm may prompt for confirmation, but CI=true should prevent this
+            printf "y\n" | vercel env rm "$var_name" "$environment" --token="$VERCEL_TOKEN" 2>&1 | grep -v -E "(error|Error|NOTE|telemetry)" || echo "    (variable doesn't exist, will create new)"
             
             # Wait a moment for removal to complete
-            sleep 0.5
+            sleep 1
             
             # Add the environment variable
-            # The value is read from stdin
+            # Note: vercel env add reads value from stdin
             # CI=true should prevent any prompts
-            echo "$var_value" | vercel env add "$var_name" "$environment" --token="$VERCEL_TOKEN" 2>&1 || echo "::warning::Failed to sync $var_name"
+            # Use printf to ensure no trailing newline
+            printf '%s' "$var_value" | vercel env add "$var_name" "$environment" --token="$VERCEL_TOKEN" 2>&1 | grep -v -E "(NOTE|telemetry)"
+            local add_status=${PIPESTATUS[0]}
             
-            # Verify the variable was added
-            if vercel env ls "$environment" --token="$VERCEL_TOKEN" 2>/dev/null | grep -q "$var_name"; then
+            if [ $add_status -eq 0 ]; then
               echo "  ✓ $var_name synced successfully"
+              
+              # Verify the variable was added by checking if it exists in the list
+              sleep 1
+              if vercel env ls "$environment" --token="$VERCEL_TOKEN" 2>/dev/null | grep -q "^$var_name"; then
+                echo "  ✓ Verified: Variable exists in Vercel environment variables list"
+              else
+                echo "  ⚠️  Warning: Variable not found in Vercel environment variables list"
+              fi
             else
-              echo "::warning::$var_name may not have been added. Check Vercel dashboard."
+              echo "::warning::Failed to sync $var_name for $environment (exit code: $add_status)"
+              # Wait a moment and verify if it was actually added (sometimes command reports error but succeeds)
+              sleep 1
+              if vercel env ls "$environment" --token="$VERCEL_TOKEN" 2>/dev/null | grep -q "$var_name"; then
+                echo "  ✓ $var_name verified in Vercel (command may have reported error but succeeded)"
+              else
+                echo "  ❌ $var_name not found in Vercel environment variables"
+              fi
             fi
           }
           
@@ -144,7 +249,46 @@ jobs:
           sync_env_var "SDMS_AuthenticationWebApp_redirectUri" "${{ secrets.SDMS_AuthenticationWebApp_redirectUri }}" "preview"
           sync_env_var "SDMS_AuthenticationWebApp_scope" "${{ secrets.SDMS_AuthenticationWebApp_scope }}" "preview"
           
-          echo "✓ Environment variables synchronized"
+          echo "✓ Environment variables synchronization complete"
+          echo ""
+          echo "🔍 Verifying synced environment variables..."
+          echo ""
+          
+          # Verify all variables were set correctly
+          verify_env_var() {
+            local var_name=$1
+            local environment=$2
+            
+            echo "Checking $var_name for $environment..."
+            # Use vercel env ls to check if variable exists
+            if vercel env ls "$environment" --token="$VERCEL_TOKEN" 2>/dev/null | grep -q "^$var_name"; then
+              echo "  ✓ Variable exists in Vercel"
+              # Try to get the value length (without exposing the actual value)
+              # Note: vercel env pull might not work in all cases, so we'll just verify existence
+            else
+              echo "  ❌ Variable NOT found in Vercel"
+              echo "::warning::$var_name was not found in Vercel $environment environment"
+            fi
+          }
+          
+          echo "=== Verifying production environment variables ==="
+          verify_env_var "SDMS_B2CWebApp_url" "production"
+          verify_env_var "SDMS_AuthenticationWebApp_url" "production"
+          verify_env_var "SDMS_AuthenticationWebApp_clientid" "production"
+          verify_env_var "SDMS_AuthenticationWebApp_redirectUri" "production"
+          verify_env_var "SDMS_AuthenticationWebApp_scope" "production"
+          
+          echo ""
+          echo "=== Verifying preview environment variables ==="
+          verify_env_var "SDMS_B2CWebApp_url" "preview"
+          verify_env_var "SDMS_AuthenticationWebApp_url" "preview"
+          verify_env_var "SDMS_AuthenticationWebApp_clientid" "preview"
+          verify_env_var "SDMS_AuthenticationWebApp_redirectUri" "preview"
+          verify_env_var "SDMS_AuthenticationWebApp_scope" "preview"
+          
+          echo ""
+          echo "✅ Verification complete"
+          echo "⚠️  Note: If variables show as empty in Vercel dashboard, check that GitHub secrets have valid values"
         shell: bash
 
       - name: Build WebApp
@@ -159,7 +303,7 @@ jobs:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ vars.VERCEL_ORG_ID }}
           vercel-project-id: ${{ vars.VERCEL_PROJECT_ID }}
-          vercel-args: '--prod --yes'
+          vercel-args: '--prod'
           working-directory: SDMSApps/SDMS.B2CWebApp
           scope: ${{ vars.VERCEL_ORG_ID }}
 

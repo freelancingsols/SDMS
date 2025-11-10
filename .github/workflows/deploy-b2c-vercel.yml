@@ -13,6 +13,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Restrict production deploys to release branch
+    if: github.ref == 'refs/heads/release' || github.ref == 'refs/heads/Release' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -24,11 +26,33 @@ jobs:
           cache: 'npm'
           cache-dependency-path: SDMSApps/SDMS.B2CWebApp/ClientApp/package.json
 
-      - name: Remove old package-lock.json and node_modules
-        working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
+      - name: Cache Vercel CLI
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: vercel-cli-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            vercel-cli-${{ runner.os }}-
+
+      - name: Validate Secrets
         run: |
-          rm -f package-lock.json
-          rm -rf node_modules || true
+          if [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then
+            echo "❌ Missing secret: VERCEL_TOKEN"
+            exit 1
+          fi
+          if [ -z "${{ secrets.VERCEL_ORG_ID }}" ]; then
+            echo "❌ Missing secret: VERCEL_ORG_ID"
+            exit 1
+          fi
+          if [ -z "${{ secrets.VERCEL_PROJECT_ID }}" ]; then
+            echo "❌ Missing secret: VERCEL_PROJECT_ID"
+            exit 1
+          fi
+          echo "✅ All required secrets are present"
+
+      - name: Clean modules only
+        working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
+        run: rm -rf node_modules || true
 
       - name: Create Vercel project configuration
         working-directory: SDMSApps/SDMS.B2CWebApp
@@ -48,6 +72,7 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          CI: 'true'
         run: |
           # Verify project is linked
           if [ ! -f ".vercel/project.json" ]; then
@@ -56,19 +81,31 @@ jobs:
           fi
           
           # Function to sync environment variable
+          # CI=true makes Vercel CLI non-interactive
           sync_env_var() {
             local var_name=$1
             local var_value=$2
             local environment=$3
             
-            echo "Syncing $var_name for $environment..."
+            echo "Syncing $var_name for $environment environment..."
             
-            # Remove existing variable if it exists (ignore errors if it doesn't exist)
-            echo "y" | vercel env rm $var_name $environment --token=$VERCEL_TOKEN --yes 2>/dev/null || echo "  (variable doesn't exist, will create)"
+            # Remove existing variable if it exists (ignore errors - it's fine if it doesn't exist)
+            printf "y\n" | vercel env rm "$var_name" "$environment" --token="$VERCEL_TOKEN" 2>&1 | grep -v "error" || echo "    (variable doesn't exist, will create new)"
             
-            # Add the environment variable (this ensures it's always up-to-date)
-            echo "$var_value" | vercel env add $var_name $environment --token=$VERCEL_TOKEN --yes
-            echo "  ✓ $var_name synced for $environment"
+            # Wait a moment for removal to complete
+            sleep 0.5
+            
+            # Add the environment variable
+            # The value is read from stdin
+            # CI=true should prevent any prompts
+            echo "$var_value" | vercel env add "$var_name" "$environment" --token="$VERCEL_TOKEN" 2>&1 || echo "::warning::Failed to sync $var_name"
+            
+            # Verify the variable was added
+            if vercel env ls "$environment" --token="$VERCEL_TOKEN" 2>/dev/null | grep -q "$var_name"; then
+              echo "  ✓ $var_name synced successfully"
+            else
+              echo "::warning::$var_name may not have been added. Check Vercel dashboard."
+            fi
           }
           
           # Sync environment variables for production
@@ -89,6 +126,10 @@ jobs:
           
           echo "✓ Environment variables synchronized"
 
+      - name: Build WebApp
+        working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
+        run: npm ci && npm run build:prod
+
       - name: Deploy to Vercel
         uses: amondnet/vercel-action@v25
         env:
@@ -99,7 +140,7 @@ jobs:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          vercel-args: '--prod'
+          vercel-args: '--prod --yes'
           working-directory: SDMSApps/SDMS.B2CWebApp
           scope: ${{ secrets.VERCEL_ORG_ID }}
 

@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Silent Refresh</title>
+</head>
+<body>
+    <script>
+        // This page is used by angular-oauth2-oidc for silent token refresh
+        // It's loaded in a hidden iframe to refresh tokens without user interaction
+        // The OAuthService handles the actual refresh logic
+        console.log('Silent refresh page loaded');
+        
+        // Notify parent window that silent refresh page is ready
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage('silent-refresh-ready', '*');
+        }
+    </script>
+</body>
+</html>
+

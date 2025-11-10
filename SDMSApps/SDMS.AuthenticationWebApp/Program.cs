@@ -370,42 +370,53 @@ using (var scope = app.Services.CreateScope())
     
     await context.Database.EnsureCreatedAsync();
 
-    // Create OpenIddict client
-    if (await applicationManager.FindByClientIdAsync("sdms_frontend") == null)
+    // Create or update OpenIddict client
+    var clientDescriptor = new OpenIddictApplicationDescriptor
     {
-        await applicationManager.CreateAsync(new OpenIddictApplicationDescriptor
+        ClientId = "sdms_frontend",
+        ClientSecret = "sdms_frontend_secret",
+        DisplayName = "SDMS Frontend Application",
+        Permissions =
         {
-            ClientId = "sdms_frontend",
-            ClientSecret = "sdms_frontend_secret",
-            DisplayName = "SDMS Frontend Application",
-            Permissions =
-            {
-                Permissions.Endpoints.Authorization,
-                Permissions.Endpoints.Token,
-                Permissions.Endpoints.Logout,
-                Permissions.GrantTypes.AuthorizationCode,
-                Permissions.GrantTypes.RefreshToken,
-                Permissions.GrantTypes.Password, // Allow password grant for API access
-                Permissions.ResponseTypes.Code,
-                Permissions.Scopes.Email,
-                Permissions.Scopes.Profile,
-                Permissions.Scopes.Roles,
-            },
-            RedirectUris =
-            {
-                new Uri("http://localhost:4200/auth-callback"),
-                new Uri("https://localhost:4200/auth-callback"),
-            },
-            PostLogoutRedirectUris =
-            {
-                new Uri("http://localhost:4200/"),
-                new Uri("https://localhost:4200/"),
-            },
-            Requirements =
-            {
-                Requirements.Features.ProofKeyForCodeExchange
-            }
-        });
+            Permissions.Endpoints.Authorization,
+            Permissions.Endpoints.Token,
+            Permissions.Endpoints.Logout,
+            Permissions.GrantTypes.AuthorizationCode,
+            Permissions.GrantTypes.RefreshToken,
+            Permissions.GrantTypes.Password, // Allow password grant for API access
+            Permissions.ResponseTypes.Code,
+            Permissions.Scopes.Email,
+            Permissions.Scopes.Profile,
+            Permissions.Scopes.Roles,
+        },
+        RedirectUris =
+        {
+            new Uri("http://localhost:4200/auth-callback"),
+            new Uri("https://localhost:4200/auth-callback"),
+        },
+        PostLogoutRedirectUris =
+        {
+            new Uri("http://localhost:4200/"),
+            new Uri("https://localhost:4200/"),
+        },
+        Requirements =
+        {
+            Requirements.Features.ProofKeyForCodeExchange
+        }
+    };
+    
+    var existingClient = await applicationManager.FindByClientIdAsync("sdms_frontend");
+    if (existingClient == null)
+    {
+        // Create new client
+        await applicationManager.CreateAsync(clientDescriptor);
+        Console.WriteLine("Created OpenIddict client: sdms_frontend");
+    }
+    else
+    {
+        // Update existing client to ensure it has password grant permission
+        await applicationManager.UpdateAsync(existingClient, clientDescriptor);
+        Console.WriteLine("Updated OpenIddict client: sdms_frontend (added password grant permission)");
     }
 
     // Create default roles

@@ -34,48 +34,19 @@ jobs:
         working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
         run: npm install --legacy-peer-deps
 
-      - name: Update configuration files from GitHub secrets
-        working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
+      - name: Create Vercel project configuration
+        working-directory: SDMSApps/SDMS.B2CWebApp
         env:
-          SDMS_B2CWebApp_url: ${{ secrets.SDMS_B2CWebApp_url }}
-          SDMS_AuthenticationWebApp_url: ${{ secrets.SDMS_AuthenticationWebApp_url }}
-          SDMS_AuthenticationWebApp_clientid: ${{ secrets.SDMS_AuthenticationWebApp_clientid }}
-          SDMS_AuthenticationWebApp_redirectUri: ${{ secrets.SDMS_AuthenticationWebApp_redirectUri }}
-          SDMS_AuthenticationWebApp_scope: ${{ secrets.SDMS_AuthenticationWebApp_scope }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          # Update appsettings.json with env vars
-          node -e "
-          const fs = require('fs');
-          const path = 'src/assets/appsettings.json';
-          const existing = JSON.parse(fs.readFileSync(path, 'utf8'));
-          const updated = {
-            SDMS_B2CWebApp_url: process.env.SDMS_B2CWebApp_url || existing.SDMS_B2CWebApp_url,
-            SDMS_AuthenticationWebApp_url: process.env.SDMS_AuthenticationWebApp_url || existing.SDMS_AuthenticationWebApp_url,
-            SDMS_AuthenticationWebApp_clientid: process.env.SDMS_AuthenticationWebApp_clientid || existing.SDMS_AuthenticationWebApp_clientid,
-            SDMS_AuthenticationWebApp_redirectUri: process.env.SDMS_AuthenticationWebApp_redirectUri || existing.SDMS_AuthenticationWebApp_redirectUri,
-            SDMS_AuthenticationWebApp_scope: process.env.SDMS_AuthenticationWebApp_scope || existing.SDMS_AuthenticationWebApp_scope
-          };
-          fs.writeFileSync(path, JSON.stringify(updated, null, 2));
-          console.log('✓ Updated appsettings.json from environment variables');
-          "
-          
-          # Set production flag to true for production build
-          node -e "
-          const fs = require('fs');
-          const path = 'src/environments/environment.ts';
-          let content = fs.readFileSync(path, 'utf8');
-          content = content.replace(/production: false/, 'production: true');
-          fs.writeFileSync(path, content, 'utf8');
-          console.log('✓ Set production flag to true');
-          "
-
-      - name: Build Angular app (Production)
-        working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
-        run: npm run build:prod
+          mkdir -p .vercel
+          echo "{\"orgId\":\"$VERCEL_ORG_ID\",\"projectId\":\"$VERCEL_PROJECT_ID\"}" > .vercel/project.json
 
       - name: Deploy to Vercel
         uses: amondnet/vercel-action@v25
         env:
+          CI: 'true'
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         with:
@@ -84,6 +55,5 @@ jobs:
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
           vercel-args: '--prod'
           working-directory: SDMSApps/SDMS.B2CWebApp
-          vercel-config-path: SDMSApps/SDMS.B2CWebApp/vercel.json
           scope: ${{ secrets.VERCEL_ORG_ID }}
 

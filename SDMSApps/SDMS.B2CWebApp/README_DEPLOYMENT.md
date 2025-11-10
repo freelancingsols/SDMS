@@ -24,10 +24,38 @@ Add the following secrets in your GitHub repository (Settings → Secrets and va
 
 ### 2. Getting Vercel Credentials
 
+#### Vercel Token (IMPORTANT: Must be a Team Token)
+
+**For Team Deployments:**
 1. Go to [Vercel Dashboard](https://vercel.com/dashboard)
-2. Go to Settings → Tokens to create a new token
-3. Copy the token to `VERCEL_TOKEN` secret
-4. Go to your project settings to find `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`
+2. **Select your team** (not your personal account) from the top dropdown
+3. Go to **Settings → Tokens** (Team Settings)
+4. Click **"Create Token"**
+5. Give it a name (e.g., "GitHub Actions Deployment")
+6. Set expiration (recommended: No expiration or long expiration)
+7. **IMPORTANT:** Make sure you're creating the token under the **team** (not personal account)
+8. Copy the token → Add to GitHub Secret: `VERCEL_TOKEN`
+
+**⚠️ Common Issue:** If you get "not a member of this team" error, you're using a personal token. You MUST use a team token.
+
+#### Vercel Organization ID
+1. Go to your Vercel Dashboard
+2. **Select your team** from the top dropdown
+3. Go to **Settings → General** (Team Settings)
+4. Copy **"Team ID"** or **"Organization ID"** → Add to GitHub Secret: `VERCEL_ORG_ID`
+
+#### Vercel Project ID
+1. Go to your Vercel Dashboard
+2. **Select your team** from the top dropdown
+3. Select your project (or create a new one)
+4. Go to **Settings → General**
+5. Copy **"Project ID"** → Add to GitHub Secret: `VERCEL_PROJECT_ID`
+
+**Note:** If you haven't created a Vercel project yet:
+1. Make sure you're in the correct team
+2. Click "Add New" → "Project"
+3. You can skip importing (we'll deploy via GitHub Actions)
+4. Get the Project ID from Settings → General
 
 ### 3. How Environment Variables Work
 

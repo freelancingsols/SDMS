@@ -99,15 +99,15 @@ export class HeaderComponent implements OnInit {
         ].join(" ");
       }
   
-      infowindowContent.children["place-icon"].src = place.icon;
-      infowindowContent.children["place-name"].textContent = place.name;
-      infowindowContent.children["place-address"].textContent = address;
+      (infowindowContent.children["place-icon"] as HTMLImageElement).src = place.icon;
+      (infowindowContent.children["place-name"] as HTMLElement).textContent = place.name;
+      (infowindowContent.children["place-address"] as HTMLElement).textContent = address;
       infowindow.open(map, marker);
     });
   
     // Sets a listener on a radio button to change the filter type on Places
     // Autocomplete.
-    function setupClickListener(id, types) {
+    function setupClickListener(id: string, types: string[]) {
       const radioButton = document.getElementById(id) as HTMLInputElement;
       radioButton.addEventListener("click", () => {
         autocomplete.setTypes(types);

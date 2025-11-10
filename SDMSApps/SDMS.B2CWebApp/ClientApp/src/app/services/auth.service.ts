@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { OAuthService } from 'angular-oauth2-oidc';
-import { BehaviorSubject, Observable, firstValueFrom } from 'rxjs';
+import { BehaviorSubject, firstValueFrom } from 'rxjs';
 import { AppSettings } from '../config/app-settings';
 import { environment } from '../../environments/environment';
 
@@ -72,7 +72,7 @@ export class AuthService {
     });
   }
 
-  async loginWithExternalProvider(provider: 'auth0' | 'google'): Promise<void> {
+  async loginWithExternalProvider(_provider: 'auth0' | 'google'): Promise<void> {
     // Initiate OAuth flow with PKCE
     this.oauthService.initCodeFlow();
   }
@@ -179,7 +179,9 @@ export class AuthService {
           }
           
           // Trigger token received event to notify the library
-          this.oauthService.events.next({ 
+          // Note: This is a workaround for password grant flow
+          // The events property is an Observable, but we need to emit to it for manual token storage
+          (this.oauthService.events as any).next({ 
             type: 'token_received',
             info: {
               access_token: response.access_token,
@@ -187,7 +189,7 @@ export class AuthService {
               refresh_token: response.refresh_token,
               expires_in: response.expires_in
             }
-          } as any);
+          });
         }
 
         // Load user profile

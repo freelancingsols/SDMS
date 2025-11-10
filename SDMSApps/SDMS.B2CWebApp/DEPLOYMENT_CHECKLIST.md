@@ -24,31 +24,39 @@ Add the following secrets:
 
 ### 2. Getting Vercel Credentials
 
-#### Vercel Token
+#### Vercel Token (⚠️ MUST be a Team Token)
 1. Go to [Vercel Dashboard](https://vercel.com/dashboard)
-2. Go to Settings → Tokens
-3. Click "Create Token"
-4. Give it a name (e.g., "GitHub Actions Deployment")
-5. Set expiration (recommended: No expiration or long expiration)
-6. Copy the token → Add to GitHub Secret: `VERCEL_TOKEN`
+2. **IMPORTANT:** Select your **TEAM** from the top dropdown (not personal account)
+   - Look for your team name (e.g., "freelancingsols") in the dropdown
+3. Go to **Settings → Tokens** (Team Settings, not Personal Settings)
+4. Click "Create Token"
+5. Give it a name (e.g., "GitHub Actions Deployment")
+6. Set expiration (recommended: No expiration or long expiration)
+7. **Copy the token** → Add to GitHub Secret: `VERCEL_TOKEN`
+8. **⚠️ If you get "not a member of this team" error, you're using a personal token. You MUST use a team token.**
+
+**See `VERCEL_TEAM_SETUP.md` for detailed instructions.**
 
 #### Vercel Organization ID
 1. Go to your Vercel Dashboard
-2. Click on your organization/team name
-3. Go to Settings → General
-4. Copy "Organization ID" → Add to GitHub Secret: `VERCEL_ORG_ID`
+2. **Select your TEAM** from the top dropdown (not personal account)
+3. Go to **Settings → General** (Team Settings)
+4. Copy **"Team ID"** or **"Organization ID"** → Add to GitHub Secret: `VERCEL_ORG_ID`
+5. **⚠️ Make sure this is the Team ID, not your personal account ID**
 
 #### Vercel Project ID
 1. Go to your Vercel Dashboard
-2. Select your project (or create a new one)
-3. Go to Settings → General
-4. Copy "Project ID" → Add to GitHub Secret: `VERCEL_PROJECT_ID`
+2. **Select your TEAM** from the top dropdown (not personal account)
+3. Select your project (or create a new one)
+4. Go to Settings → General
+5. Copy "Project ID" → Add to GitHub Secret: `VERCEL_PROJECT_ID`
 
 **Note:** If you haven't created a Vercel project yet:
-1. Go to Vercel Dashboard
+1. **Make sure you're in TEAM view** (not personal account)
 2. Click "Add New" → "Project"
-3. Import your GitHub repository (optional, we'll deploy via GitHub Actions)
+3. You can skip importing (we'll deploy via GitHub Actions)
 4. Get the Project ID from Settings → General
+5. **⚠️ Project must be in the team account, not personal account**
 
 ## Deployment Process
 

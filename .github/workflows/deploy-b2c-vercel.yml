@@ -34,14 +34,14 @@ jobs:
         working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
         run: npm install --legacy-peer-deps
 
-      - name: Update configuration files from environment variables
+      - name: Update configuration files from GitHub secrets
         working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
         env:
-          SDMS_B2CWebApp_url: ${{ vars.SDMS_B2CWebApp_url }}
-          SDMS_AuthenticationWebApp_url: ${{ vars.SDMS_AuthenticationWebApp_url }}
-          SDMS_AuthenticationWebApp_clientid: ${{ vars.SDMS_AuthenticationWebApp_clientid }}
-          SDMS_AuthenticationWebApp_redirectUri: ${{ vars.SDMS_AuthenticationWebApp_redirectUri }}
-          SDMS_AuthenticationWebApp_scope: ${{ vars.SDMS_AuthenticationWebApp_scope }}
+          SDMS_B2CWebApp_url: ${{ secrets.SDMS_B2CWebApp_url }}
+          SDMS_AuthenticationWebApp_url: ${{ secrets.SDMS_AuthenticationWebApp_url }}
+          SDMS_AuthenticationWebApp_clientid: ${{ secrets.SDMS_AuthenticationWebApp_clientid }}
+          SDMS_AuthenticationWebApp_redirectUri: ${{ secrets.SDMS_AuthenticationWebApp_redirectUri }}
+          SDMS_AuthenticationWebApp_scope: ${{ secrets.SDMS_AuthenticationWebApp_scope }}
         run: |
           # Update appsettings.json with env vars
           node -e "
@@ -77,8 +77,10 @@ jobs:
         uses: amondnet/vercel-action@v25
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ vars.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ vars.VERCEL_PROJECT_ID }}
-          working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
-          scope: ${{ vars.VERCEL_ORG_ID }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          vercel-args: '--prod'
+          working-directory: SDMSApps/SDMS.B2CWebApp
+          vercel-config-path: SDMSApps/SDMS.B2CWebApp/vercel.json
+          scope: ${{ secrets.VERCEL_ORG_ID }}
 

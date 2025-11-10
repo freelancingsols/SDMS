@@ -35,65 +35,12 @@ jobs:
             vercel-cli-${{ runner.os }}-
 
       - name: Validate Secrets
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          echo "🔍 Validating required secrets..."
-          echo ""
-          
-          # Check VERCEL_TOKEN
-          if [ -z "${VERCEL_TOKEN:-}" ]; then
-            echo "❌ Missing or empty secret: VERCEL_TOKEN"
-            echo "   Please ensure VERCEL_TOKEN is set in repository secrets"
-            echo "   Go to: Settings → Secrets and variables → Actions → Repository secrets"
-            exit 1
-          else
-            echo "✅ VERCEL_TOKEN is set (length: ${#VERCEL_TOKEN} chars)"
-          fi
-          
-          # Check VERCEL_ORG_ID
-          if [ -z "${VERCEL_ORG_ID:-}" ]; then
-            echo "❌ Missing or empty secret: VERCEL_ORG_ID"
-            echo "   Please ensure VERCEL_ORG_ID is set in repository secrets"
-            echo "   Expected format: team_xxxxxxxxxxxxx"
-            echo "   Your value should be: team_hZOl45sIAl2taEe4o51fm6e1"
-            echo "   Go to: Settings → Secrets and variables → Actions → Repository secrets"
-            exit 1
-          else
-            if [[ "${VERCEL_ORG_ID}" =~ ^team_ ]]; then
-              echo "✅ VERCEL_ORG_ID is set (value: ${VERCEL_ORG_ID})"
-            else
-              echo "⚠️  VERCEL_ORG_ID format may be incorrect (expected: team_...)"
-              echo "   Current value: ${VERCEL_ORG_ID}"
-            fi
-          fi
-          
-          # Check VERCEL_PROJECT_ID
-          if [ -z "${VERCEL_PROJECT_ID:-}" ]; then
-            echo "❌ Missing or empty secret: VERCEL_PROJECT_ID"
-            echo "   Please ensure VERCEL_PROJECT_ID is set in repository secrets"
-            echo "   Expected format: prj_xxxxxxxxxxxxx"
-            echo "   Your value should be: prj_JSJBXH8IRehWd6mzt5FXKWy8InHG"
-            echo "   Go to: Settings → Secrets and variables → Actions → Repository secrets"
-            exit 1
-          else
-            if [[ "${VERCEL_PROJECT_ID}" =~ ^prj_ ]]; then
-              echo "✅ VERCEL_PROJECT_ID is set (value: ${VERCEL_PROJECT_ID})"
-            else
-              echo "⚠️  VERCEL_PROJECT_ID format may be incorrect (expected: prj_...)"
-              echo "   Current value: ${VERCEL_PROJECT_ID}"
-            fi
-          fi
-          
-          echo ""
-          echo "✅ All required secrets are present and valid"
-          echo ""
-          echo "📋 Secret Summary:"
-          echo "   - VERCEL_TOKEN: ✅ (${#VERCEL_TOKEN} chars)"
-          echo "   - VERCEL_ORG_ID: ✅ (${VERCEL_ORG_ID})"
-          echo "   - VERCEL_PROJECT_ID: ✅ (${VERCEL_PROJECT_ID})"
+          if [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then echo "❌ Missing VERCEL_TOKEN"; exit 1; fi
+          if [ -z "${{ secrets.VERCEL_ORG_ID }}" ]; then echo "❌ Missing VERCEL_ORG_ID"; exit 1; fi
+          if [ -z "${{ secrets.VERCEL_PROJECT_ID }}" ]; then echo "❌ Missing VERCEL_PROJECT_ID"; exit 1; fi
+          echo "✅ All required secrets are present"
+        shell: bash
 
       - name: Clean modules only
         working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp

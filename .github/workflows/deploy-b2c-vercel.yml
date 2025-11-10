@@ -66,52 +66,62 @@ jobs:
           echo "✅ VERCEL_PROJECT_ID: present (variable)"
           
           echo ""
-          echo "🔍 Checking application secrets (SDMS_*)..."
+          echo "🔍 Checking application variables (SDMS_*)..."
+          echo ""
+          echo "📝 Note: These should be set as GitHub Variables (not Secrets)"
+          echo "   Reference: See SDMSApps/GITHUB_VARIABLES.txt for which SDMS_* are variables"
+          echo "   Reference: See SDMSApps/GITHUB_SECRETS.txt for which SDMS_* are secrets"
+          echo "   Go to: Settings → Secrets and variables → Actions → Variables"
           echo ""
           
-          # Check application secrets (warn if empty, but don't fail)
-          check_secret() {
-            local secret_name=$1
-            local secret_value=$2
+          # Check application variables (warn if empty, but don't fail)
+          check_variable() {
+            local var_name=$1
+            local var_value=$2
             
             # Store original for debugging
-            local original_length=${#secret_value}
+            local original_length=${#var_value}
             
             # Trim whitespace and newlines
-            local trimmed_value=$(printf '%s' "$secret_value" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | tr -d '\n\r\t')
+            local trimmed_value=$(printf '%s' "$var_value" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | tr -d '\n\r\t')
             local trimmed_length=${#trimmed_value}
             
             if [ -z "$trimmed_value" ] || [ "$trimmed_length" -eq 0 ]; then
-              echo "⚠️  $secret_name: EMPTY or only whitespace"
+              echo "⚠️  $var_name: EMPTY or only whitespace"
               echo "   Original length: $original_length chars"
               echo "   After trimming: $trimmed_length chars"
-              echo "   → This secret will be SKIPPED during environment variable sync"
-              echo "   → Please set a valid value in GitHub Secrets"
+              echo "   → This variable will be SKIPPED during environment variable sync"
+              echo "   → Please set a valid value in GitHub Variables (not Secrets)"
+              echo "   → Go to: Settings → Secrets and variables → Actions → Variables"
               return 1
             else
-              echo "✅ $secret_name: present"
+              echo "✅ $var_name: present"
               echo "   Original length: $original_length chars"
               echo "   After trimming: $trimmed_length chars"
-              # Show masked preview
-              if [ "$trimmed_length" -gt 20 ]; then
-                local preview="${trimmed_value:0:3}***${trimmed_value: -3}"
+              # Show preview (not masked since these are non-sensitive variables)
+              if [ "$trimmed_length" -gt 50 ]; then
+                local preview="${trimmed_value:0:47}..."
               else
-                local preview="${trimmed_value:0:10}***"
+                local preview="$trimmed_value"
               fi
               echo "   Preview: $preview"
               return 0
             fi
           }
           
-          check_secret "SDMS_B2CWebApp_url" "${{ secrets.SDMS_B2CWebApp_url }}"
-          check_secret "SDMS_AuthenticationWebApp_url" "${{ secrets.SDMS_AuthenticationWebApp_url }}"
-          check_secret "SDMS_AuthenticationWebApp_clientid" "${{ secrets.SDMS_AuthenticationWebApp_clientid }}"
-          check_secret "SDMS_AuthenticationWebApp_redirectUri" "${{ secrets.SDMS_AuthenticationWebApp_redirectUri }}"
-          check_secret "SDMS_AuthenticationWebApp_scope" "${{ secrets.SDMS_AuthenticationWebApp_scope }}"
+          # Check variables (don't fail if empty - they're optional for validation, will be skipped during sync)
+          # Use || true to prevent script from exiting if check_variable returns 1 (empty)
+          check_variable "SDMS_B2CWebApp_url" "${{ vars.SDMS_B2CWebApp_url }}" || true
+          check_variable "SDMS_AuthenticationWebApp_url" "${{ vars.SDMS_AuthenticationWebApp_url }}" || true
+          check_variable "SDMS_AuthenticationWebApp_clientid" "${{ vars.SDMS_AuthenticationWebApp_clientid }}" || true
+          check_variable "SDMS_AuthenticationWebApp_redirectUri" "${{ vars.SDMS_AuthenticationWebApp_redirectUri }}" || true
+          check_variable "SDMS_AuthenticationWebApp_scope" "${{ vars.SDMS_AuthenticationWebApp_scope }}" || true
           
           echo ""
           echo "✅ Validation complete"
-          echo "⚠️  Note: Empty secrets will be skipped during sync (check warnings above)"
+          echo "⚠️  Note: Empty variables will be skipped during sync (check warnings above)"
+          echo "📝 Reminder: SDMS_* values should be set as GitHub Variables (not Secrets)"
+          echo "   Go to: Settings → Secrets and variables → Actions → Variables"
         shell: bash
 
       - name: Clean modules only
@@ -130,6 +140,87 @@ jobs:
 
       - name: Install Vercel CLI
         run: npm install -g vercel@latest
+
+      - name: List Vercel Environment Variables (BEFORE Sync)
+        working-directory: SDMSApps/SDMS.B2CWebApp
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+        run: |
+          echo "🔍 Listing Vercel environment variables (BEFORE sync)..."
+          echo "📝 Note: All SDMS_* variables are NON-SENSITIVE (from GITHUB_VARIABLES.txt)"
+          echo "   Showing full values for non-sensitive variables"
+          echo ""
+          
+          # Function to list and display environment variables for an environment
+          list_env_vars() {
+            local environment=$1
+            echo "=== $environment environment ==="
+            
+            # List environment variables
+            local env_list=$(vercel env ls "$environment" --token="$VERCEL_TOKEN" 2>/dev/null || echo "")
+            
+            if [ -z "$env_list" ]; then
+              echo "  No environment variables found (or error listing)"
+              echo ""
+              return
+            fi
+            
+            # Check for each SDMS_* variable
+            local vars_to_check=(
+              "SDMS_B2CWebApp_url"
+              "SDMS_AuthenticationWebApp_url"
+              "SDMS_AuthenticationWebApp_clientid"
+              "SDMS_AuthenticationWebApp_redirectUri"
+              "SDMS_AuthenticationWebApp_scope"
+            )
+            
+            # Pull environment file once for this environment
+            local env_file=".env.before.$environment"
+            vercel env pull "$env_file" --environment="$environment" --token="$VERCEL_TOKEN" --yes >/dev/null 2>&1
+            
+            echo "  Checking SDMS_* variables:"
+            for var_name in "${vars_to_check[@]}"; do
+              if echo "$env_list" | grep -q "^$var_name"; then
+                echo "    ✅ $var_name: exists"
+                # Extract the value from the pulled environment file
+                if [ -f "$env_file" ]; then
+                  local var_value=$(grep "^$var_name=" "$env_file" | cut -d'=' -f2- | sed 's/^"//;s/"$//' || echo "")
+                  if [ -n "$var_value" ]; then
+                    local value_length=${#var_value}
+                    # All SDMS_* variables in this workflow are NON-SENSITIVE (from GITHUB_VARIABLES.txt)
+                    # Show full value for non-sensitive variables (no masking needed)
+                    echo "      Length: $value_length chars"
+                    echo "      Value: $var_value"
+                  else
+                    echo "      ⚠️  Value is empty!"
+                  fi
+                else
+                  echo "      ⚠️  Could not pull environment file"
+                fi
+              else
+                echo "    ❌ $var_name: not found"
+              fi
+            done
+            
+            # Clean up environment file
+            rm -f "$env_file"
+            
+            echo ""
+            echo "  All SDMS_* variables in $environment:"
+            echo "$env_list" | grep "SDMS_" | while IFS= read -r line; do
+              var_name=$(echo "$line" | awk '{print $1}')
+              echo "    - $var_name"
+            done || echo "    (none found)"
+            echo ""
+          }
+          
+          list_env_vars "production"
+          list_env_vars "preview"
+          
+          echo "✅ Pre-sync environment variable listing complete"
+        shell: bash
 
       - name: Sync Vercel Environment Variables from GitHub Secrets
         working-directory: SDMSApps/SDMS.B2CWebApp
@@ -182,8 +273,8 @@ jobs:
               echo "⚠️  SKIPPING $var_name for $environment: value is empty or only whitespace"
               echo "   Original length: $original_length chars"
               echo "   After trimming: $trimmed_length chars"
-              echo "::error::$var_name is empty or contains only whitespace in GitHub secrets for $environment"
-              echo "::error::Please set a valid value for $var_name in GitHub repository secrets"
+              echo "::warning::$var_name is empty or contains only whitespace in GitHub variables for $environment"
+              echo "::warning::Please set a valid value for $var_name in GitHub repository variables (Settings → Secrets and variables → Actions → Variables)"
               return 0
             fi
             
@@ -234,20 +325,23 @@ jobs:
           }
           
           # Sync environment variables for production
+          # Note: All SDMS_* values for Vercel deployment are VARIABLES (not secrets)
+          # See SDMSApps/GITHUB_VARIABLES.txt for variable definitions
+          # See SDMSApps/GITHUB_SECRETS.txt for secret definitions (used by Railway, not Vercel)
           echo "=== Syncing production environment variables ==="
-          sync_env_var "SDMS_B2CWebApp_url" "${{ secrets.SDMS_B2CWebApp_url }}" "production"
-          sync_env_var "SDMS_AuthenticationWebApp_url" "${{ secrets.SDMS_AuthenticationWebApp_url }}" "production"
-          sync_env_var "SDMS_AuthenticationWebApp_clientid" "${{ secrets.SDMS_AuthenticationWebApp_clientid }}" "production"
-          sync_env_var "SDMS_AuthenticationWebApp_redirectUri" "${{ secrets.SDMS_AuthenticationWebApp_redirectUri }}" "production"
-          sync_env_var "SDMS_AuthenticationWebApp_scope" "${{ secrets.SDMS_AuthenticationWebApp_scope }}" "production"
+          sync_env_var "SDMS_B2CWebApp_url" "${{ vars.SDMS_B2CWebApp_url }}" "production"
+          sync_env_var "SDMS_AuthenticationWebApp_url" "${{ vars.SDMS_AuthenticationWebApp_url }}" "production"
+          sync_env_var "SDMS_AuthenticationWebApp_clientid" "${{ vars.SDMS_AuthenticationWebApp_clientid }}" "production"
+          sync_env_var "SDMS_AuthenticationWebApp_redirectUri" "${{ vars.SDMS_AuthenticationWebApp_redirectUri }}" "production"
+          sync_env_var "SDMS_AuthenticationWebApp_scope" "${{ vars.SDMS_AuthenticationWebApp_scope }}" "production"
           
           # Also sync for preview environments
           echo "=== Syncing preview environment variables ==="
-          sync_env_var "SDMS_B2CWebApp_url" "${{ secrets.SDMS_B2CWebApp_url }}" "preview"
-          sync_env_var "SDMS_AuthenticationWebApp_url" "${{ secrets.SDMS_AuthenticationWebApp_url }}" "preview"
-          sync_env_var "SDMS_AuthenticationWebApp_clientid" "${{ secrets.SDMS_AuthenticationWebApp_clientid }}" "preview"
-          sync_env_var "SDMS_AuthenticationWebApp_redirectUri" "${{ secrets.SDMS_AuthenticationWebApp_redirectUri }}" "preview"
-          sync_env_var "SDMS_AuthenticationWebApp_scope" "${{ secrets.SDMS_AuthenticationWebApp_scope }}" "preview"
+          sync_env_var "SDMS_B2CWebApp_url" "${{ vars.SDMS_B2CWebApp_url }}" "preview"
+          sync_env_var "SDMS_AuthenticationWebApp_url" "${{ vars.SDMS_AuthenticationWebApp_url }}" "preview"
+          sync_env_var "SDMS_AuthenticationWebApp_clientid" "${{ vars.SDMS_AuthenticationWebApp_clientid }}" "preview"
+          sync_env_var "SDMS_AuthenticationWebApp_redirectUri" "${{ vars.SDMS_AuthenticationWebApp_redirectUri }}" "preview"
+          sync_env_var "SDMS_AuthenticationWebApp_scope" "${{ vars.SDMS_AuthenticationWebApp_scope }}" "preview"
           
           echo "✓ Environment variables synchronization complete"
           echo ""
@@ -288,7 +382,90 @@ jobs:
           
           echo ""
           echo "✅ Verification complete"
-          echo "⚠️  Note: If variables show as empty in Vercel dashboard, check that GitHub secrets have valid values"
+          echo "⚠️  Note: If variables show as empty in Vercel dashboard, check that GitHub variables have valid values"
+          echo "📝 Reminder: SDMS_* values should be set as GitHub Variables (not Secrets)"
+        shell: bash
+
+      - name: List Vercel Environment Variables (AFTER Sync)
+        working-directory: SDMSApps/SDMS.B2CWebApp
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+        run: |
+          echo "🔍 Listing Vercel environment variables (AFTER sync)..."
+          echo ""
+          echo "📝 Note: All SDMS_* variables are NON-SENSITIVE (from GITHUB_VARIABLES.txt)"
+          echo "   Showing full values for non-sensitive variables"
+          echo ""
+          
+          # Function to list and display environment variables for an environment
+          list_env_vars() {
+            local environment=$1
+            echo "=== $environment environment ==="
+            
+            # List environment variables
+            local env_list=$(vercel env ls "$environment" --token="$VERCEL_TOKEN" 2>/dev/null || echo "")
+            
+            if [ -z "$env_list" ]; then
+              echo "  No environment variables found (or error listing)"
+              echo ""
+              return
+            fi
+            
+            # Variables to check
+            local vars_to_check=(
+              "SDMS_B2CWebApp_url"
+              "SDMS_AuthenticationWebApp_url"
+              "SDMS_AuthenticationWebApp_clientid"
+              "SDMS_AuthenticationWebApp_redirectUri"
+              "SDMS_AuthenticationWebApp_scope"
+            )
+            
+            # Pull environment file once for this environment
+            local env_file=".env.after.$environment"
+            vercel env pull "$env_file" --environment="$environment" --token="$VERCEL_TOKEN" --yes >/dev/null 2>&1
+            
+            echo "  Checking SDMS_* variables:"
+            for var_name in "${vars_to_check[@]}"; do
+              if echo "$env_list" | grep -q "^$var_name"; then
+                echo "    ✅ $var_name: exists"
+                # Extract the value from the pulled environment file
+                if [ -f "$env_file" ]; then
+                  local var_value=$(grep "^$var_name=" "$env_file" | cut -d'=' -f2- | sed 's/^"//;s/"$//' || echo "")
+                  if [ -n "$var_value" ]; then
+                    local value_length=${#var_value}
+                    # All SDMS_* variables in this workflow are NON-SENSITIVE (from GITHUB_VARIABLES.txt)
+                    # Show full value for non-sensitive variables (no masking needed)
+                    echo "      Length: $value_length chars"
+                    echo "      Value: $var_value"
+                  else
+                    echo "      ⚠️  Value is empty!"
+                  fi
+                else
+                  echo "      ⚠️  Could not pull environment file"
+                fi
+              else
+                echo "    ❌ $var_name: not found"
+              fi
+            done
+            
+            # Clean up environment file
+            rm -f "$env_file"
+            
+            echo ""
+            echo "  All SDMS_* variables in $environment:"
+            echo "$env_list" | grep "SDMS_" | while IFS= read -r line; do
+              var_name=$(echo "$line" | awk '{print $1}')
+              echo "    - $var_name"
+            done || echo "    (none found)"
+            echo ""
+          }
+          
+          list_env_vars "production"
+          list_env_vars "preview"
+          
+          echo "✅ Environment variable listing complete"
         shell: bash
 
       - name: Build WebApp

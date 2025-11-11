@@ -1,15 +1,13 @@
-name: Error Handler and Reporter
+name: Error Handler - B2C WebApp
 
-# This workflow runs when other workflows fail
+# This workflow runs when B2C WebApp workflows fail
 # It captures errors and creates detailed reports for Cursor AI to fix
 
 on:
   workflow_run:
     workflows: 
       - "CI - B2C WebApp (Build, Test, and Lint)"
-      - "CI - Authentication WebApp (Build, Test, and Lint)"
       - "Deploy B2C WebApp to Vercel"
-      - "Deploy Authentication WebApp to Railway"
     types:
       - completed
   workflow_dispatch:
@@ -19,9 +17,13 @@ on:
         required: false
         type: string
       workflow_name:
-        description: 'Optional: Workflow name to analyze'
+        description: 'Optional: Workflow name to analyze (defaults to B2C WebApp CI)'
         required: false
-        type: string
+        type: choice
+        options:
+          - "CI - B2C WebApp (Build, Test, and Lint)"
+          - "Deploy B2C WebApp to Vercel"
+        default: "CI - B2C WebApp (Build, Test, and Lint)"
 
 jobs:
   analyze-and-report:
@@ -41,13 +43,15 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Fetch all history for comparison
+          # For workflow_run, checkout the commit from the triggering workflow
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
 
       - name: Configure GitHub CLI
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "$GITHUB_TOKEN" | gh auth login --with-token || true
-          gh auth status || echo "GitHub CLI authentication configured"
+          echo "$GITHUB_TOKEN" | gh auth login --with-token
+          gh auth status
 
       - name: Determine workflow run
         id: determine-run
@@ -56,12 +60,8 @@ jobs:
             if [ -n "${{ inputs.workflow_run_id }}" ]; then
               RUN_ID="${{ inputs.workflow_run_id }}"
             else
-              # Find latest failed run
-              if [ -n "${{ inputs.workflow_name }}" ]; then
-                WORKFLOW_NAME="${{ inputs.workflow_name }}"
-              else
-                WORKFLOW_NAME="CI - B2C WebApp (Build, Test, and Lint)"
-              fi
+              # Find latest failed run for B2C WebApp
+              WORKFLOW_NAME="${{ inputs.workflow_name || 'CI - B2C WebApp (Build, Test, and Lint)' }}"
               RUN_ID=$(gh run list --workflow="$WORKFLOW_NAME" --status failure --limit 1 --json databaseId --jq '.[0].databaseId' || echo "")
             fi
           else
@@ -69,12 +69,12 @@ jobs:
           fi
           
           if [ -z "$RUN_ID" ] || [ "$RUN_ID" == "null" ]; then
-            echo "No failed workflow run found"
+            echo "❌ No failed workflow run found"
             exit 1
           fi
           
           echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
-          echo "Using workflow run ID: $RUN_ID"
+          echo "✅ Using workflow run ID: $RUN_ID"
 
       - name: Get workflow run details
         id: workflow-details
@@ -82,14 +82,20 @@ jobs:
           RUN_ID="${{ steps.determine-run.outputs.run_id }}"
           
           # Get workflow run information
-          WORKFLOW_INFO=$(gh run view $RUN_ID --json name,headBranch,headSha,conclusion,createdAt,htmlUrl,event,actor,workflowName || echo "{}")
+          WORKFLOW_INFO=$(gh run view $RUN_ID --json name,headBranch,headSha,conclusion,createdAt,htmlUrl,event,actor,workflowName,workflowId || echo "{}")
           
-          WORKFLOW_NAME=$(echo "$WORKFLOW_INFO" | jq -r '.name // .workflowName // "Unknown"')
+          if [ "$WORKFLOW_INFO" == "{}" ]; then
+            echo "❌ Could not retrieve workflow run information"
+            exit 1
+          fi
+          
+          WORKFLOW_NAME=$(echo "$WORKFLOW_INFO" | jq -r '.workflowName // .name // "Unknown"')
           BRANCH=$(echo "$WORKFLOW_INFO" | jq -r '.headBranch // "unknown"')
           COMMIT_SHA=$(echo "$WORKFLOW_INFO" | jq -r '.headSha // "unknown"')
           RUN_URL=$(echo "$WORKFLOW_INFO" | jq -r '.htmlUrl // ""')
           ACTOR=$(echo "$WORKFLOW_INFO" | jq -r '.actor.login // "unknown"')
           CREATED_AT=$(echo "$WORKFLOW_INFO" | jq -r '.createdAt // ""')
+          CONCLUSION=$(echo "$WORKFLOW_INFO" | jq -r '.conclusion // "unknown"')
           
           echo "workflow_name=$WORKFLOW_NAME" >> $GITHUB_OUTPUT
           echo "branch=$BRANCH" >> $GITHUB_OUTPUT
@@ -97,22 +103,42 @@ jobs:
           echo "run_url=$RUN_URL" >> $GITHUB_OUTPUT
           echo "actor=$ACTOR" >> $GITHUB_OUTPUT
           echo "created_at=$CREATED_AT" >> $GITHUB_OUTPUT
+          echo "conclusion=$CONCLUSION" >> $GITHUB_OUTPUT
           
-          echo "Workflow: $WORKFLOW_NAME"
-          echo "Branch: $BRANCH"
-          echo "Commit: $COMMIT_SHA"
+          echo "📋 Workflow Details:"
+          echo "  Workflow: $WORKFLOW_NAME"
+          echo "  Branch: $BRANCH"
+          echo "  Commit: $COMMIT_SHA"
+          echo "  Conclusion: $CONCLUSION"
+          echo "  Run URL: $RUN_URL"
+
+      - name: Checkout correct commit
+        if: github.event_name == 'workflow_run'
+        run: |
+          COMMIT_SHA="${{ steps.workflow-details.outputs.commit_sha }}"
+          if [ -n "$COMMIT_SHA" ] && [ "$COMMIT_SHA" != "unknown" ]; then
+            echo "Checking out commit: $COMMIT_SHA"
+            git checkout $COMMIT_SHA || echo "Warning: Could not checkout commit $COMMIT_SHA"
+          fi
 
       - name: Find last successful build
         id: last-success
         run: |
-          RUN_ID="${{ steps.determine-run.outputs.run_id }}"
           WORKFLOW_NAME="${{ steps.workflow-details.outputs.workflow_name }}"
           BRANCH="${{ steps.workflow-details.outputs.branch }}"
           
-          # Find last successful run on the same branch
-          LAST_SUCCESS=$(gh run list --workflow="$WORKFLOW_NAME" --branch="$BRANCH" --status success --limit 1 --json databaseId,headSha,createdAt --jq '.[0]' || echo "{}")
+          if [ -z "$WORKFLOW_NAME" ] || [ "$WORKFLOW_NAME" == "Unknown" ]; then
+            echo "⚠️  Could not determine workflow name, skipping last success lookup"
+            echo "last_success_id=" >> $GITHUB_OUTPUT
+            echo "last_success_sha=" >> $GITHUB_OUTPUT
+            echo "last_success_time=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
           
-          if [ "$LAST_SUCCESS" != "{}" ] && [ -n "$LAST_SUCCESS" ]; then
+          # Find last successful run on the same branch
+          LAST_SUCCESS=$(gh run list --workflow="$WORKFLOW_NAME" --branch="$BRANCH" --status success --limit 1 --json databaseId,headSha,createdAt --jq '.[0]' 2>/dev/null || echo "{}")
+          
+          if [ "$LAST_SUCCESS" != "{}" ] && [ -n "$LAST_SUCCESS" ] && [ "$LAST_SUCCESS" != "null" ]; then
             LAST_SUCCESS_ID=$(echo "$LAST_SUCCESS" | jq -r '.databaseId // ""')
             LAST_SUCCESS_SHA=$(echo "$LAST_SUCCESS" | jq -r '.headSha // ""')
             LAST_SUCCESS_TIME=$(echo "$LAST_SUCCESS" | jq -r '.createdAt // ""')
@@ -121,9 +147,9 @@ jobs:
             echo "last_success_sha=$LAST_SUCCESS_SHA" >> $GITHUB_OUTPUT
             echo "last_success_time=$LAST_SUCCESS_TIME" >> $GITHUB_OUTPUT
             
-            echo "Last successful build: $LAST_SUCCESS_ID at $LAST_SUCCESS_TIME (SHA: $LAST_SUCCESS_SHA)"
+            echo "✅ Last successful build: $LAST_SUCCESS_ID at $LAST_SUCCESS_TIME (SHA: $LAST_SUCCESS_SHA)"
           else
-            echo "No previous successful build found"
+            echo "⚠️  No previous successful build found"
             echo "last_success_id=" >> $GITHUB_OUTPUT
             echo "last_success_sha=" >> $GITHUB_OUTPUT
             echo "last_success_time=" >> $GITHUB_OUTPUT
@@ -134,19 +160,30 @@ jobs:
         run: |
           RUN_ID="${{ steps.determine-run.outputs.run_id }}"
           
-          echo "Downloading logs for run $RUN_ID..."
+          echo "📥 Downloading logs for run $RUN_ID..."
           
           # Download logs for all jobs
-          gh run view $RUN_ID --log > workflow-logs.txt 2>&1 || echo "Warning: Could not download all logs"
+          if gh run view $RUN_ID --log > workflow-logs.txt 2>&1; then
+            echo "✅ Downloaded workflow logs"
+          else
+            echo "⚠️  Warning: Could not download all logs, trying individual jobs..."
+            echo "" > workflow-logs.txt
+          fi
           
           # Also try to get job-specific logs
-          JOBS=$(gh run view $RUN_ID --json jobs --jq '.jobs[].name' || echo "")
+          JOBS=$(gh run view $RUN_ID --json jobs --jq '.jobs[].name' 2>/dev/null || echo "")
           
           if [ -n "$JOBS" ]; then
             echo "$JOBS" | while read -r job_name; do
               if [ -n "$job_name" ]; then
-                echo "Downloading logs for job: $job_name"
+                echo "  Downloading logs for job: $job_name"
                 gh run view $RUN_ID --log --job="$job_name" >> "workflow-logs-${job_name}.txt" 2>&1 || true
+                # Also append to main log file
+                if [ -f "workflow-logs-${job_name}.txt" ]; then
+                  echo "" >> workflow-logs.txt
+                  echo "=== Job: $job_name ===" >> workflow-logs.txt
+                  cat "workflow-logs-${job_name}.txt" >> workflow-logs.txt
+                fi
               fi
             done
           fi
@@ -155,7 +192,10 @@ jobs:
           
           if [ -f "workflow-logs.txt" ]; then
             LOG_SIZE=$(wc -c < workflow-logs.txt)
-            echo "Downloaded log file size: $LOG_SIZE bytes"
+            echo "✅ Downloaded log file size: $LOG_SIZE bytes"
+          else
+            echo "❌ No log file created"
+            exit 1
           fi
 
       - name: Extract comprehensive error details
@@ -164,22 +204,26 @@ jobs:
           LOG_FILE="${{ steps.download-logs.outputs.logs_file }}"
           LAST_SUCCESS_SHA="${{ steps.last-success.outputs.last_success_sha }}"
           CURRENT_SHA="${{ steps.workflow-details.outputs.commit_sha }}"
+          WORKFLOW_NAME="${{ steps.workflow-details.outputs.workflow_name }}"
           
           # Create error report file
-          ERROR_REPORT="error-report.md"
-          echo "# Comprehensive Error Report" > "$ERROR_REPORT"
+          ERROR_REPORT="error-report-b2c.md"
+          echo "# 🔴 B2C WebApp Error Report" > "$ERROR_REPORT"
           echo "" >> "$ERROR_REPORT"
+          echo "**Application:** B2C WebApp" >> "$ERROR_REPORT"
           echo "**Generated:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> "$ERROR_REPORT"
-          echo "**Workflow:** ${{ steps.workflow-details.outputs.workflow_name }}" >> "$ERROR_REPORT"
-          echo "**Failed Commit:** $CURRENT_SHA" >> "$ERROR_REPORT"
-          if [ -n "$LAST_SUCCESS_SHA" ]; then
-            echo "**Last Successful Commit:** $LAST_SUCCESS_SHA" >> "$ERROR_REPORT"
+          echo "**Workflow:** $WORKFLOW_NAME" >> "$ERROR_REPORT"
+          echo "**Failed Commit:** \`$CURRENT_SHA\`" >> "$ERROR_REPORT"
+          if [ -n "$LAST_SUCCESS_SHA" ] && [ "$LAST_SUCCESS_SHA" != "" ]; then
+            echo "**Last Successful Commit:** \`$LAST_SUCCESS_SHA\`" >> "$ERROR_REPORT"
           fi
           echo "" >> "$ERROR_REPORT"
           
-          if [ ! -f "$LOG_FILE" ]; then
-            echo "## Error: Could not download workflow logs" >> "$ERROR_REPORT"
+          if [ ! -f "$LOG_FILE" ] || [ ! -s "$LOG_FILE" ]; then
+            echo "## ❌ Error: Could not download workflow logs" >> "$ERROR_REPORT"
             echo "error_summary=Could not extract errors from logs" >> $GITHUB_OUTPUT
+            echo "total_errors=0" >> $GITHUB_OUTPUT
+            echo "error_report_file=$ERROR_REPORT" >> $GITHUB_OUTPUT
             exit 0
           fi
           
@@ -193,7 +237,8 @@ jobs:
             echo "$CS_ERRORS" >> "$ERROR_REPORT"
             echo '```' >> "$ERROR_REPORT"
             echo "" >> "$ERROR_REPORT"
-            echo "**Error Count:** $(echo "$CS_ERRORS" | grep -c "error CS" || echo "0")" >> "$ERROR_REPORT"
+            CS_ERROR_COUNT=$(echo "$CS_ERRORS" | grep -c "error CS" || echo "0")
+            echo "**Error Count:** $CS_ERROR_COUNT" >> "$ERROR_REPORT"
             echo "" >> "$ERROR_REPORT"
           else
             echo "No C# compilation errors found." >> "$ERROR_REPORT"
@@ -208,7 +253,8 @@ jobs:
             echo "$TS_ERRORS" >> "$ERROR_REPORT"
             echo '```' >> "$ERROR_REPORT"
             echo "" >> "$ERROR_REPORT"
-            echo "**Error Count:** $(echo "$TS_ERRORS" | grep -c "TS[0-9]" || echo "0")" >> "$ERROR_REPORT"
+            TS_ERROR_COUNT=$(echo "$TS_ERRORS" | grep -c "TS[0-9]" || echo "0")
+            echo "**Error Count:** $TS_ERROR_COUNT" >> "$ERROR_REPORT"
             echo "" >> "$ERROR_REPORT"
           else
             echo "No TypeScript errors found." >> "$ERROR_REPORT"
@@ -230,7 +276,7 @@ jobs:
           
           echo "## 4. Build Configuration Errors" >> "$ERROR_REPORT"
           echo "" >> "$ERROR_REPORT"
-          BUILD_ERRORS=$(grep -E "angular.json|tsconfig|webpack|Build FAILED|configuration error|Schema validation" "$LOG_FILE" | head -30 || echo "")
+          BUILD_ERRORS=$(grep -E "angular.json|tsconfig|webpack|Build FAILED|configuration error|Schema validation|vercel" "$LOG_FILE" | head -30 || echo "")
           if [ -n "$BUILD_ERRORS" ]; then
             echo '```' >> "$ERROR_REPORT"
             echo "$BUILD_ERRORS" >> "$ERROR_REPORT"
@@ -267,18 +313,30 @@ jobs:
             echo "" >> "$ERROR_REPORT"
           fi
           
-          echo "## 7. All Error Messages (Complete)" >> "$ERROR_REPORT"
+          echo "## 7. Deployment Errors (Vercel)" >> "$ERROR_REPORT"
+          echo "" >> "$ERROR_REPORT"
+          DEPLOY_ERRORS=$(grep -iE "vercel|deployment|deploy|environment variable|env var" "$LOG_FILE" | head -30 || echo "")
+          if [ -n "$DEPLOY_ERRORS" ]; then
+            echo '```' >> "$ERROR_REPORT"
+            echo "$DEPLOY_ERRORS" >> "$ERROR_REPORT"
+            echo '```' >> "$ERROR_REPORT"
+            echo "" >> "$ERROR_REPORT"
+          else
+            echo "No deployment errors found." >> "$ERROR_REPORT"
+            echo "" >> "$ERROR_REPORT"
+          fi
+          
+          echo "## 8. All Error Messages (Complete)" >> "$ERROR_REPORT"
           echo "" >> "$ERROR_REPORT"
           echo '```' >> "$ERROR_REPORT"
-          # Extract all lines containing "Error:", "ERROR", "error", "Failed", "FAILED"
           grep -iE "error|failed|exception|fatal" "$LOG_FILE" | head -100 >> "$ERROR_REPORT" || echo "No errors found in logs" >> "$ERROR_REPORT"
           echo '```' >> "$ERROR_REPORT"
           echo "" >> "$ERROR_REPORT"
           
           # Extract file paths and line numbers
-          echo "## 8. Files with Errors (File Paths and Line Numbers)" >> "$ERROR_REPORT"
+          echo "## 9. Files with Errors (File Paths and Line Numbers)" >> "$ERROR_REPORT"
           echo "" >> "$ERROR_REPORT"
-          FILE_ERRORS=$(grep -E "\.(cs|ts|tsx|js|json):[0-9]+" "$LOG_FILE" | sort -u | head -50 || echo "")
+          FILE_ERRORS=$(grep -E "SDMSApps/SDMS\.B2CWebApp.*\.(cs|ts|tsx|js|json):[0-9]+" "$LOG_FILE" | sort -u | head -50 || echo "")
           if [ -n "$FILE_ERRORS" ]; then
             echo '```' >> "$ERROR_REPORT"
             echo "$FILE_ERRORS" >> "$ERROR_REPORT"
@@ -290,13 +348,13 @@ jobs:
           fi
           
           # Compare with last successful build if available
-          if [ -n "$LAST_SUCCESS_SHA" ] && [ "$LAST_SUCCESS_SHA" != "null" ] && [ "$LAST_SUCCESS_SHA" != "$CURRENT_SHA" ]; then
-            echo "## 9. Changes Since Last Successful Build" >> "$ERROR_REPORT"
+          if [ -n "$LAST_SUCCESS_SHA" ] && [ "$LAST_SUCCESS_SHA" != "null" ] && [ "$LAST_SUCCESS_SHA" != "" ] && [ "$LAST_SUCCESS_SHA" != "$CURRENT_SHA" ]; then
+            echo "## 10. Changes Since Last Successful Build" >> "$ERROR_REPORT"
             echo "" >> "$ERROR_REPORT"
-            echo "**Files changed between $LAST_SUCCESS_SHA and $CURRENT_SHA:**" >> "$ERROR_REPORT"
+            echo "**Files changed between \`$LAST_SUCCESS_SHA\` and \`$CURRENT_SHA\`:**" >> "$ERROR_REPORT"
             echo "" >> "$ERROR_REPORT"
             echo '```' >> "$ERROR_REPORT"
-            git diff --name-status "$LAST_SUCCESS_SHA".."$CURRENT_SHA" >> "$ERROR_REPORT" 2>&1 || echo "Could not determine changes" >> "$ERROR_REPORT"
+            git diff --name-status "$LAST_SUCCESS_SHA".."$CURRENT_SHA" -- "SDMSApps/SDMS.B2CWebApp/**" >> "$ERROR_REPORT" 2>&1 || echo "Could not determine changes" >> "$ERROR_REPORT"
             echo '```' >> "$ERROR_REPORT"
             echo "" >> "$ERROR_REPORT"
           fi
@@ -313,22 +371,25 @@ jobs:
           TOTAL_ERRORS=$(grep -cE "error CS|error TS|ERROR|Error:" "$LOG_FILE" 2>/dev/null || echo "0")
           echo "total_errors=$TOTAL_ERRORS" >> $GITHUB_OUTPUT
           
-          echo "Extracted $TOTAL_ERRORS errors"
-          cat "$ERROR_REPORT"
+          echo "✅ Extracted $TOTAL_ERRORS errors"
+          echo "📄 Error report saved to: $ERROR_REPORT"
 
       - name: Generate actionable fix suggestions
         id: generate-fixes
         run: |
           LOG_FILE="${{ steps.download-logs.outputs.logs_file }}"
-          FIX_SUGGESTIONS="fix-suggestions.md"
+          FIX_SUGGESTIONS="fix-suggestions-b2c.md"
           
-          echo "# Fix Suggestions for Cursor AI" > "$FIX_SUGGESTIONS"
+          echo "# Fix Suggestions for B2C WebApp" > "$FIX_SUGGESTIONS"
+          echo "" >> "$FIX_SUGGESTIONS"
+          echo "## Application: B2C WebApp" >> "$FIX_SUGGESTIONS"
           echo "" >> "$FIX_SUGGESTIONS"
           echo "## Immediate Actions Required" >> "$FIX_SUGGESTIONS"
           echo "" >> "$FIX_SUGGESTIONS"
           
-          if [ ! -f "$LOG_FILE" ]; then
-            echo "error_summary=Could not generate fix suggestions" >> $GITHUB_OUTPUT
+          if [ ! -f "$LOG_FILE" ] || [ ! -s "$LOG_FILE" ]; then
+            echo "Could not generate fix suggestions - log file not available" >> "$FIX_SUGGESTIONS"
+            echo "fix_suggestions_file=$FIX_SUGGESTIONS" >> $GITHUB_OUTPUT
             exit 0
           fi
           
@@ -351,6 +412,7 @@ jobs:
             echo "2. **Review angular.json configuration** - Remove deprecated properties (aot, extractCss)" >> "$FIX_SUGGESTIONS"
             echo "3. **Verify import statements** - Check if all imports are correct and paths are valid" >> "$FIX_SUGGESTIONS"
             echo "4. **Check return types** - Methods returning void cannot be tested for truthiness" >> "$FIX_SUGGESTIONS"
+            echo "5. **Check B2C WebApp specific files** - Review files in \`SDMSApps/SDMS.B2CWebApp/ClientApp/src\`" >> "$FIX_SUGGESTIONS"
             echo "" >> "$FIX_SUGGESTIONS"
           fi
           
@@ -359,11 +421,22 @@ jobs:
             echo "### NPM Dependency Issues Detected" >> "$FIX_SUGGESTIONS"
             echo "" >> "$FIX_SUGGESTIONS"
             echo "```bash" >> "$FIX_SUGGESTIONS"
-            echo "# Try these commands:" >> "$FIX_SUGGESTIONS"
+            echo "# Try these commands in SDMSApps/SDMS.B2CWebApp/ClientApp:" >> "$FIX_SUGGESTIONS"
             echo "rm -f package-lock.json" >> "$FIX_SUGGESTIONS"
             echo "rm -rf node_modules" >> "$FIX_SUGGESTIONS"
             echo "npm install --legacy-peer-deps" >> "$FIX_SUGGESTIONS"
             echo "```" >> "$FIX_SUGGESTIONS"
+            echo "" >> "$FIX_SUGGESTIONS"
+          fi
+          
+          # Vercel deployment errors
+          if grep -qi "vercel\|deployment" "$LOG_FILE"; then
+            echo "### Vercel Deployment Issues Detected" >> "$FIX_SUGGESTIONS"
+            echo "" >> "$FIX_SUGGESTIONS"
+            echo "1. **Check environment variables** - Verify all SDMS_* variables are set in Vercel" >> "$FIX_SUGGESTIONS"
+            echo "2. **Check build script** - Verify \`SDMSApps/SDMS.B2CWebApp/ClientApp/scripts/build-vercel.js\` is working" >> "$FIX_SUGGESTIONS"
+            echo "3. **Check vercel.json** - Verify buildCommand is correct" >> "$FIX_SUGGESTIONS"
+            echo "4. **Review Vercel logs** - Check the deployment logs in Vercel dashboard" >> "$FIX_SUGGESTIONS"
             echo "" >> "$FIX_SUGGESTIONS"
           fi
           
@@ -376,6 +449,7 @@ jobs:
             echo "   - Remove \`extractCss\` property (deprecated in Angular 18)" >> "$FIX_SUGGESTIONS"
             echo "   - Remove \`defaultProject\` property (deprecated)" >> "$FIX_SUGGESTIONS"
             echo "2. **Verify TypeScript configuration** - Check tsconfig.json for compatibility" >> "$FIX_SUGGESTIONS"
+            echo "3. **Check B2C WebApp angular.json** - Review \`SDMSApps/SDMS.B2CWebApp/ClientApp/angular.json\`" >> "$FIX_SUGGESTIONS"
             echo "" >> "$FIX_SUGGESTIONS"
           fi
           
@@ -383,7 +457,7 @@ jobs:
           echo "" >> "$FIX_SUGGESTIONS"
           echo "1. **Read the error report** - Start with section 1 (C# errors) or section 2 (TypeScript errors)" >> "$FIX_SUGGESTIONS"
           echo "2. **Identify the root cause** - Look for the first error in the log (errors often cascade)" >> "$FIX_SUGGESTIONS"
-          echo "3. **Check file paths** - Verify the files mentioned in errors exist and are accessible" >> "$FIX_SUGGESTIONS"
+          echo "3. **Check file paths** - Verify the files mentioned in errors exist in \`SDMSApps/SDMS.B2CWebApp\`" >> "$FIX_SUGGESTIONS"
           echo "4. **Review recent changes** - Check what changed since the last successful build" >> "$FIX_SUGGESTIONS"
           echo "5. **Apply fixes** - Make one fix at a time and test" >> "$FIX_SUGGESTIONS"
           echo "6. **Re-run the workflow** - Verify fixes resolve all errors" >> "$FIX_SUGGESTIONS"
@@ -395,7 +469,7 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
           echo "fix_suggestions_file=$FIX_SUGGESTIONS" >> $GITHUB_OUTPUT
           
-          cat "$FIX_SUGGESTIONS"
+          echo "✅ Fix suggestions generated: $FIX_SUGGESTIONS"
 
       - name: Create GitHub Issue with comprehensive report
         env:
@@ -418,16 +492,17 @@ jobs:
           FIX_SUGGESTIONS=$(cat "$FIX_SUGGESTIONS_FILE" 2>/dev/null || echo "Fix suggestions not available")
           
           ISSUE_BODY=$(cat <<EOF
-          # 🔴 Workflow Failure: ${WORKFLOW_NAME}
+          # 🔴 B2C WebApp Workflow Failure: ${WORKFLOW_NAME}
           
+          **Application:** B2C WebApp  
           **Run ID:** ${RUN_ID}  
           **Branch:** ${BRANCH}  
-          **Commit:** ${COMMIT_SHA}  
+          **Commit:** \`${COMMIT_SHA}\`  
           **Failed At:** ${CREATED_AT}  
           **Triggered By:** @${ACTOR}  
           **Total Errors Found:** ${TOTAL_ERRORS}
           
-          ${LAST_SUCCESS_SHA:+**Last Successful Build:** ${LAST_SUCCESS_SHA}}
+          ${LAST_SUCCESS_SHA:+**Last Successful Build:** \`${LAST_SUCCESS_SHA}\`}
           
           **View Failed Run:** [${RUN_URL}](${RUN_URL})
           
@@ -447,7 +522,7 @@ jobs:
           
           ## 📝 Instructions for Cursor AI
           
-          This issue contains all information needed to fix the build errors:
+          This issue contains all information needed to fix the B2C WebApp build errors:
           
           1. **Error Report** (above) - Contains all error messages, file paths, and line numbers
           2. **Fix Suggestions** (above) - Provides step-by-step guidance
@@ -457,39 +532,45 @@ jobs:
           ### How to Use This Report:
           
           - Start with the first error in the log (errors often cascade from the first failure)
-          - Check the file paths and line numbers in section 8
-          - Review the changes since last successful build in section 9
+          - Check the file paths and line numbers in section 9
+          - Review the changes since last successful build in section 10
           - Apply fixes one at a time, starting with compilation errors
           - Re-run the workflow after fixes to verify resolution
+          - Focus on files in \`SDMSApps/SDMS.B2CWebApp\` directory
           
           ---
           
-          **Labels:** \`ci-failure\` \`auto-generated\` \`needs-fix\`  
+          **Labels:** \`ci-failure\` \`b2c-webapp\` \`auto-generated\` \`needs-fix\`  
           **Priority:** High  
           
-          *This issue was auto-generated by the Error Handler and Reporter workflow*
+          *This issue was auto-generated by the B2C WebApp Error Handler workflow*
           EOF
           )
           
           # Create or update issue
-          EXISTING_ISSUE=$(gh issue list --label "ci-failure" --state open --search "Run ${RUN_ID}" --limit 1 --json number --jq '.[0].number' || echo "")
+          EXISTING_ISSUE=$(gh issue list --label "b2c-webapp" --state open --search "Run ${RUN_ID}" --limit 1 --json number --jq '.[0].number' 2>/dev/null || echo "")
           
           if [ -z "$EXISTING_ISSUE" ] || [ "$EXISTING_ISSUE" == "null" ]; then
             gh issue create \
-              --title "🔴 CI Failed: ${WORKFLOW_NAME} (Run ${RUN_ID}) - ${TOTAL_ERRORS} errors" \
+              --title "🔴 B2C WebApp Failed: ${WORKFLOW_NAME} (Run ${RUN_ID}) - ${TOTAL_ERRORS} errors" \
               --body "$ISSUE_BODY" \
-              --label "ci-failure,auto-generated,needs-fix" \
-              --assignee "$ACTOR"
-            echo "Created new issue for workflow failure"
+              --label "ci-failure,b2c-webapp,auto-generated,needs-fix" \
+              --assignee "$ACTOR" 2>/dev/null || \
+            gh issue create \
+              --title "🔴 B2C WebApp Failed: ${WORKFLOW_NAME} (Run ${RUN_ID}) - ${TOTAL_ERRORS} errors" \
+              --body "$ISSUE_BODY" \
+              --label "ci-failure,b2c-webapp,auto-generated,needs-fix"
+            echo "✅ Created new issue for B2C WebApp workflow failure"
           else
             gh issue comment "$EXISTING_ISSUE" --body "$ISSUE_BODY"
-            echo "Updated existing issue #${EXISTING_ISSUE}"
+            echo "✅ Updated existing issue #${EXISTING_ISSUE}"
           fi
 
       - name: Generate workflow summary
         run: |
-          echo "## 🔴 Workflow Failure Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔴 B2C WebApp Workflow Failure Analysis" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Application:** B2C WebApp" >> $GITHUB_STEP_SUMMARY
           echo "**Workflow:** ${{ steps.workflow-details.outputs.workflow_name }}" >> $GITHUB_STEP_SUMMARY
           echo "**Status:** ❌ Failed" >> $GITHUB_STEP_SUMMARY
           echo "**Run ID:** ${{ steps.determine-run.outputs.run_id }}" >> $GITHUB_STEP_SUMMARY
@@ -501,12 +582,13 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 📊 Error Breakdown" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "See the [GitHub Issue](#) created above for comprehensive error details including:" >> $GITHUB_STEP_SUMMARY
+          echo "See the GitHub issue created above for comprehensive error details including:" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ All C# compilation errors with file paths and line numbers" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ All TypeScript/Angular errors with file paths and line numbers" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ NPM and dependency errors" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Build configuration errors" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Vercel deployment errors" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Test failures" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ File changes since last successful build" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Step-by-step fix suggestions for Cursor AI" >> $GITHUB_STEP_SUMMARY
@@ -522,9 +604,12 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: error-reports-${{ steps.determine-run.outputs.run_id }}
+          name: b2c-webapp-error-reports-${{ steps.determine-run.outputs.run_id }}
           path: |
-            error-report.md
-            fix-suggestions.md
+            error-report-b2c.md
+            fix-suggestions-b2c.md
             workflow-logs.txt
+            workflow-logs-*.txt
           retention-days: 30
+          if-no-files-found: warn
+

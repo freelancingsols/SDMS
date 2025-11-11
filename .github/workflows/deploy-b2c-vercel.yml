@@ -13,29 +13,114 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    # Only deploy if:
-    # 1. CI workflow completed successfully (for workflow_run trigger)
-    # 2. Or manual dispatch (workflow_dispatch)
-    # 3. And on release branch (for workflow_run) or any branch (for manual dispatch)
+    # Deployment rules:
+    # 1. For workflow_run: Only deploy if CI succeeded AND CI ran on release branch
+    # 2. For workflow_dispatch: Allow manual deployment from any branch
     if: |
-      (github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.head_branch == 'release' || github.event.workflow_run.head_branch == 'Release')) ||
+      (github.event_name == 'workflow_run' && 
+       github.event.workflow_run.conclusion == 'success' && 
+       (github.event.workflow_run.head_branch == 'release' || github.event.workflow_run.head_branch == 'Release')) ||
       github.event_name == 'workflow_dispatch'
     steps:
-      - name: Verify CI Status
+      - name: Deployment Summary
+        run: |
+          echo "╔════════════════════════════════════════════════════════════╗"
+          echo "║         B2C WebApp Deployment to Vercel                    ║"
+          echo "╚════════════════════════════════════════════════════════════╝"
+          echo ""
+          echo "📦 Application: B2C WebApp"
+          echo "🚀 Target Platform: Vercel"
+          echo "🌿 Trigger: ${{ github.event_name }}"
+          if [ "${{ github.event_name }}" == "workflow_run" ]; then
+            echo "📋 CI Workflow: ${{ github.event.workflow_run.name }}"
+            echo "🌿 CI Branch: ${{ github.event.workflow_run.head_branch }}"
+            echo "✅ CI Status: ${{ github.event.workflow_run.conclusion }}"
+            echo "🔖 CI Commit: ${{ github.event.workflow_run.head_sha }}"
+          else
+            echo "🌿 Branch: ${{ github.ref }}"
+            echo "🔖 Commit: ${{ github.sha }}"
+          fi
+          echo ""
+          echo "📝 Deployment will:"
+          echo "   1. Verify CI status and release branch"
+          echo "   2. Sync environment variables to Vercel"
+          echo "   3. Build Angular application"
+          echo "   4. Deploy to Vercel production"
+          echo ""
+
+      - name: Verify CI Status and Application
         if: github.event_name == 'workflow_run'
         run: |
-          echo "🔍 Checking CI workflow status..."
-          echo "Workflow Run ID: ${{ github.event.workflow_run.id }}"
-          echo "Workflow Run Conclusion: ${{ github.event.workflow_run.conclusion }}"
-          echo "Workflow Run Branch: ${{ github.event.workflow_run.head_branch }}"
-          echo "Workflow Run Commit SHA: ${{ github.event.workflow_run.head_sha }}"
+          echo "🔍 Verifying CI workflow status for B2C WebApp deployment..."
           echo ""
-          if [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
-            echo "❌ CI workflow did not complete successfully. Deployment cancelled."
-            echo "   Conclusion: ${{ github.event.workflow_run.conclusion }}"
+          echo "📋 Deployment Information:"
+          echo "  Application: B2C WebApp"
+          echo "  Target: Vercel"
+          echo "  Workflow Run ID: ${{ github.event.workflow_run.id }}"
+          echo "  CI Workflow: ${{ github.event.workflow_run.name }}"
+          echo "  Workflow Run Conclusion: ${{ github.event.workflow_run.conclusion }}"
+          echo "  Workflow Run Branch: ${{ github.event.workflow_run.head_branch }}"
+          echo "  Workflow Run Commit SHA: ${{ github.event.workflow_run.head_sha }}"
+          echo ""
+          
+          # Verify this is the correct CI workflow
+          CI_WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
+          if [[ "$CI_WORKFLOW_NAME" != *"B2C WebApp"* ]]; then
+            echo "⚠️  WARNING: This deployment is for B2C WebApp, but CI workflow name doesn't match: $CI_WORKFLOW_NAME"
+            echo "   Expected: CI workflow should contain 'B2C WebApp'"
+            echo "   Continuing anyway, but please verify this is the correct deployment."
+          else
+            echo "✅ Verified: This is the B2C WebApp CI workflow"
+          fi
+          echo ""
+          
+          # Verify branch is release
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
+          if [ "$BRANCH" != "release" ] && [ "$BRANCH" != "Release" ]; then
+            echo "❌ Deployment cancelled: CI workflow ran on branch '$BRANCH', but deployment only runs from 'release' branch"
+            echo "   Current branch: $BRANCH"
+            echo "   Required branch: release or Release"
             exit 1
           fi
-          echo "✅ CI workflow completed successfully. Proceeding with deployment."
+          echo "✅ Verified: CI workflow ran on release branch ($BRANCH)"
+          echo ""
+          
+          # Verify CI succeeded
+          CONCLUSION="${{ github.event.workflow_run.conclusion }}"
+          if [ "$CONCLUSION" != "success" ]; then
+            echo "❌ CI workflow did not complete successfully. Deployment cancelled."
+            echo "   Conclusion: $CONCLUSION"
+            echo "   Only successful CI runs trigger deployment."
+            exit 1
+          fi
+          echo "✅ Verified: CI workflow completed successfully"
+          echo ""
+          echo "🚀 All checks passed. Proceeding with B2C WebApp deployment to Vercel..."
+
+      - name: Verify which application triggered deployment
+        if: github.event_name == 'workflow_run'
+        run: |
+          echo "🔍 Determining which application's CI triggered this deployment..."
+          echo ""
+          
+          CI_WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
+          
+          echo "CI Workflow: $CI_WORKFLOW_NAME"
+          echo "Branch: $BRANCH"
+          echo ""
+          
+          # Check if this is B2C WebApp CI
+          if [[ "$CI_WORKFLOW_NAME" == *"B2C WebApp"* ]]; then
+            echo "✅ Confirmed: B2C WebApp CI workflow triggered this deployment"
+            echo "   This deployment will deploy B2C WebApp to Vercel"
+          else
+            echo "⚠️  WARNING: Unexpected CI workflow name: $CI_WORKFLOW_NAME"
+            echo "   This deployment workflow is for B2C WebApp"
+            echo "   Please verify this is the correct deployment"
+          fi
+          echo ""
+          echo "📌 Deployment will proceed for: B2C WebApp → Vercel"
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -43,6 +128,7 @@ jobs:
           # For workflow_run trigger, use the commit SHA from the CI workflow
           # For manual dispatch, use the default branch/ref
           ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+          fetch-depth: 0  # Fetch full history for better operations
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

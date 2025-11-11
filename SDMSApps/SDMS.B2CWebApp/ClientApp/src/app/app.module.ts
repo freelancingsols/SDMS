@@ -4,7 +4,6 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
-import { RouterModule } from '@angular/router';
 import { ServiceWorkerModule } from '@angular/service-worker';
 import { environment } from '../environments/environment';
 import { FrameworkModule } from './framework/framework.module';
@@ -41,11 +40,7 @@ import { MatSortModule } from '@angular/material/sort';
     HttpClientModule,
     FormsModule,
     ReactiveFormsModule,
-    RouterModule.forRoot([
-      { path: 'test', component: TestComponent },
-      { path: '', redirectTo: '/test', pathMatch: 'full' },
-      { path: '**', redirectTo: '/test' }
-    ]),
+    // Routes are defined in AppRoutingModule to avoid duplication
     ServiceWorkerModule.register('ngsw-worker.js', { 
       enabled: environment.production,
       registrationStrategy: 'registerWhenStable:30000'

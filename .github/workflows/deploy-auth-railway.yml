@@ -1,21 +1,49 @@
 name: Deploy Authentication WebApp to Railway
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI - Authentication WebApp (Build, Test, and Lint)"]
+    types:
+      - completed
     branches:
       - release
       - Release
-    paths:
-      - 'SDMSApps/SDMS.AuthenticationWebApp/**'
-      - '.github/workflows/deploy-auth-railway.yml'
   workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Only deploy if:
+    # 1. CI workflow completed successfully (for workflow_run trigger)
+    # 2. Or manual dispatch (workflow_dispatch)
+    # 3. And on release branch (for workflow_run) or any branch (for manual dispatch)
+    if: |
+      (github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.head_branch == 'release' || github.event.workflow_run.head_branch == 'Release')) ||
+      github.event_name == 'workflow_dispatch'
+
     steps:
+      - name: Verify CI Status
+        if: github.event_name == 'workflow_run'
+        run: |
+          echo "🔍 Checking CI workflow status..."
+          echo "Workflow Run ID: ${{ github.event.workflow_run.id }}"
+          echo "Workflow Run Conclusion: ${{ github.event.workflow_run.conclusion }}"
+          echo "Workflow Run Branch: ${{ github.event.workflow_run.head_branch }}"
+          echo "Workflow Run Commit SHA: ${{ github.event.workflow_run.head_sha }}"
+          echo ""
+          if [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
+            echo "❌ CI workflow did not complete successfully. Deployment cancelled."
+            echo "   Conclusion: ${{ github.event.workflow_run.conclusion }}"
+            exit 1
+          fi
+          echo "✅ CI workflow completed successfully. Proceeding with deployment."
+
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # For workflow_run trigger, use the commit SHA from the CI workflow
+          # For manual dispatch, use the default branch/ref
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -29,7 +57,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package.json
 
-      - name: Remove old package-lock.json and node_modules
+      - name: Clean old node_modules
         working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
         run: |
           rm -f package-lock.json
@@ -39,7 +67,7 @@ jobs:
         working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
         run: npm install --legacy-peer-deps
 
-      - name: Build Angular app - Build Node code first
+      - name: Build Angular app
         working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
         run: npm run build -- --configuration production
 
@@ -55,60 +83,308 @@ jobs:
         working-directory: SDMSApps/SDMS.AuthenticationWebApp
         run: dotnet publish --configuration Release --no-build --output ./publish
 
-      - name: Install Railway CLI
+      - name: Install Railway CLI (for deployment)
         run: npm install -g @railway/cli
 
-      - name: Set Railway environment variables from GitHub secrets
+      - name: Sync Railway environment variables
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          SERVICE_ID: ${{ vars.RAILWAY_SERVICE_ID }}
+          PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+          ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
+          # Secrets
+          SDMS_AuthenticationWebApp_ConnectionString: ${{ secrets.SDMS_AuthenticationWebApp_ConnectionString }}
+          SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret: ${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret }}
+          SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret: ${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret }}
+          SDMS_AuthenticationWebApp_WebhookSecret: ${{ secrets.SDMS_AuthenticationWebApp_WebhookSecret }}
+          # Vars
+          SDMS_AuthenticationWebApp_FrontendUrl: ${{ vars.SDMS_AuthenticationWebApp_FrontendUrl }}
+          SDMS_AuthenticationWebApp_LoginUrl: ${{ vars.SDMS_AuthenticationWebApp_LoginUrl }}
+          SDMS_AuthenticationWebApp_LogoutUrl: ${{ vars.SDMS_AuthenticationWebApp_LogoutUrl }}
+          SDMS_AuthenticationWebApp_ErrorUrl: ${{ vars.SDMS_AuthenticationWebApp_ErrorUrl }}
+          SDMS_AuthenticationWebApp_ReturnUrlParameter: ${{ vars.SDMS_AuthenticationWebApp_ReturnUrlParameter }}
+          SDMS_AuthenticationWebApp_ServerPort: ${{ vars.SDMS_AuthenticationWebApp_ServerPort }}
+          SDMS_AuthenticationWebApp_ServerUrls: ${{ vars.SDMS_AuthenticationWebApp_ServerUrls }}
+          SDMS_AuthenticationWebApp_SigningKeyPath: ${{ vars.SDMS_AuthenticationWebApp_SigningKeyPath }}
+          SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId: ${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId }}
+          SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain: ${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain }}
+          SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId: ${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId }}
+          SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri: ${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri }}
         working-directory: SDMSApps/SDMS.AuthenticationWebApp
         run: |
-          railway login --token $RAILWAY_TOKEN
-          railway link ${{ secrets.RAILWAY_PROJECT_ID }}
+          echo "=== Syncing Railway Environment Variables ==="
+          echo "Service ID: $SERVICE_ID"
+          echo "Project ID: $PROJECT_ID"
+          echo "Environment ID: $ENVIRONMENT_ID"
+          echo ""
           
-          # Set environment variables from GitHub secrets
-          # Connection String
-          railway variables set SDMS_AuthenticationWebApp_ConnectionString="${{ secrets.SDMS_AuthenticationWebApp_ConnectionString }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
+          # Validate required environment variables
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "❌ RAILWAY_TOKEN missing. Add it to GitHub secrets."
+            exit 1
+          fi
           
-          # Frontend Configuration
-          railway variables set SDMS_AuthenticationWebApp_FrontendUrl="${{ secrets.SDMS_AuthenticationWebApp_FrontendUrl }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
+          if [ -z "$PROJECT_ID" ]; then
+            echo "❌ RAILWAY_PROJECT_ID missing. Add it to GitHub variables."
+            exit 1
+          fi
           
-          # Authentication URLs
-          railway variables set SDMS_AuthenticationWebApp_LoginUrl="${{ secrets.SDMS_AuthenticationWebApp_LoginUrl }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_LogoutUrl="${{ secrets.SDMS_AuthenticationWebApp_LogoutUrl }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_ErrorUrl="${{ secrets.SDMS_AuthenticationWebApp_ErrorUrl }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_ReturnUrlParameter="${{ secrets.SDMS_AuthenticationWebApp_ReturnUrlParameter }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
+          if [ -z "$SERVICE_ID" ]; then
+            echo "❌ RAILWAY_SERVICE_ID missing. Add it to GitHub variables."
+            exit 1
+          fi
           
-          # Server Configuration
-          railway variables set SDMS_AuthenticationWebApp_ServerPort="${{ secrets.SDMS_AuthenticationWebApp_ServerPort }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_ServerUrls="${{ secrets.SDMS_AuthenticationWebApp_ServerUrls }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
+          if [ -z "$ENVIRONMENT_ID" ]; then
+            echo "❌ RAILWAY_ENVIRONMENT_ID missing. Add it to GitHub variables."
+            exit 1
+          fi
           
-          # External Authentication (Google)
-          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId="${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret="${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
+          # Verify token format
+          TOKEN_PREFIX=$(echo "$RAILWAY_TOKEN" | cut -c1-8)
+          TOKEN_LENGTH=${#RAILWAY_TOKEN}
+          echo "✅ Token configured (length: $TOKEN_LENGTH, starts with: $TOKEN_PREFIX...)"
+          echo ""
           
-          # External Authentication (Auth0)
-          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain="${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId="${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
-          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret="${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
+          # Railway GraphQL API endpoint
+          RAILWAY_API="https://backboard.railway.app/graphql/v2"
           
-          # External Authentication (Redirect URI)
-          railway variables set SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri="${{ secrets.SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
+          # Function to escape JSON string for GraphQL variables
+          escape_json() {
+            local input="$1"
+            # Escape backslashes first
+            input=$(echo "$input" | sed 's/\\/\\\\/g')
+            # Escape double quotes
+            input=$(echo "$input" | sed 's/"/\\"/g')
+            # Escape newlines
+            input=$(echo "$input" | sed 's/$/\\n/' | tr -d '\n' | sed 's/\\n$//')
+            # Escape carriage returns
+            input=$(echo "$input" | sed 's/\r/\\r/g')
+            # Escape tabs
+            input=$(echo "$input" | sed 's/\t/\\t/g')
+            echo "$input"
+          }
           
-          # Webhook
-          railway variables set SDMS_AuthenticationWebApp_WebhookSecret="${{ secrets.SDMS_AuthenticationWebApp_WebhookSecret }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
+          # Function to get all Railway environment variables
+          get_railway_variables() {
+            echo "📥 Fetching current Railway environment variables..."
+            
+            # Compose GraphQL query
+            GET_QUERY_PAYLOAD=$(printf '{"query":"query variables($environmentId: String!, $pluginId: String, $projectId: String!, $serviceId: String, $unrendered: Boolean) {\\n  variables(\\n    environmentId: $environmentId\\n    pluginId: $pluginId\\n    projectId: $projectId\\n    serviceId: $serviceId\\n    unrendered: $unrendered\\n  )\\n}","operationName":"variables","variables":{"pluginId":null,"unrendered":null,"projectId":"%s","environmentId":"%s","serviceId":"%s"}}' "$PROJECT_ID" "$ENVIRONMENT_ID" "$SERVICE_ID")
+            
+            # Send GraphQL query to get variables
+            RESPONSE=$(curl -s -X POST "$RAILWAY_API" --max-time 30 -H "Project-Access-Token: $RAILWAY_TOKEN" -H "Content-Type: application/json" -d "$GET_QUERY_PAYLOAD" 2>&1)
+            
+            # Check for errors
+            if echo "$RESPONSE" | grep -q "\"errors\""; then
+              echo "❌ Error fetching Railway variables:"
+              echo "$RESPONSE" | grep -o '"message":"[^"]*"' | head -1 | sed 's/"message":"\([^"]*\)"/\1/'
+              return 1
+            fi
+            
+            # Extract variables object from response
+            # Response format: {"data":{"variables":{"VAR_NAME":"VAR_VALUE",...}}}
+            # Save to temporary file for parsing
+            echo "$RESPONSE" > /tmp/railway_variables.json
+            
+            # Count variables
+            VAR_COUNT=$(echo "$RESPONSE" | grep -o '"[^"]*":"[^"]*"' | wc -l)
+            echo "✅ Found $VAR_COUNT existing variable(s) in Railway"
+            echo ""
+            
+            return 0
+          }
           
-          # Signing Key Path
-          railway variables set SDMS_AuthenticationWebApp_SigningKeyPath="${{ secrets.SDMS_AuthenticationWebApp_SigningKeyPath }}" --service ${{ secrets.RAILWAY_SERVICE_ID }} || true
+          # Function to get variable value from Railway response
+          get_railway_var_value() {
+            local VAR_NAME="$1"
+            # Extract value from JSON response file
+            # Pattern: "VAR_NAME":"VALUE"
+            if [ -f /tmp/railway_variables.json ]; then
+              grep -o "\"$VAR_NAME\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" /tmp/railway_variables.json | sed "s/\"$VAR_NAME\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\"/\1/" | head -1
+            fi
+          }
           
-          echo "✓ Environment variables set in Railway"
+          # Function to set Railway variable using GraphQL API
+          set_railway_env() {
+            local VAR_NAME=$1
+            local VAR_VALUE=$2
+            local ACTION=$3  # "insert" or "update"
+            
+            # Escape the value for JSON
+            ESCAPED_VALUE=$(escape_json "$VAR_VALUE")
+            
+            if [ "$ACTION" = "insert" ]; then
+              echo -n "  ➕ Inserting $VAR_NAME... "
+            else
+              echo -n "  🔄 Updating $VAR_NAME... "
+            fi
+            
+            # Compose GraphQL mutation
+            UPSERT_PAYLOAD=$(printf '{"query":"mutation variableUpsert($input: VariableUpsertInput!) {\\n  variableUpsert(input: $input)\\n}","operationName":"variableUpsert","variables":{"input":{"projectId":"%s","environmentId":"%s","serviceId":"%s","name":"%s","value":"%s"}}}' "$PROJECT_ID" "$ENVIRONMENT_ID" "$SERVICE_ID" "$VAR_NAME" "$ESCAPED_VALUE")
+            
+            # Send GraphQL upsert request
+            HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/railway_upsert_response.json -X POST "$RAILWAY_API" --max-time 120 -H "Project-Access-Token: $RAILWAY_TOKEN" -H "Content-Type: application/json" -d "$UPSERT_PAYLOAD" 2>&1)
+            
+            CURL_EXIT=$?
+            
+            # Check response
+            if [ "$HTTP_CODE" = "504" ] || [ "$HTTP_CODE" = "502" ] || [ "$HTTP_CODE" = "503" ]; then
+              echo "✅ (HTTP $HTTP_CODE - Railway processing asynchronously)"
+              sleep 1
+              return 0
+            elif [ $CURL_EXIT -eq 28 ]; then
+              echo "✅ (timeout - Railway processing asynchronously)"
+              sleep 1
+              return 0
+            elif [ "$HTTP_CODE" = "200" ]; then
+              # Check for GraphQL errors
+              if grep -q "\"errors\"" /tmp/railway_upsert_response.json 2>/dev/null; then
+                ERROR_MSG=$(cat /tmp/railway_upsert_response.json | grep -o '"message":"[^"]*"' | head -1 | sed 's/"message":"\([^"]*\)"/\1/')
+                if [ -n "$ERROR_MSG" ]; then
+                  echo "❌ GraphQL Error: $ERROR_MSG"
+                  return 1
+                fi
+              else
+                echo "✅"
+                return 0
+              fi
+            elif [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "403" ]; then
+              echo "❌ Authentication error (HTTP $HTTP_CODE)"
+              echo "     💡 Verify RAILWAY_TOKEN is a valid Project Token"
+              return 1
+            else
+              echo "⚠️  (HTTP $HTTP_CODE)"
+              return 1
+            fi
+          }
+          
+          # Step 1: Get current Railway variables
+          if ! get_railway_variables; then
+            echo "❌ Failed to fetch Railway variables. Continuing with sync anyway..."
+          fi
+          
+          # Step 2: Define all variables to sync (name -> GitHub secret/var name)
+          declare -A VARS_TO_SYNC
+          VARS_TO_SYNC["SDMS_AuthenticationWebApp_ConnectionString"]="$SDMS_AuthenticationWebApp_ConnectionString"
+          VARS_TO_SYNC["SDMS_AuthenticationWebApp_FrontendUrl"]="$SDMS_AuthenticationWebApp_FrontendUrl"
+          VARS_TO_SYNC["SDMS_AuthenticationWebApp_LoginUrl"]="$SDMS_AuthenticationWebApp_LoginUrl"
+          VARS_TO_SYNC["SDMS_AuthenticationWebApp_LogoutUrl"]="$SDMS_AuthenticationWebApp_LogoutUrl"
+          VARS_TO_SYNC["SDMS_AuthenticationWebApp_ErrorUrl"]="$SDMS_AuthenticationWebApp_ErrorUrl"
+          VARS_TO_SYNC["SDMS_AuthenticationWebApp_ReturnUrlParameter"]="$SDMS_AuthenticationWebApp_ReturnUrlParameter"
+          VARS_TO_SYNC["SDMS_AuthenticationWebApp_ServerPort"]="$SDMS_AuthenticationWebApp_ServerPort"
+          VARS_TO_SYNC["SDMS_AuthenticationWebApp_ServerUrls"]="$SDMS_AuthenticationWebApp_ServerUrls"
+          VARS_TO_SYNC["SDMS_AuthenticationWebApp_SigningKeyPath"]="$SDMS_AuthenticationWebApp_SigningKeyPath"
+          VARS_TO_SYNC["SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId"]="$SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId"
+          VARS_TO_SYNC["SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret"]="$SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret"
+          VARS_TO_SYNC["SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain"]="$SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain"
+          VARS_TO_SYNC["SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId"]="$SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId"
+          VARS_TO_SYNC["SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret"]="$SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret"
+          VARS_TO_SYNC["SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri"]="$SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri"
+          VARS_TO_SYNC["SDMS_AuthenticationWebApp_WebhookSecret"]="$SDMS_AuthenticationWebApp_WebhookSecret"
+          
+          # Step 3: Compare and sync
+          echo "🔄 Comparing and syncing variables..."
+          echo ""
+          
+          # Track results
+          INSERTED_VARS=()
+          UPDATED_VARS=()
+          UNCHANGED_VARS=()
+          FAILED_VARS=()
+          CRITICAL_FAILED=0
+          
+          # Process each variable
+          for VAR_NAME in "${!VARS_TO_SYNC[@]}"; do
+            GITHUB_VALUE="${VARS_TO_SYNC[$VAR_NAME]}"
+            
+            # Skip if GitHub value is empty (optional variable)
+            if [ -z "$GITHUB_VALUE" ]; then
+              echo "  ⏭️  Skipping $VAR_NAME (not set in GitHub)"
+              continue
+            fi
+            
+            # Get current value from Railway
+            RAILWAY_VALUE=$(get_railway_var_value "$VAR_NAME")
+            
+            if [ -z "$RAILWAY_VALUE" ]; then
+              # Variable doesn't exist - INSERT
+              if set_railway_env "$VAR_NAME" "$GITHUB_VALUE" "insert"; then
+                INSERTED_VARS+=("$VAR_NAME")
+              else
+                FAILED_VARS+=("$VAR_NAME")
+                if [ "$VAR_NAME" = "SDMS_AuthenticationWebApp_ConnectionString" ]; then
+                  CRITICAL_FAILED=1
+                fi
+              fi
+            elif [ "$RAILWAY_VALUE" != "$GITHUB_VALUE" ]; then
+              # Variable exists but value is different - UPDATE
+              if set_railway_env "$VAR_NAME" "$GITHUB_VALUE" "update"; then
+                UPDATED_VARS+=("$VAR_NAME")
+              else
+                FAILED_VARS+=("$VAR_NAME")
+                if [ "$VAR_NAME" = "SDMS_AuthenticationWebApp_ConnectionString" ]; then
+                  CRITICAL_FAILED=1
+                fi
+              fi
+            else
+              # Variable exists and value is the same - SKIP
+              echo "  ✓ $VAR_NAME is already up to date"
+              UNCHANGED_VARS+=("$VAR_NAME")
+            fi
+          done
+          
+          # Summary
+          echo ""
+          echo "=== Sync Summary ==="
+          echo "  ➕ Inserted: ${#INSERTED_VARS[@]} variable(s)"
+          echo "  🔄 Updated: ${#UPDATED_VARS[@]} variable(s)"
+          echo "  ✓ Unchanged: ${#UNCHANGED_VARS[@]} variable(s)"
+          echo "  ❌ Failed: ${#FAILED_VARS[@]} variable(s)"
+          echo ""
+          
+          if [ ${#INSERTED_VARS[@]} -gt 0 ]; then
+            echo "Inserted variables:"
+            for var in "${INSERTED_VARS[@]}"; do
+              echo "   ➕ $var"
+            done
+            echo ""
+          fi
+          
+          if [ ${#UPDATED_VARS[@]} -gt 0 ]; then
+            echo "Updated variables:"
+            for var in "${UPDATED_VARS[@]}"; do
+              echo "   🔄 $var"
+            done
+            echo ""
+          fi
+          
+          if [ ${#FAILED_VARS[@]} -gt 0 ]; then
+            echo "Failed variables:"
+            for var in "${FAILED_VARS[@]}"; do
+              echo "   ❌ $var"
+            done
+            echo ""
+          fi
+          
+          if [ $CRITICAL_FAILED -eq 1 ]; then
+            echo "❌ CRITICAL ERROR: Connection string failed to set"
+            echo "   Deployment cannot proceed without the connection string."
+            echo "   Please set SDMS_AuthenticationWebApp_ConnectionString manually in Railway dashboard:"
+            echo "   https://railway.app/project/$PROJECT_ID/service/$SERVICE_ID/variables"
+            exit 1
+          elif [ ${#FAILED_VARS[@]} -gt 0 ]; then
+            echo "⚠️  Some variables failed to set, but deployment can continue"
+            echo "   Please set failed variables manually in Railway dashboard:"
+            echo "   https://railway.app/project/$PROJECT_ID/service/$SERVICE_ID/variables"
+          else
+            echo "✅ All environment variables synced successfully!"
+          fi
 
       - name: Deploy to Railway
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         working-directory: SDMSApps/SDMS.AuthenticationWebApp
         run: |
-          railway login --token $RAILWAY_TOKEN
-          railway link ${{ secrets.RAILWAY_PROJECT_ID }}
-          railway up --service ${{ secrets.RAILWAY_SERVICE_ID }}
-
+          echo "=== Deploying to Railway ==="
+          railway up --service ${{ vars.RAILWAY_SERVICE_ID }}
+          echo "✅ Deployment complete."

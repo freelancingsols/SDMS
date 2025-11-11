@@ -6,15 +6,18 @@ nixPkgs = ["dotnet-sdk_8", "nodejs-18_x"]
 
 [phases.install]
 cmds = [
-  "cd ClientApp && npm ci",
+  "cd ClientApp && npm install --legacy-peer-deps",
   "dotnet restore"
 ]
 
 [phases.build]
 cmds = [
-  "cd ClientApp && npm run build",
+  "cd ClientApp && npm run build -- --configuration production && cd ..",
   "dotnet build -c Release",
-  "dotnet publish -c Release -o ./publish"
+  "dotnet publish -c Release -o ./publish",
+  "echo 'Copying Angular dist files...'",
+  "mkdir -p ./publish/ClientApp/dist/sdms-auth-client",
+  "if [ -d 'ClientApp/dist/sdms-auth-client' ]; then cp -r ClientApp/dist/sdms-auth-client/. ./publish/ClientApp/dist/sdms-auth-client/; echo 'Angular files copied successfully'; else echo 'ERROR: Angular dist directory not found!'; ls -la ClientApp/ || true; ls -la ClientApp/dist/ || true; exit 1; fi"
 ]
 
 [start]

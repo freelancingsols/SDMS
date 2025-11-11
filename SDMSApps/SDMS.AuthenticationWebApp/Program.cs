@@ -1,11 +1,14 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using OpenIddict.Abstractions;
 using OpenIddict.EntityFrameworkCore.Models;
 using OpenIddict.Server.AspNetCore;
+using SDMS.AuthenticationWebApp.Configuration;
 using SDMS.AuthenticationWebApp.Constants;
 using SDMS.AuthenticationWebApp.Data;
 using SDMS.AuthenticationWebApp.Models;
@@ -14,11 +17,13 @@ using static OpenIddict.Abstractions.OpenIddictConstants;
 using Microsoft.Extensions.FileProviders;
 using System.Net;
 using Microsoft.OpenApi.Models;
+using Microsoft.Extensions.Logging;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Load configuration from environment variables (for Railway/deployment)
+// Load configuration from environment variables
 // Environment variables take precedence over appsettings.json
+// This allows configuration to be set via environment variables in any deployment platform
 builder.Configuration.AddEnvironmentVariables();
 
 // Configure server URLs from configuration
@@ -48,12 +53,55 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "SDMS Authentication API", Version = "v1" });
 });
 
-// Database - Load from environment variable
-// Priority: SDMS_AuthenticationWebApp_ConnectionString > POSTGRES_CONNECTION (Railway) > Default
-var connectionString = builder.Configuration[ConfigurationKeys.ConnectionString]
-    ?? builder.Configuration[ConfigurationKeys.PostgresConnection]
-    ?? "Host=localhost;Database=sdms_auth;Username=postgres;Password=postgres";
+// Database - Get connection string from deployment configuration FIRST
+// This is needed for both DbContext and health checks
+var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Information));
+var configLogger = loggerFactory.CreateLogger("DeploymentConfiguration");
+var connectionString = DeploymentConfiguration.GetDatabaseConnectionString(builder.Configuration, configLogger);
 
+// Add health checks for Railway and other platforms
+// Include database connection check to verify database connectivity
+builder.Services.AddHealthChecks()
+    .AddNpgSql(
+        connectionString: connectionString,
+        name: "database",
+        failureStatus: Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Unhealthy,
+        tags: new[] { "db", "sql", "postgresql" });
+
+// Configure DataProtection for persistent key storage
+// For Railway/container deployments, consider using a volume or database storage
+// For now, use the app directory (Railway can mount a volume if persistence is needed)
+try
+{
+    var dataProtectionKeysPath = Path.Combine(builder.Environment.ContentRootPath, "DataProtection-Keys");
+    if (!Directory.Exists(dataProtectionKeysPath))
+    {
+        Directory.CreateDirectory(dataProtectionKeysPath);
+    }
+    
+    builder.Services.AddDataProtection()
+        .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath))
+        .SetApplicationName("SDMS.AuthenticationWebApp");
+}
+catch (Exception ex)
+{
+    // If we can't create the directory, DataProtection will use default in-memory storage
+    // This is acceptable for single-instance deployments but keys will be lost on restart
+    Console.WriteLine($"Warning: Could not configure DataProtection key storage: {ex.Message}");
+    Console.WriteLine("DataProtection will use default storage (keys may be lost on restart)");
+}
+
+// Configure ForwardedHeaders for reverse proxy support (Railway, etc.)
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor 
+        | ForwardedHeaders.XForwardedProto 
+        | ForwardedHeaders.XForwardedHost;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
+// Configure DbContext with the connection string (already retrieved above for health checks)
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
     options.UseNpgsql(connectionString);
@@ -98,6 +146,7 @@ builder.Services.AddOpenIddict()
 
         options.AllowRefreshTokenFlow();
         options.AllowClientCredentialsFlow();
+        options.AllowPasswordFlow(); // Allow password grant for testing and API access
 
         options.RegisterScopes(Scopes.Email, Scopes.Profile, Scopes.Roles, "api");
 
@@ -118,25 +167,22 @@ builder.Services.AddOpenIddict()
     });
 
 // Authentication - configure login interaction similar to IdentityServer4 UserInteraction
+// Note: AddIdentity already registers Identity.Application and Identity.External schemes
+// We only need to configure authentication defaults and add external authentication providers
 var loginUrl = builder.Configuration[ConfigurationKeys.LoginUrl] ?? "/login";
 var logoutUrl = builder.Configuration[ConfigurationKeys.LogoutUrl] ?? "/logout";
 var errorUrl = builder.Configuration[ConfigurationKeys.ErrorUrl] ?? "/login";
 var returnUrlParameter = builder.Configuration[ConfigurationKeys.ReturnUrlParameter] ?? "ReturnUrl";
 
+// Configure authentication defaults
+// AddIdentity already registers Identity.Application and Identity.External schemes
+// Do NOT add them again here to avoid duplicate scheme registration
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultScheme = IdentityConstants.ApplicationScheme;
     options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
     options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme;
 })
-.AddCookie(IdentityConstants.ApplicationScheme, options =>
-{
-    options.LoginPath = loginUrl;
-    options.LogoutPath = logoutUrl;
-    options.AccessDeniedPath = errorUrl;
-    options.ReturnUrlParameter = returnUrlParameter;
-})
-.AddCookie(IdentityConstants.ExternalScheme)
 .AddGoogle(options =>
 {
     var clientId = builder.Configuration[ConfigurationKeys.ExternalAuthGoogleClientId];
@@ -216,15 +262,43 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // Configure HTTP pipeline
+// ForwardedHeaders must be first to handle reverse proxy headers correctly (Railway, etc.)
+app.UseForwardedHeaders();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+// Only use HTTPS redirection in development
+// In production behind a reverse proxy (like Railway), the proxy handles HTTPS termination
+// Railway terminates SSL at the proxy level, so HTTPS redirection is not needed
+if (app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
+// In production (Railway), skip HTTPS redirection as the proxy handles SSL/TLS
+
 app.UseCors();
 app.UseRouting();
+
+// Map health check, ping, and root endpoints BEFORE authentication/authorization
+// This allows Railway and other platforms to check if the container is healthy
+app.MapHealthChecks("/health").AllowAnonymous();
+app.MapGet("/ping", () => Results.Ok(new { 
+    status = "ok",
+    message = "pong",
+    timestamp = DateTime.UtcNow
+})).AllowAnonymous();
+app.MapGet("/", () => Results.Json(new { 
+    status = "ok", 
+    service = "SDMS Authentication API", 
+    version = "1.0",
+    timestamp = DateTime.UtcNow,
+    environment = app.Environment.EnvironmentName
+})).AllowAnonymous();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -235,23 +309,40 @@ app.MapControllers();
 var angularDistPath = Path.Combine(builder.Environment.ContentRootPath, "ClientApp", "dist", "sdms-auth-client");
 var wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
 
-var fileProvider = new CompositeFileProvider(
-    new List<IFileProvider>()
-    {
-        new PhysicalFileProvider(angularDistPath),
-        new PhysicalFileProvider(wwwrootPath)
-    }
-);
+var fileProviders = new List<IFileProvider>();
+
+// Only add Angular dist file provider if directory exists
+if (Directory.Exists(angularDistPath))
+{
+    fileProviders.Add(new PhysicalFileProvider(angularDistPath));
+}
+else
+{
+    // Log warning to console (will be logged properly after app is built)
+    Console.WriteLine($"Warning: Angular dist directory not found at {angularDistPath}. Angular app will not be served.");
+}
+
+// Only add wwwroot file provider if directory exists
+if (Directory.Exists(wwwrootPath))
+{
+    fileProviders.Add(new PhysicalFileProvider(wwwrootPath));
+}
+
+var fileProvider = new CompositeFileProvider(fileProviders);
 
 // SPA fallback: redirect non-API routes to index.html
+// Exclude health check, root, and API endpoints from SPA fallback
 app.Use(async (HttpContext context, Func<Task> next) =>
 {
     await next.Invoke();
+    var path = context.Request.Path.Value ?? "";
     if (context.Response.StatusCode == (int)HttpStatusCode.NotFound 
-        && context.Request.Path.Value != null
-        && !context.Request.Path.Value.StartsWith("/api")
-        && !context.Request.Path.Value.StartsWith("/connect")
-        && !context.Request.Path.Value.StartsWith("/swagger"))
+        && !path.StartsWith("/api")
+        && !path.StartsWith("/connect")
+        && !path.StartsWith("/swagger")
+        && path != "/"
+        && path != "/health"
+        && path != "/ping")
     {
         context.Request.Path = new PathString("/index.html");
         await next.Invoke();
@@ -279,41 +370,54 @@ using (var scope = app.Services.CreateScope())
     
     await context.Database.EnsureCreatedAsync();
 
-    // Create OpenIddict client
-    if (await applicationManager.FindByClientIdAsync("sdms_frontend") == null)
+    // Create or update OpenIddict client
+    var clientDescriptor = new OpenIddictApplicationDescriptor
     {
-        await applicationManager.CreateAsync(new OpenIddictApplicationDescriptor
+        ClientId = "sdms_frontend",
+        ClientSecret = "sdms_frontend_secret",
+        ClientType = ClientTypes.Confidential, // Required: Confidential client (has secret)
+        DisplayName = "SDMS Frontend Application",
+        Permissions =
         {
-            ClientId = "sdms_frontend",
-            ClientSecret = "sdms_frontend_secret",
-            DisplayName = "SDMS Frontend Application",
-            Permissions =
-            {
-                Permissions.Endpoints.Authorization,
-                Permissions.Endpoints.Token,
-                Permissions.Endpoints.Logout,
-                Permissions.GrantTypes.AuthorizationCode,
-                Permissions.GrantTypes.RefreshToken,
-                Permissions.ResponseTypes.Code,
-                Permissions.Scopes.Email,
-                Permissions.Scopes.Profile,
-                Permissions.Scopes.Roles,
-            },
-            RedirectUris =
-            {
-                new Uri("http://localhost:4200/auth-callback"),
-                new Uri("https://localhost:4200/auth-callback"),
-            },
-            PostLogoutRedirectUris =
-            {
-                new Uri("http://localhost:4200/"),
-                new Uri("https://localhost:4200/"),
-            },
-            Requirements =
-            {
-                Requirements.Features.ProofKeyForCodeExchange
-            }
-        });
+            Permissions.Endpoints.Authorization,
+            Permissions.Endpoints.Token,
+            Permissions.Endpoints.Logout,
+            Permissions.GrantTypes.AuthorizationCode,
+            Permissions.GrantTypes.RefreshToken,
+            Permissions.GrantTypes.Password, // Allow password grant for API access
+            Permissions.ResponseTypes.Code,
+            Permissions.Scopes.Email,
+            Permissions.Scopes.Profile,
+            Permissions.Scopes.Roles,
+        },
+        RedirectUris =
+        {
+            new Uri("http://localhost:4200/auth-callback"),
+            new Uri("https://localhost:4200/auth-callback"),
+        },
+        PostLogoutRedirectUris =
+        {
+            new Uri("http://localhost:4200/"),
+            new Uri("https://localhost:4200/"),
+        },
+        Requirements =
+        {
+            Requirements.Features.ProofKeyForCodeExchange
+        }
+    };
+    
+    var existingClient = await applicationManager.FindByClientIdAsync("sdms_frontend");
+    if (existingClient == null)
+    {
+        // Create new client
+        await applicationManager.CreateAsync(clientDescriptor);
+        Console.WriteLine("Created OpenIddict client: sdms_frontend");
+    }
+    else
+    {
+        // Update existing client to ensure it has password grant permission
+        await applicationManager.UpdateAsync(existingClient, clientDescriptor);
+        Console.WriteLine("Updated OpenIddict client: sdms_frontend (added password grant permission)");
     }
 
     // Create default roles

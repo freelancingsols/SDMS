@@ -1,0 +1,629 @@
+name: Error Handler - Authentication WebApp
+
+# This workflow runs when Authentication WebApp workflows fail
+# It captures errors and creates detailed reports for Cursor AI to fix
+
+on:
+  workflow_run:
+    workflows: 
+      - "CI - Authentication WebApp (Build, Test, and Lint)"
+      - "Deploy Authentication WebApp to Railway"
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      workflow_run_id:
+        description: 'Optional: Workflow Run ID to analyze (leave empty to analyze latest failure)'
+        required: false
+        type: string
+      workflow_name:
+        description: 'Optional: Workflow name to analyze (defaults to Authentication WebApp CI)'
+        required: false
+        type: choice
+        options:
+          - "CI - Authentication WebApp (Build, Test, and Lint)"
+          - "Deploy Authentication WebApp to Railway"
+        default: "CI - Authentication WebApp (Build, Test, and Lint)"
+
+jobs:
+  analyze-and-report:
+    # Run only if the workflow failed or if manually triggered
+    if: |
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure') ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      actions: read
+      checks: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for comparison
+          # For workflow_run, checkout the commit from the triggering workflow
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+
+      - name: Configure GitHub CLI
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$GITHUB_TOKEN" | gh auth login --with-token
+          gh auth status
+
+      - name: Determine workflow run
+        id: determine-run
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            if [ -n "${{ inputs.workflow_run_id }}" ]; then
+              RUN_ID="${{ inputs.workflow_run_id }}"
+            else
+              # Find latest failed run for Authentication WebApp
+              WORKFLOW_NAME="${{ inputs.workflow_name || 'CI - Authentication WebApp (Build, Test, and Lint)' }}"
+              RUN_ID=$(gh run list --workflow="$WORKFLOW_NAME" --status failure --limit 1 --json databaseId --jq '.[0].databaseId' || echo "")
+            fi
+          else
+            RUN_ID="${{ github.event.workflow_run.id }}"
+          fi
+          
+          if [ -z "$RUN_ID" ] || [ "$RUN_ID" == "null" ]; then
+            echo "❌ No failed workflow run found"
+            exit 1
+          fi
+          
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+          echo "✅ Using workflow run ID: $RUN_ID"
+
+      - name: Get workflow run details
+        id: workflow-details
+        run: |
+          RUN_ID="${{ steps.determine-run.outputs.run_id }}"
+          
+          # Get workflow run information
+          WORKFLOW_INFO=$(gh run view $RUN_ID --json name,headBranch,headSha,conclusion,createdAt,htmlUrl,event,actor,workflowName,workflowId || echo "{}")
+          
+          if [ "$WORKFLOW_INFO" == "{}" ]; then
+            echo "❌ Could not retrieve workflow run information"
+            exit 1
+          fi
+          
+          WORKFLOW_NAME=$(echo "$WORKFLOW_INFO" | jq -r '.workflowName // .name // "Unknown"')
+          BRANCH=$(echo "$WORKFLOW_INFO" | jq -r '.headBranch // "unknown"')
+          COMMIT_SHA=$(echo "$WORKFLOW_INFO" | jq -r '.headSha // "unknown"')
+          RUN_URL=$(echo "$WORKFLOW_INFO" | jq -r '.htmlUrl // ""')
+          ACTOR=$(echo "$WORKFLOW_INFO" | jq -r '.actor.login // "unknown"')
+          CREATED_AT=$(echo "$WORKFLOW_INFO" | jq -r '.createdAt // ""')
+          CONCLUSION=$(echo "$WORKFLOW_INFO" | jq -r '.conclusion // "unknown"')
+          
+          echo "workflow_name=$WORKFLOW_NAME" >> $GITHUB_OUTPUT
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+          echo "commit_sha=$COMMIT_SHA" >> $GITHUB_OUTPUT
+          echo "run_url=$RUN_URL" >> $GITHUB_OUTPUT
+          echo "actor=$ACTOR" >> $GITHUB_OUTPUT
+          echo "created_at=$CREATED_AT" >> $GITHUB_OUTPUT
+          echo "conclusion=$CONCLUSION" >> $GITHUB_OUTPUT
+          
+          echo "📋 Workflow Details:"
+          echo "  Workflow: $WORKFLOW_NAME"
+          echo "  Branch: $BRANCH"
+          echo "  Commit: $COMMIT_SHA"
+          echo "  Conclusion: $CONCLUSION"
+          echo "  Run URL: $RUN_URL"
+
+      - name: Checkout correct commit
+        if: github.event_name == 'workflow_run'
+        run: |
+          COMMIT_SHA="${{ steps.workflow-details.outputs.commit_sha }}"
+          if [ -n "$COMMIT_SHA" ] && [ "$COMMIT_SHA" != "unknown" ]; then
+            echo "Checking out commit: $COMMIT_SHA"
+            git checkout $COMMIT_SHA || echo "Warning: Could not checkout commit $COMMIT_SHA"
+          fi
+
+      - name: Find last successful build
+        id: last-success
+        run: |
+          WORKFLOW_NAME="${{ steps.workflow-details.outputs.workflow_name }}"
+          BRANCH="${{ steps.workflow-details.outputs.branch }}"
+          
+          if [ -z "$WORKFLOW_NAME" ] || [ "$WORKFLOW_NAME" == "Unknown" ]; then
+            echo "⚠️  Could not determine workflow name, skipping last success lookup"
+            echo "last_success_id=" >> $GITHUB_OUTPUT
+            echo "last_success_sha=" >> $GITHUB_OUTPUT
+            echo "last_success_time=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Find last successful run on the same branch
+          LAST_SUCCESS=$(gh run list --workflow="$WORKFLOW_NAME" --branch="$BRANCH" --status success --limit 1 --json databaseId,headSha,createdAt --jq '.[0]' 2>/dev/null || echo "{}")
+          
+          if [ "$LAST_SUCCESS" != "{}" ] && [ -n "$LAST_SUCCESS" ] && [ "$LAST_SUCCESS" != "null" ]; then
+            LAST_SUCCESS_ID=$(echo "$LAST_SUCCESS" | jq -r '.databaseId // ""')
+            LAST_SUCCESS_SHA=$(echo "$LAST_SUCCESS" | jq -r '.headSha // ""')
+            LAST_SUCCESS_TIME=$(echo "$LAST_SUCCESS" | jq -r '.createdAt // ""')
+            
+            echo "last_success_id=$LAST_SUCCESS_ID" >> $GITHUB_OUTPUT
+            echo "last_success_sha=$LAST_SUCCESS_SHA" >> $GITHUB_OUTPUT
+            echo "last_success_time=$LAST_SUCCESS_TIME" >> $GITHUB_OUTPUT
+            
+            echo "✅ Last successful build: $LAST_SUCCESS_ID at $LAST_SUCCESS_TIME (SHA: $LAST_SUCCESS_SHA)"
+          else
+            echo "⚠️  No previous successful build found"
+            echo "last_success_id=" >> $GITHUB_OUTPUT
+            echo "last_success_sha=" >> $GITHUB_OUTPUT
+            echo "last_success_time=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download workflow logs
+        id: download-logs
+        run: |
+          RUN_ID="${{ steps.determine-run.outputs.run_id }}"
+          
+          echo "📥 Downloading logs for run $RUN_ID..."
+          
+          # Download logs for all jobs
+          if gh run view $RUN_ID --log > workflow-logs.txt 2>&1; then
+            echo "✅ Downloaded workflow logs"
+          else
+            echo "⚠️  Warning: Could not download all logs, trying individual jobs..."
+            echo "" > workflow-logs.txt
+          fi
+          
+          # Also try to get job-specific logs
+          JOBS=$(gh run view $RUN_ID --json jobs --jq '.jobs[].name' 2>/dev/null || echo "")
+          
+          if [ -n "$JOBS" ]; then
+            echo "$JOBS" | while read -r job_name; do
+              if [ -n "$job_name" ]; then
+                echo "  Downloading logs for job: $job_name"
+                gh run view $RUN_ID --log --job="$job_name" >> "workflow-logs-${job_name}.txt" 2>&1 || true
+                # Also append to main log file
+                if [ -f "workflow-logs-${job_name}.txt" ]; then
+                  echo "" >> workflow-logs.txt
+                  echo "=== Job: $job_name ===" >> workflow-logs.txt
+                  cat "workflow-logs-${job_name}.txt" >> workflow-logs.txt
+                fi
+              fi
+            done
+          fi
+          
+          echo "logs_file=workflow-logs.txt" >> $GITHUB_OUTPUT
+          
+          if [ -f "workflow-logs.txt" ]; then
+            LOG_SIZE=$(wc -c < workflow-logs.txt)
+            echo "✅ Downloaded log file size: $LOG_SIZE bytes"
+          else
+            echo "❌ No log file created"
+            exit 1
+          fi
+
+      - name: Extract comprehensive error details
+        id: extract-errors
+        run: |
+          LOG_FILE="${{ steps.download-logs.outputs.logs_file }}"
+          LAST_SUCCESS_SHA="${{ steps.last-success.outputs.last_success_sha }}"
+          CURRENT_SHA="${{ steps.workflow-details.outputs.commit_sha }}"
+          WORKFLOW_NAME="${{ steps.workflow-details.outputs.workflow_name }}"
+          
+          # Create error report file
+          ERROR_REPORT="error-report-auth.md"
+          echo "# 🔴 Authentication WebApp Error Report" > "$ERROR_REPORT"
+          echo "" >> "$ERROR_REPORT"
+          echo "**Application:** Authentication WebApp" >> "$ERROR_REPORT"
+          echo "**Generated:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> "$ERROR_REPORT"
+          echo "**Workflow:** $WORKFLOW_NAME" >> "$ERROR_REPORT"
+          echo "**Failed Commit:** \`$CURRENT_SHA\`" >> "$ERROR_REPORT"
+          if [ -n "$LAST_SUCCESS_SHA" ] && [ "$LAST_SUCCESS_SHA" != "" ]; then
+            echo "**Last Successful Commit:** \`$LAST_SUCCESS_SHA\`" >> "$ERROR_REPORT"
+          fi
+          echo "" >> "$ERROR_REPORT"
+          
+          if [ ! -f "$LOG_FILE" ] || [ ! -s "$LOG_FILE" ]; then
+            echo "## ❌ Error: Could not download workflow logs" >> "$ERROR_REPORT"
+            echo "error_summary=Could not extract errors from logs" >> $GITHUB_OUTPUT
+            echo "total_errors=0" >> $GITHUB_OUTPUT
+            echo "error_report_file=$ERROR_REPORT" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Extract different types of errors
+          
+          echo "## 1. C# / .NET Compilation Errors" >> "$ERROR_REPORT"
+          echo "" >> "$ERROR_REPORT"
+          CS_ERRORS=$(grep -E "error CS[0-9]+:|Build FAILED|error :" "$LOG_FILE" | head -50 || echo "")
+          if [ -n "$CS_ERRORS" ]; then
+            echo '```' >> "$ERROR_REPORT"
+            echo "$CS_ERRORS" >> "$ERROR_REPORT"
+            echo '```' >> "$ERROR_REPORT"
+            echo "" >> "$ERROR_REPORT"
+            CS_ERROR_COUNT=$(echo "$CS_ERRORS" | grep -c "error CS" || echo "0")
+            echo "**Error Count:** $CS_ERROR_COUNT" >> "$ERROR_REPORT"
+            echo "" >> "$ERROR_REPORT"
+          else
+            echo "No C# compilation errors found." >> "$ERROR_REPORT"
+            echo "" >> "$ERROR_REPORT"
+          fi
+          
+          echo "## 2. TypeScript / Angular Compilation Errors" >> "$ERROR_REPORT"
+          echo "" >> "$ERROR_REPORT"
+          TS_ERRORS=$(grep -E "TS[0-9]+|Error:|ERROR in|error TS" "$LOG_FILE" | head -50 || echo "")
+          if [ -n "$TS_ERRORS" ]; then
+            echo '```' >> "$ERROR_REPORT"
+            echo "$TS_ERRORS" >> "$ERROR_REPORT"
+            echo '```' >> "$ERROR_REPORT"
+            echo "" >> "$ERROR_REPORT"
+            TS_ERROR_COUNT=$(echo "$TS_ERRORS" | grep -c "TS[0-9]" || echo "0")
+            echo "**Error Count:** $TS_ERROR_COUNT" >> "$ERROR_REPORT"
+            echo "" >> "$ERROR_REPORT"
+          else
+            echo "No TypeScript errors found." >> "$ERROR_REPORT"
+            echo "" >> "$ERROR_REPORT"
+          fi
+          
+          echo "## 3. NPM / Package Errors" >> "$ERROR_REPORT"
+          echo "" >> "$ERROR_REPORT"
+          NPM_ERRORS=$(grep -E "npm ERR|npm error|ENOENT|not found|Cannot find module|ERR!" "$LOG_FILE" | head -30 || echo "")
+          if [ -n "$NPM_ERRORS" ]; then
+            echo '```' >> "$ERROR_REPORT"
+            echo "$NPM_ERRORS" >> "$ERROR_REPORT"
+            echo '```' >> "$ERROR_REPORT"
+            echo "" >> "$ERROR_REPORT"
+          else
+            echo "No NPM errors found." >> "$ERROR_REPORT"
+            echo "" >> "$ERROR_REPORT"
+          fi
+          
+          echo "## 4. Build Configuration Errors" >> "$ERROR_REPORT"
+          echo "" >> "$ERROR_REPORT"
+          BUILD_ERRORS=$(grep -E "angular.json|tsconfig|webpack|Build FAILED|configuration error|Schema validation|dotnet" "$LOG_FILE" | head -30 || echo "")
+          if [ -n "$BUILD_ERRORS" ]; then
+            echo '```' >> "$ERROR_REPORT"
+            echo "$BUILD_ERRORS" >> "$ERROR_REPORT"
+            echo '```' >> "$ERROR_REPORT"
+            echo "" >> "$ERROR_REPORT"
+          else
+            echo "No build configuration errors found." >> "$ERROR_REPORT"
+            echo "" >> "$ERROR_REPORT"
+          fi
+          
+          echo "## 5. Test Failures" >> "$ERROR_REPORT"
+          echo "" >> "$ERROR_REPORT"
+          TEST_ERRORS=$(grep -E "FAILED|FAIL|● |Expected|Received|Test Suites:" "$LOG_FILE" | head -30 || echo "")
+          if [ -n "$TEST_ERRORS" ]; then
+            echo '```' >> "$ERROR_REPORT"
+            echo "$TEST_ERRORS" >> "$ERROR_REPORT"
+            echo '```' >> "$ERROR_REPORT"
+            echo "" >> "$ERROR_REPORT"
+          else
+            echo "No test failures found." >> "$ERROR_REPORT"
+            echo "" >> "$ERROR_REPORT"
+          fi
+          
+          echo "## 6. Linter Errors" >> "$ERROR_REPORT"
+          echo "" >> "$ERROR_REPORT"
+          LINT_ERRORS=$(grep -E "lint error|ESLint|TSLint|warning|Lint failed|dotnet format" "$LOG_FILE" | head -30 || echo "")
+          if [ -n "$LINT_ERRORS" ]; then
+            echo '```' >> "$ERROR_REPORT"
+            echo "$LINT_ERRORS" >> "$ERROR_REPORT"
+            echo '```' >> "$ERROR_REPORT"
+            echo "" >> "$ERROR_REPORT"
+          else
+            echo "No linter errors found." >> "$ERROR_REPORT"
+            echo "" >> "$ERROR_REPORT"
+          fi
+          
+          echo "## 7. Deployment Errors (Railway)" >> "$ERROR_REPORT"
+          echo "" >> "$ERROR_REPORT"
+          DEPLOY_ERRORS=$(grep -iE "railway|deployment|deploy|environment variable|env var|GraphQL|railway up" "$LOG_FILE" | head -30 || echo "")
+          if [ -n "$DEPLOY_ERRORS" ]; then
+            echo '```' >> "$ERROR_REPORT"
+            echo "$DEPLOY_ERRORS" >> "$ERROR_REPORT"
+            echo '```' >> "$ERROR_REPORT"
+            echo "" >> "$ERROR_REPORT"
+          else
+            echo "No deployment errors found." >> "$ERROR_REPORT"
+            echo "" >> "$ERROR_REPORT"
+          fi
+          
+          echo "## 8. All Error Messages (Complete)" >> "$ERROR_REPORT"
+          echo "" >> "$ERROR_REPORT"
+          echo '```' >> "$ERROR_REPORT"
+          grep -iE "error|failed|exception|fatal" "$LOG_FILE" | head -100 >> "$ERROR_REPORT" || echo "No errors found in logs" >> "$ERROR_REPORT"
+          echo '```' >> "$ERROR_REPORT"
+          echo "" >> "$ERROR_REPORT"
+          
+          # Extract file paths and line numbers
+          echo "## 9. Files with Errors (File Paths and Line Numbers)" >> "$ERROR_REPORT"
+          echo "" >> "$ERROR_REPORT"
+          FILE_ERRORS=$(grep -E "SDMSApps/SDMS\.AuthenticationWebApp.*\.(cs|ts|tsx|js|json):[0-9]+" "$LOG_FILE" | sort -u | head -50 || echo "")
+          if [ -n "$FILE_ERRORS" ]; then
+            echo '```' >> "$ERROR_REPORT"
+            echo "$FILE_ERRORS" >> "$ERROR_REPORT"
+            echo '```' >> "$ERROR_REPORT"
+            echo "" >> "$ERROR_REPORT"
+          else
+            echo "No file-specific errors found." >> "$ERROR_REPORT"
+            echo "" >> "$ERROR_REPORT"
+          fi
+          
+          # Compare with last successful build if available
+          if [ -n "$LAST_SUCCESS_SHA" ] && [ "$LAST_SUCCESS_SHA" != "null" ] && [ "$LAST_SUCCESS_SHA" != "" ] && [ "$LAST_SUCCESS_SHA" != "$CURRENT_SHA" ]; then
+            echo "## 10. Changes Since Last Successful Build" >> "$ERROR_REPORT"
+            echo "" >> "$ERROR_REPORT"
+            echo "**Files changed between \`$LAST_SUCCESS_SHA\` and \`$CURRENT_SHA\`:**" >> "$ERROR_REPORT"
+            echo "" >> "$ERROR_REPORT"
+            echo '```' >> "$ERROR_REPORT"
+            git diff --name-status "$LAST_SUCCESS_SHA".."$CURRENT_SHA" -- "SDMSApps/SDMS.AuthenticationWebApp/**" >> "$ERROR_REPORT" 2>&1 || echo "Could not determine changes" >> "$ERROR_REPORT"
+            echo '```' >> "$ERROR_REPORT"
+            echo "" >> "$ERROR_REPORT"
+          fi
+          
+          # Generate summary for GitHub output
+          ERROR_SUMMARY=$(cat "$ERROR_REPORT")
+          echo "error_summary<<EOF" >> $GITHUB_OUTPUT
+          echo "$ERROR_SUMMARY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo "error_report_file=$ERROR_REPORT" >> $GITHUB_OUTPUT
+          
+          # Count total errors
+          TOTAL_ERRORS=$(grep -cE "error CS|error TS|ERROR|Error:" "$LOG_FILE" 2>/dev/null || echo "0")
+          echo "total_errors=$TOTAL_ERRORS" >> $GITHUB_OUTPUT
+          
+          echo "✅ Extracted $TOTAL_ERRORS errors"
+          echo "📄 Error report saved to: $ERROR_REPORT"
+
+      - name: Generate actionable fix suggestions
+        id: generate-fixes
+        run: |
+          LOG_FILE="${{ steps.download-logs.outputs.logs_file }}"
+          FIX_SUGGESTIONS="fix-suggestions-auth.md"
+          
+          echo "# Fix Suggestions for Authentication WebApp" > "$FIX_SUGGESTIONS"
+          echo "" >> "$FIX_SUGGESTIONS"
+          echo "## Application: Authentication WebApp" >> "$FIX_SUGGESTIONS"
+          echo "" >> "$FIX_SUGGESTIONS"
+          echo "## Immediate Actions Required" >> "$FIX_SUGGESTIONS"
+          echo "" >> "$FIX_SUGGESTIONS"
+          
+          if [ ! -f "$LOG_FILE" ] || [ ! -s "$LOG_FILE" ]; then
+            echo "Could not generate fix suggestions - log file not available" >> "$FIX_SUGGESTIONS"
+            echo "fix_suggestions_file=$FIX_SUGGESTIONS" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # C# compilation errors
+          if grep -q "error CS" "$LOG_FILE"; then
+            echo "### C# Compilation Errors Detected" >> "$FIX_SUGGESTIONS"
+            echo "" >> "$FIX_SUGGESTIONS"
+            echo "1. **Review C# error messages** - Each error code (CS####) indicates a specific issue" >> "$FIX_SUGGESTIONS"
+            echo "2. **Check file paths and line numbers** - Errors include exact file locations" >> "$FIX_SUGGESTIONS"
+            echo "3. **Verify using directives** - Missing namespaces can cause type not found errors" >> "$FIX_SUGGESTIONS"
+            echo "4. **Check attribute usage** - Some attributes require constant values" >> "$FIX_SUGGESTIONS"
+            echo "5. **Check Authentication WebApp specific files** - Review files in \`SDMSApps/SDMS.AuthenticationWebApp\`" >> "$FIX_SUGGESTIONS"
+            echo "" >> "$FIX_SUGGESTIONS"
+          fi
+          
+          # TypeScript errors
+          if grep -q "TS[0-9]" "$LOG_FILE"; then
+            echo "### TypeScript/Angular Errors Detected" >> "$FIX_SUGGESTIONS"
+            echo "" >> "$FIX_SUGGESTIONS"
+            echo "1. **Check TypeScript version compatibility** - Ensure @angular packages match versions" >> "$FIX_SUGGESTIONS"
+            echo "2. **Review angular.json configuration** - Remove deprecated properties (aot, extractCss)" >> "$FIX_SUGGESTIONS"
+            echo "3. **Verify import statements** - Check if all imports are correct and paths are valid" >> "$FIX_SUGGESTIONS"
+            echo "4. **Check return types** - Methods returning void cannot be tested for truthiness" >> "$FIX_SUGGESTIONS"
+            echo "5. **Check Authentication WebApp specific files** - Review files in \`SDMSApps/SDMS.AuthenticationWebApp/ClientApp/src\`" >> "$FIX_SUGGESTIONS"
+            echo "" >> "$FIX_SUGGESTIONS"
+          fi
+          
+          # NPM errors
+          if grep -q "npm ERR\|ENOENT\|Cannot find module" "$LOG_FILE"; then
+            echo "### NPM Dependency Issues Detected" >> "$FIX_SUGGESTIONS"
+            echo "" >> "$FIX_SUGGESTIONS"
+            echo "```bash" >> "$FIX_SUGGESTIONS"
+            echo "# Try these commands in SDMSApps/SDMS.AuthenticationWebApp/ClientApp:" >> "$FIX_SUGGESTIONS"
+            echo "rm -f package-lock.json" >> "$FIX_SUGGESTIONS"
+            echo "rm -rf node_modules" >> "$FIX_SUGGESTIONS"
+            echo "npm install --legacy-peer-deps" >> "$FIX_SUGGESTIONS"
+            echo "```" >> "$FIX_SUGGESTIONS"
+            echo "" >> "$FIX_SUGGESTIONS"
+          fi
+          
+          # Railway deployment errors
+          if grep -qi "railway\|deployment\|GraphQL" "$LOG_FILE"; then
+            echo "### Railway Deployment Issues Detected" >> "$FIX_SUGGESTIONS"
+            echo "" >> "$FIX_SUGGESTIONS"
+            echo "1. **Check environment variables** - Verify all SDMS_AuthenticationWebApp_* variables are set in Railway" >> "$FIX_SUGGESTIONS"
+            echo "2. **Check Railway token** - Verify RAILWAY_TOKEN is valid and has correct permissions" >> "$FIX_SUGGESTIONS"
+            echo "3. **Check Railway service IDs** - Verify RAILWAY_SERVICE_ID, RAILWAY_PROJECT_ID, RAILWAY_ENVIRONMENT_ID are correct" >> "$FIX_SUGGESTIONS"
+            echo "4. **Review Railway GraphQL API** - Check if Railway API is accessible and responding" >> "$FIX_SUGGESTIONS"
+            echo "5. **Check connection string** - Verify SDMS_AuthenticationWebApp_ConnectionString is set correctly" >> "$FIX_SUGGESTIONS"
+            echo "" >> "$FIX_SUGGESTIONS"
+          fi
+          
+          # .NET build errors
+          if grep -qi "dotnet\|\.NET\|csproj" "$LOG_FILE"; then
+            echo "### .NET Build Issues Detected" >> "$FIX_SUGGESTIONS"
+            echo "" >> "$FIX_SUGGESTIONS"
+            echo "1. **Check .NET SDK version** - Verify .NET 8.0.x is installed and available" >> "$FIX_SUGGESTIONS"
+            echo "2. **Check project file** - Verify SDMSApps/SDMS.AuthenticationWebApp/*.csproj is valid" >> "$FIX_SUGGESTIONS"
+            echo "3. **Restore NuGet packages** - Run \`dotnet restore\` to restore dependencies" >> "$FIX_SUGGESTIONS"
+            echo "4. **Check build configuration** - Verify Release configuration builds successfully" >> "$FIX_SUGGESTIONS"
+            echo "" >> "$FIX_SUGGESTIONS"
+          fi
+          
+          # Build configuration errors
+          if grep -q "angular.json\|Schema validation\|buildOptimizer" "$LOG_FILE"; then
+            echo "### Build Configuration Issues Detected" >> "$FIX_SUGGESTIONS"
+            echo "" >> "$FIX_SUGGESTIONS"
+            echo "1. **Remove deprecated properties from angular.json:**" >> "$FIX_SUGGESTIONS"
+            echo "   - Remove \`aot\` property (AOT is always enabled in Angular 18)" >> "$FIX_SUGGESTIONS"
+            echo "   - Remove \`extractCss\` property (deprecated in Angular 18)" >> "$FIX_SUGGESTIONS"
+            echo "   - Remove \`defaultProject\` property (deprecated)" >> "$FIX_SUGGESTIONS"
+            echo "2. **Verify TypeScript configuration** - Check tsconfig.json for compatibility" >> "$FIX_SUGGESTIONS"
+            echo "3. **Check Authentication WebApp angular.json** - Review \`SDMSApps/SDMS.AuthenticationWebApp/ClientApp/angular.json\`" >> "$FIX_SUGGESTIONS"
+            echo "" >> "$FIX_SUGGESTIONS"
+          fi
+          
+          echo "## Step-by-Step Resolution Guide" >> "$FIX_SUGGESTIONS"
+          echo "" >> "$FIX_SUGGESTIONS"
+          echo "1. **Read the error report** - Start with section 1 (C# errors) or section 2 (TypeScript errors)" >> "$FIX_SUGGESTIONS"
+          echo "2. **Identify the root cause** - Look for the first error in the log (errors often cascade)" >> "$FIX_SUGGESTIONS"
+          echo "3. **Check file paths** - Verify the files mentioned in errors exist in \`SDMSApps/SDMS.AuthenticationWebApp\`" >> "$FIX_SUGGESTIONS"
+          echo "4. **Review recent changes** - Check what changed since the last successful build" >> "$FIX_SUGGESTIONS"
+          echo "5. **Apply fixes** - Make one fix at a time and test" >> "$FIX_SUGGESTIONS"
+          echo "6. **Re-run the workflow** - Verify fixes resolve all errors" >> "$FIX_SUGGESTIONS"
+          echo "" >> "$FIX_SUGGESTIONS"
+          
+          FIX_SUMMARY=$(cat "$FIX_SUGGESTIONS")
+          echo "fix_suggestions<<EOF" >> $GITHUB_OUTPUT
+          echo "$FIX_SUMMARY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "fix_suggestions_file=$FIX_SUGGESTIONS" >> $GITHUB_OUTPUT
+          
+          echo "✅ Fix suggestions generated: $FIX_SUGGESTIONS"
+
+      - name: Create GitHub Issue with comprehensive report
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          WORKFLOW_NAME="${{ steps.workflow-details.outputs.workflow_name }}"
+          RUN_ID="${{ steps.determine-run.outputs.run_id }}"
+          RUN_URL="${{ steps.workflow-details.outputs.run_url }}"
+          COMMIT_SHA="${{ steps.workflow-details.outputs.commit_sha }}"
+          BRANCH="${{ steps.workflow-details.outputs.branch }}"
+          ACTOR="${{ steps.workflow-details.outputs.actor }}"
+          CREATED_AT="${{ steps.workflow-details.outputs.created_at }}"
+          LAST_SUCCESS_SHA="${{ steps.last-success.outputs.last_success_sha }}"
+          TOTAL_ERRORS="${{ steps.extract-errors.outputs.total_errors }}"
+          
+          ERROR_REPORT_FILE="${{ steps.extract-errors.outputs.error_report_file }}"
+          FIX_SUGGESTIONS_FILE="${{ steps.generate-fixes.outputs.fix_suggestions_file }}"
+          
+          ERROR_REPORT=$(cat "$ERROR_REPORT_FILE" 2>/dev/null || echo "Error report not available")
+          FIX_SUGGESTIONS=$(cat "$FIX_SUGGESTIONS_FILE" 2>/dev/null || echo "Fix suggestions not available")
+          
+          ISSUE_BODY=$(cat <<EOF
+          # 🔴 Authentication WebApp Workflow Failure: ${WORKFLOW_NAME}
+          
+          **Application:** Authentication WebApp  
+          **Run ID:** ${RUN_ID}  
+          **Branch:** ${BRANCH}  
+          **Commit:** \`${COMMIT_SHA}\`  
+          **Failed At:** ${CREATED_AT}  
+          **Triggered By:** @${ACTOR}  
+          **Total Errors Found:** ${TOTAL_ERRORS}
+          
+          ${LAST_SUCCESS_SHA:+**Last Successful Build:** \`${LAST_SUCCESS_SHA}\`}
+          
+          **View Failed Run:** [${RUN_URL}](${RUN_URL})
+          
+          ---
+          
+          ## 📋 Comprehensive Error Report
+          
+          ${ERROR_REPORT}
+          
+          ---
+          
+          ## 🔧 Fix Suggestions for Cursor AI
+          
+          ${FIX_SUGGESTIONS}
+          
+          ---
+          
+          ## 📝 Instructions for Cursor AI
+          
+          This issue contains all information needed to fix the Authentication WebApp build errors:
+          
+          1. **Error Report** (above) - Contains all error messages, file paths, and line numbers
+          2. **Fix Suggestions** (above) - Provides step-by-step guidance
+          3. **File Changes** - Shows what changed since last successful build
+          4. **Error Context** - Each error includes file path and line number for direct fixing
+          
+          ### How to Use This Report:
+          
+          - Start with the first error in the log (errors often cascade from the first failure)
+          - Check the file paths and line numbers in section 9
+          - Review the changes since last successful build in section 10
+          - Apply fixes one at a time, starting with compilation errors
+          - Re-run the workflow after fixes to verify resolution
+          - Focus on files in \`SDMSApps/SDMS.AuthenticationWebApp\` directory
+          
+          ---
+          
+          **Labels:** \`ci-failure\` \`auth-webapp\` \`auto-generated\` \`needs-fix\`  
+          **Priority:** High  
+          
+          *This issue was auto-generated by the Authentication WebApp Error Handler workflow*
+          EOF
+          )
+          
+          # Create or update issue
+          EXISTING_ISSUE=$(gh issue list --label "auth-webapp" --state open --search "Run ${RUN_ID}" --limit 1 --json number --jq '.[0].number' 2>/dev/null || echo "")
+          
+          if [ -z "$EXISTING_ISSUE" ] || [ "$EXISTING_ISSUE" == "null" ]; then
+            gh issue create \
+              --title "🔴 Authentication WebApp Failed: ${WORKFLOW_NAME} (Run ${RUN_ID}) - ${TOTAL_ERRORS} errors" \
+              --body "$ISSUE_BODY" \
+              --label "ci-failure,auth-webapp,auto-generated,needs-fix" \
+              --assignee "$ACTOR" 2>/dev/null || \
+            gh issue create \
+              --title "🔴 Authentication WebApp Failed: ${WORKFLOW_NAME} (Run ${RUN_ID}) - ${TOTAL_ERRORS} errors" \
+              --body "$ISSUE_BODY" \
+              --label "ci-failure,auth-webapp,auto-generated,needs-fix"
+            echo "✅ Created new issue for Authentication WebApp workflow failure"
+          else
+            gh issue comment "$EXISTING_ISSUE" --body "$ISSUE_BODY"
+            echo "✅ Updated existing issue #${EXISTING_ISSUE}"
+          fi
+
+      - name: Generate workflow summary
+        run: |
+          echo "## 🔴 Authentication WebApp Workflow Failure Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Application:** Authentication WebApp" >> $GITHUB_STEP_SUMMARY
+          echo "**Workflow:** ${{ steps.workflow-details.outputs.workflow_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ❌ Failed" >> $GITHUB_STEP_SUMMARY
+          echo "**Run ID:** ${{ steps.determine-run.outputs.run_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Total Errors:** ${{ steps.extract-errors.outputs.total_errors }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ steps.workflow-details.outputs.branch }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ steps.workflow-details.outputs.commit_sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**View Logs:** [${{ steps.workflow-details.outputs.run_url }}](${{ steps.workflow-details.outputs.run_url }})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📊 Error Breakdown" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "See the GitHub issue created above for comprehensive error details including:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ All C# compilation errors with file paths and line numbers" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ All TypeScript/Angular errors with file paths and line numbers" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ NPM and dependency errors" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Build configuration errors" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Railway deployment errors" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ .NET build errors" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Test failures" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ File changes since last successful build" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Step-by-step fix suggestions for Cursor AI" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔧 Quick Actions" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. Review the GitHub issue created above" >> $GITHUB_STEP_SUMMARY
+          echo "2. Use Cursor AI to fix errors using the detailed report" >> $GITHUB_STEP_SUMMARY
+          echo "3. Re-run the failed workflow to verify fixes" >> $GITHUB_STEP_SUMMARY
+          echo "4. Close the issue once the build succeeds" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload error reports as artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: auth-webapp-error-reports-${{ steps.determine-run.outputs.run_id }}
+          path: |
+            error-report-auth.md
+            fix-suggestions-auth.md
+            workflow-logs.txt
+            workflow-logs-*.txt
+          retention-days: 30
+          if-no-files-found: warn
+

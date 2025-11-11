@@ -4,5 +4,5 @@
 // The production flag is set at build time by CI/CD/Vercel
 
 export const environment = {
-  production: false // Updated at build time for production builds
+  production: true // Updated at build time for production builds
 };

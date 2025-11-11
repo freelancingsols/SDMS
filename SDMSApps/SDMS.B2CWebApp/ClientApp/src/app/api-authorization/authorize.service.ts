@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@angular/core';
+import { Injectable } from '@angular/core';
 import { BehaviorSubject, concat, Observable, of } from 'rxjs';
 import { filter, map, take, tap } from 'rxjs/operators';
 import { OAuthService } from 'angular-oauth2-oidc';
@@ -36,18 +36,14 @@ export interface IUser {
   providedIn: 'root'
 })
 export class AuthorizeService {
-  private baseUrl: string;
   constructor(
-    @Inject('BASE_URL') baseUrl: string,
     private oauthService: OAuthService
   ) {
-    this.baseUrl = baseUrl;
   }
   // By default pop ups are disabled because they don't work properly on Edge.
   // If you want to enable pop up authentication simply set this flag to false.
 
-  private popUpDisabled = true;
-  private userSubject: BehaviorSubject<IUser | null> = new BehaviorSubject(null);
+  private userSubject: BehaviorSubject<IUser | null> = new BehaviorSubject<IUser | null>(null);
 
   public isAuthenticated(): Observable<boolean> {
     return this.getUser().pipe(map(u => !!u));
@@ -87,15 +83,15 @@ export class AuthorizeService {
         return this.redirect();
       } catch (redirectError) {
         console.log('Redirect authentication error: ', redirectError);
-        return this.error(redirectError);
+        return this.error(String(redirectError));
       }
     } catch (error) {
       console.log('Authentication error: ', error);
-      return this.error(error);
+      return this.error(String(error));
     }
   }
 
-  public async completeSignIn(url: string, callbackAction: string): Promise<IAuthenticationResult> {
+  public async completeSignIn(_url: string, _callbackAction: string): Promise<IAuthenticationResult> {
     try {
       // OAuth callback is handled by angular-oauth2-oidc automatically
       await this.oauthService.loadDiscoveryDocumentAndTryLogin();
@@ -114,18 +110,18 @@ export class AuthorizeService {
       return this.success(state);
     } catch (error) {
       console.log('Signout error: ', error);
-      return this.error(error);
+      return this.error(String(error));
     }
   }
 
-  public async completeSignOut(url: string): Promise<IAuthenticationResult> {
+  public async completeSignOut(_url: string): Promise<IAuthenticationResult> {
     try {
       this.oauthService.logOut();
       this.userSubject.next(null);
       return this.success(null);
     } catch (error) {
       console.log(`There was an error trying to log out '${error}'.`);
-      return this.error(error);
+      return this.error(String(error));
     }
   }
 

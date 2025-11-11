@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "cd ClientApp && rm -f package-lock.json && npm install --legacy-peer-deps && node scripts/build-vercel.js && cross-env NODE_OPTIONS=--max-old-space-size=4096 npm run build:prod",
+  "buildCommand": "bash ClientApp/scripts/vercel-build.sh",
   "outputDirectory": "ClientApp/dist/sdms-b2c-webapp",
   "installCommand": "cd ClientApp && rm -f package-lock.json && npm install --legacy-peer-deps",
   "framework": null,

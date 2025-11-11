@@ -664,17 +664,34 @@ jobs:
           echo ""
           echo "✅ All required files and directories are present"
 
+      - name: Install Vercel CLI
+        run: |
+          echo "📦 Installing Vercel CLI..."
+          npm install -g vercel@latest
+          vercel --version
+          echo ""
+          
+          # Verify Vercel CLI can authenticate
+          export VERCEL_TOKEN="${{ secrets.VERCEL_TOKEN }}"
+          export VERCEL_ORG_ID="${{ vars.VERCEL_ORG_ID }}"
+          export VERCEL_PROJECT_ID="${{ vars.VERCEL_PROJECT_ID }}"
+          
+          echo "Testing Vercel CLI authentication..."
+          echo "VERCEL_TOKEN is set: $([ -n "$VERCEL_TOKEN" ] && echo "yes" || echo "no")"
+          echo "VERCEL_ORG_ID: $VERCEL_ORG_ID"
+          echo "VERCEL_PROJECT_ID: $VERCEL_PROJECT_ID"
+          echo ""
+
       - name: Update Vercel project root directory setting
-        working-directory: SDMSApps/SDMS.B2CWebApp
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
         run: |
-          echo "🔧 Checking and updating Vercel project root directory setting..."
+          echo "🔧 Updating Vercel project root directory setting..."
           echo ""
           
-          # Install jq if not available (should be available in GitHub Actions Ubuntu)
+          # Install jq if not available
           if ! command -v jq &> /dev/null; then
             echo "Installing jq..."
             sudo apt-get update && sudo apt-get install -y jq || echo "jq installation skipped"
@@ -686,7 +703,7 @@ jobs:
           echo "Target Root Directory: $ROOT_DIRECTORY"
           echo ""
           
-          # First, get current project settings
+          # First, get current project settings to verify
           echo "📥 Fetching current project settings..."
           CURRENT_SETTINGS=$(curl -s -X GET \
             "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
@@ -699,15 +716,34 @@ jobs:
             
             if [ "$CURRENT_ROOT" == "$ROOT_DIRECTORY" ]; then
               echo "✅ Root Directory is already set correctly to: $ROOT_DIRECTORY"
-              exit 0
+              
+              # Verify it's actually set by checking again
+              VERIFY_SETTINGS=$(curl -s -X GET \
+                "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
+                -H "Authorization: Bearer $VERCEL_TOKEN" \
+                -H "Content-Type: application/json" 2>&1)
+              VERIFY_ROOT=$(echo "$VERIFY_SETTINGS" | jq -r '.rootDirectory // "not set"' 2>/dev/null || echo "unknown")
+              
+              if [ "$VERIFY_ROOT" == "$ROOT_DIRECTORY" ]; then
+                echo "✅ Verified: Root Directory is correctly set to: $ROOT_DIRECTORY"
+                exit 0
+              else
+                echo "⚠️  Verification failed: Root Directory shows as '$VERIFY_ROOT' instead of '$ROOT_DIRECTORY'"
+                echo "   Will attempt to update..."
+              fi
             fi
           else
-            echo "⚠️  Could not fetch current settings, will attempt to update anyway"
+            echo "⚠️  Could not fetch current settings, will attempt to update"
           fi
           echo ""
           
           # Update project configuration using Vercel API
           echo "🔄 Updating Root Directory to: $ROOT_DIRECTORY"
+          echo "   API Endpoint: https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID"
+          echo "   Team ID: $VERCEL_ORG_ID"
+          echo ""
+          
+          # Try updating via API
           RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X PATCH \
             "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
             -H "Authorization: Bearer $VERCEL_TOKEN" \
@@ -719,30 +755,127 @@ jobs:
           HTTP_STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
           RESPONSE_BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS:/d')
           
+          echo "API Response Status: $HTTP_STATUS"
+          echo "API Response Body:"
+          echo "$RESPONSE_BODY" | jq '.' 2>/dev/null || echo "$RESPONSE_BODY"
+          echo ""
+          
           if [ "$HTTP_STATUS" == "200" ] || [ "$HTTP_STATUS" == "201" ]; then
-            echo "✅ Successfully updated Vercel project Root Directory to: $ROOT_DIRECTORY"
+            echo "✅ API call successful (HTTP $HTTP_STATUS)"
             echo "$RESPONSE_BODY" | jq '.' 2>/dev/null || echo "$RESPONSE_BODY"
+            echo ""
+            
+            # Wait a moment for the update to propagate
+            echo "⏳ Waiting 3 seconds for settings to propagate..."
+            sleep 3
+            echo ""
+            
+            # Verify the update was successful
+            echo "🔍 Verifying Root Directory was updated..."
+            VERIFY_SETTINGS=$(curl -s -X GET \
+              "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
+              -H "Authorization: Bearer $VERCEL_TOKEN" \
+              -H "Content-Type: application/json" 2>&1)
+            
+            if echo "$VERIFY_SETTINGS" | grep -q "rootDirectory"; then
+              VERIFY_ROOT=$(echo "$VERIFY_SETTINGS" | jq -r '.rootDirectory // "not set"' 2>/dev/null || echo "unknown")
+              echo "Verified Root Directory: $VERIFY_ROOT"
+              
+              if [ "$VERIFY_ROOT" == "$ROOT_DIRECTORY" ]; then
+                echo "✅ SUCCESS: Root Directory is now set to: $ROOT_DIRECTORY"
+              else
+                echo "❌ ERROR: Root Directory verification failed!"
+                echo "   Expected: $ROOT_DIRECTORY"
+                echo "   Actual: $VERIFY_ROOT"
+                echo ""
+                echo "   The API call succeeded but the setting was not updated correctly."
+                echo "   This might be a Vercel API issue or permission problem."
+                echo ""
+                echo "   Please update manually in Vercel dashboard:"
+                echo "   1. Go to https://vercel.com/dashboard"
+                echo "   2. Select your team and project"
+                echo "   3. Go to Settings → General"
+                echo "   4. Set 'Root Directory' to: $ROOT_DIRECTORY"
+                echo "   5. Click 'Save'"
+                exit 1
+              fi
+            else
+              echo "⚠️  Could not verify Root Directory update (response doesn't contain rootDirectory)"
+              echo "   Response: $VERIFY_SETTINGS"
+              echo "   Continuing anyway, but deployment may fail if setting is incorrect."
+            fi
           else
-            echo "⚠️  Could not update Root Directory via API (HTTP $HTTP_STATUS)"
+            echo "❌ ERROR: Failed to update Root Directory via API (HTTP $HTTP_STATUS)"
             echo "Response: $RESPONSE_BODY"
             echo ""
-            echo "⚠️  MANUAL ACTION REQUIRED:"
+            echo "❌ DEPLOYMENT WILL FAIL:"
             echo "   The Root Directory in Vercel project settings must be updated manually."
             echo ""
             echo "   Steps to fix:"
             echo "   1. Go to https://vercel.com/dashboard"
-            echo "   2. Select your team and project"
+            echo "   2. Select your team and project: $VERCEL_PROJECT_ID"
             echo "   3. Go to Settings → General"
             echo "   4. Find 'Root Directory' setting"
-            echo "   5. Change it from 'SDMSApps/SDMS.B2CWebApp/ClientApp' to '$ROOT_DIRECTORY'"
+            echo "   5. Change it to: $ROOT_DIRECTORY"
             echo "   6. Click 'Save'"
             echo ""
-            echo "   Why this matters:"
-            echo "   - vercel.json is located at: $ROOT_DIRECTORY/vercel.json"
-            echo "   - buildCommand in vercel.json uses 'cd ClientApp'"
-            echo "   - So Root Directory should be $ROOT_DIRECTORY (not $ROOT_DIRECTORY/ClientApp)"
+            echo "   Current error: The API call failed with HTTP $HTTP_STATUS"
+            echo "   This might be due to:"
+            echo "   - Invalid VERCEL_TOKEN"
+            echo "   - Invalid VERCEL_ORG_ID or VERCEL_PROJECT_ID"
+            echo "   - Insufficient permissions"
+            echo "   - Vercel API issue"
             echo ""
-            echo "   Deployment may fail until this is fixed."
+            echo "   After fixing manually, re-run this workflow."
+            exit 1
+          fi
+          echo ""
+
+      - name: Verify Vercel project settings before deployment
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+        run: |
+          echo "🔍 Final verification of Vercel project settings..."
+          echo ""
+          
+          ROOT_DIRECTORY="SDMSApps/SDMS.B2CWebApp"
+          
+          # Get the latest project settings
+          FINAL_SETTINGS=$(curl -s -X GET \
+            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            -H "Content-Type: application/json" 2>&1)
+          
+          if echo "$FINAL_SETTINGS" | grep -q "rootDirectory"; then
+            FINAL_ROOT=$(echo "$FINAL_SETTINGS" | jq -r '.rootDirectory // "not set"' 2>/dev/null || echo "unknown")
+            echo "Current Root Directory in Vercel: $FINAL_ROOT"
+            echo "Expected Root Directory: $ROOT_DIRECTORY"
+            echo ""
+            
+            if [ "$FINAL_ROOT" != "$ROOT_DIRECTORY" ]; then
+              echo "❌ ERROR: Root Directory mismatch!"
+              echo "   Vercel has: $FINAL_ROOT"
+              echo "   Expected: $ROOT_DIRECTORY"
+              echo ""
+              echo "   This will cause deployment to fail."
+              echo "   Please update manually in Vercel dashboard or check API permissions."
+              echo ""
+              echo "   Manual fix:"
+              echo "   1. Go to https://vercel.com/dashboard"
+              echo "   2. Select project: $VERCEL_PROJECT_ID"
+              echo "   3. Settings → General → Root Directory"
+              echo "   4. Set to: $ROOT_DIRECTORY"
+              echo "   5. Save"
+              exit 1
+            else
+              echo "✅ Root Directory is correctly set to: $ROOT_DIRECTORY"
+            fi
+          else
+            echo "⚠️  Could not verify Root Directory from API response"
+            echo "   Response: $FINAL_SETTINGS"
+            echo "   Continuing with deployment, but it may fail if setting is incorrect."
           fi
           echo ""
 

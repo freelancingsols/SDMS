@@ -537,6 +537,129 @@ jobs:
           echo ""
         shell: bash
 
+      - name: Verify Vercel project structure
+        working-directory: SDMSApps/SDMS.B2CWebApp
+        run: |
+          echo "🔍 Verifying project structure..."
+          echo "Current directory: $(pwd)"
+          echo ""
+          echo "Checking for required files:"
+          ls -la || echo "Could not list directory"
+          echo ""
+          if [ -f "vercel.json" ]; then
+            echo "✅ vercel.json exists"
+            cat vercel.json
+          else
+            echo "❌ vercel.json not found!"
+            exit 1
+          fi
+          echo ""
+          if [ -d "ClientApp" ]; then
+            echo "✅ ClientApp directory exists"
+            ls -la ClientApp/ | head -10
+          else
+            echo "❌ ClientApp directory not found!"
+            exit 1
+          fi
+          echo ""
+          if [ -f "ClientApp/package.json" ]; then
+            echo "✅ ClientApp/package.json exists"
+          else
+            echo "❌ ClientApp/package.json not found!"
+            exit 1
+          fi
+          echo ""
+          if [ -f "ClientApp/scripts/build-vercel.js" ]; then
+            echo "✅ ClientApp/scripts/build-vercel.js exists"
+          else
+            echo "❌ ClientApp/scripts/build-vercel.js not found!"
+            exit 1
+          fi
+          echo ""
+          echo "✅ All required files and directories are present"
+
+      - name: Update Vercel project root directory setting
+        working-directory: SDMSApps/SDMS.B2CWebApp
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+        run: |
+          echo "🔧 Checking and updating Vercel project root directory setting..."
+          echo ""
+          
+          # Install jq if not available (should be available in GitHub Actions Ubuntu)
+          if ! command -v jq &> /dev/null; then
+            echo "Installing jq..."
+            sudo apt-get update && sudo apt-get install -y jq || echo "jq installation skipped"
+          fi
+          
+          # The Root Directory should be set to the path relative to repo root where vercel.json is located
+          ROOT_DIRECTORY="SDMSApps/SDMS.B2CWebApp"
+          
+          echo "Target Root Directory: $ROOT_DIRECTORY"
+          echo ""
+          
+          # First, get current project settings
+          echo "📥 Fetching current project settings..."
+          CURRENT_SETTINGS=$(curl -s -X GET \
+            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            -H "Content-Type: application/json" 2>&1)
+          
+          if echo "$CURRENT_SETTINGS" | grep -q "rootDirectory"; then
+            CURRENT_ROOT=$(echo "$CURRENT_SETTINGS" | jq -r '.rootDirectory // "not set"' 2>/dev/null || echo "unknown")
+            echo "Current Root Directory: $CURRENT_ROOT"
+            
+            if [ "$CURRENT_ROOT" == "$ROOT_DIRECTORY" ]; then
+              echo "✅ Root Directory is already set correctly to: $ROOT_DIRECTORY"
+              exit 0
+            fi
+          else
+            echo "⚠️  Could not fetch current settings, will attempt to update anyway"
+          fi
+          echo ""
+          
+          # Update project configuration using Vercel API
+          echo "🔄 Updating Root Directory to: $ROOT_DIRECTORY"
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X PATCH \
+            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"rootDirectory\": \"$ROOT_DIRECTORY\"
+            }" 2>&1)
+          
+          HTTP_STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
+          RESPONSE_BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS:/d')
+          
+          if [ "$HTTP_STATUS" == "200" ] || [ "$HTTP_STATUS" == "201" ]; then
+            echo "✅ Successfully updated Vercel project Root Directory to: $ROOT_DIRECTORY"
+            echo "$RESPONSE_BODY" | jq '.' 2>/dev/null || echo "$RESPONSE_BODY"
+          else
+            echo "⚠️  Could not update Root Directory via API (HTTP $HTTP_STATUS)"
+            echo "Response: $RESPONSE_BODY"
+            echo ""
+            echo "⚠️  MANUAL ACTION REQUIRED:"
+            echo "   The Root Directory in Vercel project settings must be updated manually."
+            echo ""
+            echo "   Steps to fix:"
+            echo "   1. Go to https://vercel.com/dashboard"
+            echo "   2. Select your team and project"
+            echo "   3. Go to Settings → General"
+            echo "   4. Find 'Root Directory' setting"
+            echo "   5. Change it from 'SDMSApps/SDMS.B2CWebApp/ClientApp' to '$ROOT_DIRECTORY'"
+            echo "   6. Click 'Save'"
+            echo ""
+            echo "   Why this matters:"
+            echo "   - vercel.json is located at: $ROOT_DIRECTORY/vercel.json"
+            echo "   - buildCommand in vercel.json uses 'cd ClientApp'"
+            echo "   - So Root Directory should be $ROOT_DIRECTORY (not $ROOT_DIRECTORY/ClientApp)"
+            echo ""
+            echo "   Deployment may fail until this is fixed."
+          fi
+          echo ""
+
       - name: Deploy to Vercel
         uses: amondnet/vercel-action@v25
         env:
@@ -548,4 +671,5 @@ jobs:
           vercel-args: '--prod --force'
           working-directory: SDMSApps/SDMS.B2CWebApp
           scope: ${{ vars.VERCEL_ORG_ID }}
+        continue-on-error: false
 

@@ -1,0 +1,429 @@
+name: Create PR from Stage to Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      check_ci:
+        description: 'Check if CI workflows passed before creating PR'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Needed to create PRs
+      pull-requests: write  # Needed to create/update PRs
+      actions: read  # Needed to read workflow runs (if CI check is enabled)
+
+    steps:
+      - name: Summary
+        run: |
+          echo "╔════════════════════════════════════════════════════════════╗"
+          echo "║        Create PR from Stage to Release                     ║"
+          echo "╚════════════════════════════════════════════════════════════╝"
+          echo ""
+          echo "📋 Purpose: Create/update PR from stage → release"
+          echo "🌿 Source Branch: stage"
+          echo "🎯 Target Branch: release"
+          echo "🔍 Triggered by: Manual dispatch"
+          echo "🔍 CI Check: ${{ github.event.inputs.check_ci }}"
+          echo ""
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: stage
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Verify branches exist
+        run: |
+          echo "🔍 Verifying branches exist..."
+          git fetch origin stage release || true
+          
+          if ! git show-ref --verify --quiet refs/remotes/origin/stage; then
+            echo "❌ Error: stage branch does not exist"
+            exit 1
+          fi
+          
+          if ! git show-ref --verify --quiet refs/remotes/origin/release; then
+            echo "❌ Error: release branch does not exist"
+            exit 1
+          fi
+          
+          echo "✅ Both branches exist"
+          echo "  - stage: $(git rev-parse origin/stage)"
+          echo "  - release: $(git rev-parse origin/release)"
+          echo ""
+
+      - name: Check if PR already exists
+        id: check-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🔍 Checking if PR from stage to release already exists..."
+          
+          # Get existing PRs from stage to release
+          PR_DATA=$(gh pr list \
+            --base release \
+            --head stage \
+            --state open \
+            --json number,title,url,state \
+            --limit 1 2>&1) || PR_DATA=""
+          
+          if [ -z "$PR_DATA" ] || [ "$PR_DATA" == "[]" ]; then
+            echo "✅ No existing PR found"
+            echo "pr_exists=false" >> $GITHUB_OUTPUT
+          else
+            PR_NUMBER=$(echo "$PR_DATA" | jq -r '.[0].number' 2>/dev/null || echo "")
+            PR_TITLE=$(echo "$PR_DATA" | jq -r '.[0].title' 2>/dev/null || echo "")
+            PR_URL=$(echo "$PR_DATA" | jq -r '.[0].url' 2>/dev/null || echo "")
+            
+            if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "null" ]; then
+              echo "📋 Existing PR found:"
+              echo "  Number: #$PR_NUMBER"
+              echo "  Title: $PR_TITLE"
+              echo "  URL: $PR_URL"
+              echo "pr_exists=true" >> $GITHUB_OUTPUT
+              echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+              echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
+            else
+              echo "✅ No existing PR found"
+              echo "pr_exists=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+          echo ""
+
+      - name: Check CI workflows status (optional)
+        id: check-ci-status
+        if: github.event.inputs.check_ci == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🔍 Checking if both CI workflows passed on stage branch..."
+          
+          # Initialize variables
+          B2C_CONCLUSION="unknown"
+          AUTH_CONCLUSION="unknown"
+          B2C_PASSED=false
+          AUTH_PASSED=false
+          
+          # Get the latest commit on stage branch (this is what we're checking CI for)
+          STAGE_SHA=$(git rev-parse origin/stage)
+          echo "Stage branch HEAD SHA: $STAGE_SHA"
+          echo ""
+          
+          # Check B2C WebApp CI status for the current stage HEAD
+          echo "📋 Checking B2C WebApp CI for stage branch..."
+          B2C_CI=$(gh run list \
+            --branch stage \
+            --workflow "ci-b2c-webapp.yml" \
+            --limit 5 \
+            --json conclusion,headSha,status,createdAt \
+            --jq '.[] | select(.headSha == "'"$STAGE_SHA"'") | .' 2>&1 | head -1) || B2C_CI=""
+          
+          # If no exact match, get the latest run (might be for a different commit)
+          if [ -z "$B2C_CI" ] || [ "$B2C_CI" == "null" ] || [ "$B2C_CI" == "" ]; then
+            echo "  ℹ️  No CI run found for exact commit, checking latest run..."
+            B2C_CI=$(gh run list \
+              --branch stage \
+              --workflow "ci-b2c-webapp.yml" \
+              --limit 1 \
+              --json conclusion,headSha,status \
+              --jq '.[0]' 2>&1) || B2C_CI=""
+          fi
+          
+          if [ -z "$B2C_CI" ] || [ "$B2C_CI" == "null" ] || [ "$B2C_CI" == "" ]; then
+            echo "⚠️  No B2C WebApp CI run found for stage branch"
+            B2C_CONCLUSION="not_found"
+            B2C_PASSED=false
+          else
+            B2C_CONCLUSION=$(echo "$B2C_CI" | jq -r '.conclusion // "unknown"' 2>/dev/null || echo "unknown")
+            B2C_SHA=$(echo "$B2C_CI" | jq -r '.headSha // ""' 2>/dev/null || echo "")
+            echo "  Conclusion: $B2C_CONCLUSION"
+            echo "  SHA: $B2C_SHA"
+            
+            if [ "$B2C_CONCLUSION" == "success" ]; then
+              echo "  ✅ B2C WebApp CI passed"
+              B2C_PASSED=true
+            else
+              echo "  ❌ B2C WebApp CI did not pass (conclusion: $B2C_CONCLUSION)"
+              B2C_PASSED=false
+            fi
+          fi
+          echo "b2c_ci_passed=$B2C_PASSED" >> $GITHUB_OUTPUT
+          echo ""
+          
+          # Check Authentication WebApp CI status for the current stage HEAD
+          echo "📋 Checking Authentication WebApp CI for stage branch..."
+          AUTH_CI=$(gh run list \
+            --branch stage \
+            --workflow "ci-authentication-webapp.yml" \
+            --limit 5 \
+            --json conclusion,headSha,status,createdAt \
+            --jq '.[] | select(.headSha == "'"$STAGE_SHA"'") | .' 2>&1 | head -1) || AUTH_CI=""
+          
+          # If no exact match, get the latest run (might be for a different commit)
+          if [ -z "$AUTH_CI" ] || [ "$AUTH_CI" == "null" ] || [ "$AUTH_CI" == "" ]; then
+            echo "  ℹ️  No CI run found for exact commit, checking latest run..."
+            AUTH_CI=$(gh run list \
+              --branch stage \
+              --workflow "ci-authentication-webapp.yml" \
+              --limit 1 \
+              --json conclusion,headSha,status \
+              --jq '.[0]' 2>&1) || AUTH_CI=""
+          fi
+          
+          if [ -z "$AUTH_CI" ] || [ "$AUTH_CI" == "null" ] || [ "$AUTH_CI" == "" ]; then
+            echo "⚠️  No Authentication WebApp CI run found for stage branch"
+            AUTH_CONCLUSION="not_found"
+            AUTH_PASSED=false
+          else
+            AUTH_CONCLUSION=$(echo "$AUTH_CI" | jq -r '.conclusion // "unknown"' 2>/dev/null || echo "unknown")
+            AUTH_SHA=$(echo "$AUTH_CI" | jq -r '.headSha // ""' 2>/dev/null || echo "")
+            echo "  Conclusion: $AUTH_CONCLUSION"
+            echo "  SHA: $AUTH_SHA"
+            
+            if [ "$AUTH_CONCLUSION" == "success" ]; then
+              echo "  ✅ Authentication WebApp CI passed"
+              AUTH_PASSED=true
+            else
+              echo "  ❌ Authentication WebApp CI did not pass (conclusion: $AUTH_CONCLUSION)"
+              AUTH_PASSED=false
+            fi
+          fi
+          echo "auth_ci_passed=$AUTH_PASSED" >> $GITHUB_OUTPUT
+          echo ""
+          
+          # Determine if we should create PR
+          if [ "$B2C_PASSED" == "true" ] && [ "$AUTH_PASSED" == "true" ]; then
+            echo "✅ Both CI workflows passed - PR can be created/updated"
+            echo "ci_ready=true" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️  Not all CI workflows have passed yet:"
+            echo "  B2C WebApp CI: $B2C_CONCLUSION (passed: $B2C_PASSED)"
+            echo "  Authentication WebApp CI: $AUTH_CONCLUSION (passed: $AUTH_PASSED)"
+            echo "  PR creation will be skipped"
+            echo "ci_ready=false" >> $GITHUB_OUTPUT
+          fi
+          echo ""
+      
+      - name: Set CI ready status (skip check)
+        id: check-ci-status
+        if: github.event.inputs.check_ci != 'true'
+        run: |
+          echo "⏭️  Skipping CI check (check_ci is false)"
+          echo "ci_ready=true" >> $GITHUB_OUTPUT
+          echo "b2c_ci_passed=skipped" >> $GITHUB_OUTPUT
+          echo "auth_ci_passed=skipped" >> $GITHUB_OUTPUT
+
+      - name: Create or update PR
+        id: create-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_EXISTS="${{ steps.check-pr.outputs.pr_exists }}"
+          CI_READY="${{ steps.check-ci-status.outputs.ci_ready }}"
+          CHECK_CI="${{ github.event.inputs.check_ci }}"
+          
+          echo "📋 PR Creation Decision:"
+          echo "  PR exists: $PR_EXISTS"
+          echo "  CI check enabled: $CHECK_CI"
+          echo "  CI ready: $CI_READY"
+          echo ""
+          
+          # If CI check is enabled and CI is not ready, skip
+          if [ "$CHECK_CI" == "true" ] && [ "$CI_READY" != "true" ]; then
+            echo "⏭️  Skipping PR creation: Not all CI workflows have passed"
+            echo "   Re-run the workflow after CI passes, or disable CI check"
+            exit 0
+          fi
+          
+          # Check if there are commits to merge
+          echo "📝 Checking if there are commits to merge..."
+          COMMIT_COUNT=$(git rev-list --count origin/release..origin/stage 2>/dev/null || echo "0")
+          
+          if [ "$COMMIT_COUNT" == "0" ]; then
+            echo "ℹ️  No commits to merge: stage and release branches are in sync"
+            if [ "$PR_EXISTS" == "true" ]; then
+              PR_NUMBER="${{ steps.check-pr.outputs.pr_number }}"
+              echo "   Existing PR #$PR_NUMBER will be left as is (no changes to merge)"
+              echo "   You may want to close it manually if it's no longer needed"
+            else
+              echo "   No PR will be created (branches are already in sync)"
+            fi
+            exit 0
+          fi
+          
+          echo "✅ Found $COMMIT_COUNT commit(s) to merge"
+          echo ""
+          
+          # Get commit messages for PR body
+          echo "📝 Gathering commit information..."
+          COMMITS=$(git log origin/release..origin/stage --oneline --no-decorate | head -20)
+          
+          # Build CI status section
+          CI_STATUS_SECTION=""
+          if [ "$CHECK_CI" == "true" ]; then
+            B2C_STATUS="${{ steps.check-ci-status.outputs.b2c_ci_passed }}"
+            AUTH_STATUS="${{ steps.check-ci-status.outputs.auth_ci_passed }}"
+            if [ "$B2C_STATUS" == "true" ] && [ "$AUTH_STATUS" == "true" ]; then
+              CI_STATUS_SECTION="### ✅ CI Status
+          - ✅ B2C WebApp CI: Passed
+          - ✅ Authentication WebApp CI: Passed
+          
+          "
+            elif [ "$B2C_STATUS" == "skipped" ] || [ "$AUTH_STATUS" == "skipped" ]; then
+              CI_STATUS_SECTION="### ⚠️ CI Status
+          - ℹ️ CI check was skipped
+          
+          "
+            else
+              CI_STATUS_SECTION="### ⚠️ CI Status
+          - B2C WebApp CI: $B2C_STATUS
+          - Authentication WebApp CI: $AUTH_STATUS
+          
+          "
+            fi
+          else
+            CI_STATUS_SECTION="### ℹ️ CI Status
+          - CI check was disabled for this PR
+          
+          "
+          fi
+          
+          # Base title (will be updated with PR number after creation)
+          BASE_TITLE="Release: Merge stage to release"
+          PR_BODY="## PR from Stage to Release
+          
+          This PR was created to merge changes from \`stage\` branch to \`release\` branch.
+
+          ### 📋 Summary
+          - **Source Branch:** \`stage\`
+          - **Target Branch:** \`release\`
+          - **Commits:** $COMMIT_COUNT commit(s)
+          
+          $CI_STATUS_SECTION
+          ### 📝 Recent Commits
+          \`\`\`
+          $COMMITS
+          \`\`\`
+          
+          ### 🔍 Review Checklist
+          - [ ] Review all changes
+          - [ ] Verify CI workflows passed (if applicable)
+          - [ ] Test deployment in staging environment
+          - [ ] Approve and merge when ready
+          
+          ---
+          *This PR was created by GitHub Actions workflow*"
+          
+          if [ "$PR_EXISTS" == "true" ]; then
+            PR_NUMBER="${{ steps.check-pr.outputs.pr_number }}"
+            PR_URL="${{ steps.check-pr.outputs.pr_url }}"
+            
+            echo "📋 Updating existing PR #$PR_NUMBER..."
+            
+            # Update PR title with number
+            UPDATED_TITLE="Release PR #$PR_NUMBER: Merge stage to release"
+            
+            # Update PR body and title with latest information
+            gh pr edit "$PR_NUMBER" \
+              --body "$PR_BODY" \
+              --title "$UPDATED_TITLE" 2>&1 || echo "⚠️  Could not update PR (might be unchanged)"
+            
+            echo "✅ PR updated: $PR_URL"
+            echo "pr_created=false" >> $GITHUB_OUTPUT
+            echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+            echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
+            echo "pr_title=$UPDATED_TITLE" >> $GITHUB_OUTPUT
+          else
+            echo "🆕 Creating new PR from stage to release..."
+            
+            # Create the PR with base title (labels are optional)
+            PR_RESULT=$(gh pr create \
+              --base release \
+              --head stage \
+              --title "$BASE_TITLE" \
+              --body "$PR_BODY" \
+              --label "automated,release" 2>&1) || {
+              # If creation fails due to labels, try without labels
+              if echo "$PR_RESULT" | grep -qi "label"; then
+                echo "⚠️  Label assignment failed, retrying without labels..."
+                PR_RESULT=$(gh pr create \
+                  --base release \
+                  --head stage \
+                  --title "$BASE_TITLE" \
+                  --body "$PR_BODY" 2>&1) || {
+                  echo "❌ Failed to create PR: $PR_RESULT"
+                  exit 1
+                }
+              else
+                echo "❌ Failed to create PR: $PR_RESULT"
+                exit 1
+              fi
+            }
+            
+            # Extract PR URL and number from output
+            PR_URL=$(echo "$PR_RESULT" | grep -o 'https://github.com[^ ]*' | head -1)
+            PR_NUMBER=$(echo "$PR_URL" | grep -oE '/pull/[0-9]+' | grep -oE '[0-9]+' || echo "")
+            
+            if [ -z "$PR_URL" ] || [ -z "$PR_NUMBER" ]; then
+              echo "⚠️  Could not extract PR URL/number from output: $PR_RESULT"
+              echo "   PR may have been created - please check manually"
+              echo "pr_created=true" >> $GITHUB_OUTPUT
+              echo "pr_number=unknown" >> $GITHUB_OUTPUT
+              echo "pr_url=unknown" >> $GITHUB_OUTPUT
+              echo "pr_title=$BASE_TITLE" >> $GITHUB_OUTPUT
+            else
+              echo "✅ PR created successfully! Updating title with PR number..."
+              
+              # Update PR title to include PR number
+              UPDATED_TITLE="Release PR #$PR_NUMBER: Merge stage to release"
+              gh pr edit "$PR_NUMBER" --title "$UPDATED_TITLE" 2>&1 || {
+                echo "⚠️  Could not update PR title (PR was created with base title)"
+                UPDATED_TITLE="$BASE_TITLE"
+              }
+              
+              echo "✅ PR created and updated:"
+              echo "  Number: #$PR_NUMBER"
+              echo "  Title: $UPDATED_TITLE"
+              echo "  URL: $PR_URL"
+              
+              echo "pr_created=true" >> $GITHUB_OUTPUT
+              echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+              echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
+              echo "pr_title=$UPDATED_TITLE" >> $GITHUB_OUTPUT
+            fi
+          fi
+          echo ""
+
+      - name: Summary
+        run: |
+          echo "╔════════════════════════════════════════════════════════════╗"
+          echo "║                    Workflow Summary                        ║"
+          echo "╚════════════════════════════════════════════════════════════╝"
+          echo ""
+          PR_CREATED="${{ steps.create-pr.outputs.pr_created }}"
+          PR_NUMBER="${{ steps.create-pr.outputs.pr_number }}"
+          PR_URL="${{ steps.create-pr.outputs.pr_url }}"
+          
+          if [ "$PR_CREATED" == "true" ]; then
+            echo "✅ New PR created: $PR_URL"
+          elif [ -n "$PR_NUMBER" ]; then
+            echo "✅ Existing PR updated: $PR_URL"
+          else
+            echo "⏭️  PR creation skipped (waiting for CI workflows to complete)"
+          fi
+          echo ""
+

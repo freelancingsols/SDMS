@@ -1,5 +1,6 @@
 name: Create PR from Stage to Release
 
+# This workflow ONLY runs on manual dispatch - it will NEVER auto-trigger
 on:
   workflow_dispatch:
     inputs:
@@ -219,7 +220,7 @@ jobs:
           echo ""
       
       - name: Set CI ready status (skip check)
-        id: check-ci-status
+        id: skip-ci-status
         if: github.event.inputs.check_ci != 'true'
         run: |
           echo "⏭️  Skipping CI check (check_ci is false)"
@@ -233,7 +234,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PR_EXISTS="${{ steps.check-pr.outputs.pr_exists }}"
-          CI_READY="${{ steps.check-ci-status.outputs.ci_ready }}"
+          # Get CI ready status from either check-ci-status or skip-ci-status step
+          CI_READY="${{ steps.check-ci-status.outputs.ci_ready || steps.skip-ci-status.outputs.ci_ready }}"
           CHECK_CI="${{ github.event.inputs.check_ci }}"
           
           echo "📋 PR Creation Decision:"
@@ -277,6 +279,9 @@ jobs:
           if [ "$CHECK_CI" == "true" ]; then
             B2C_STATUS="${{ steps.check-ci-status.outputs.b2c_ci_passed }}"
             AUTH_STATUS="${{ steps.check-ci-status.outputs.auth_ci_passed }}"
+          else
+            B2C_STATUS="${{ steps.skip-ci-status.outputs.b2c_ci_passed }}"
+            AUTH_STATUS="${{ steps.skip-ci-status.outputs.auth_ci_passed }}"
             if [ "$B2C_STATUS" == "true" ] && [ "$AUTH_STATUS" == "true" ]; then
               CI_STATUS_SECTION="### ✅ CI Status
           - ✅ B2C WebApp CI: Passed

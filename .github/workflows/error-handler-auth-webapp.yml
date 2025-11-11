@@ -27,10 +27,6 @@ on:
 
 jobs:
   analyze-and-report:
-    # Run only if the workflow failed or if manually triggered
-    if: |
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure') ||
-      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -45,39 +41,58 @@ jobs:
           fetch-depth: 0  # Fetch all history for comparison
           # For workflow_run, checkout the commit from the triggering workflow
           ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+        continue-on-error: true
 
       - name: Configure GitHub CLI
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "$GITHUB_TOKEN" | gh auth login --with-token
-          gh auth status
+          # GitHub CLI automatically uses GITHUB_TOKEN in GitHub Actions
+          # No explicit authentication needed - GITHUB_TOKEN is automatically available
+          gh auth status || echo "Note: GitHub CLI will use GITHUB_TOKEN automatically"
 
       - name: Determine workflow run
         id: determine-run
         run: |
+          SHOULD_SKIP="false"
+          
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            if [ -n "${{ inputs.workflow_run_id }}" ]; then
-              RUN_ID="${{ inputs.workflow_run_id }}"
+            if [ -n "${{ github.event.inputs.workflow_run_id }}" ]; then
+              RUN_ID="${{ github.event.inputs.workflow_run_id }}"
             else
               # Find latest failed run for Authentication WebApp
-              WORKFLOW_NAME="${{ inputs.workflow_name || 'CI - Authentication WebApp (Build, Test, and Lint)' }}"
+              WORKFLOW_NAME="${{ github.event.inputs.workflow_name || 'CI - Authentication WebApp (Build, Test, and Lint)' }}"
               RUN_ID=$(gh run list --workflow="$WORKFLOW_NAME" --status failure --limit 1 --json databaseId --jq '.[0].databaseId' || echo "")
             fi
           else
             RUN_ID="${{ github.event.workflow_run.id }}"
+            CONCLUSION="${{ github.event.workflow_run.conclusion }}"
+            
+            # Skip if workflow didn't fail
+            if [ "$CONCLUSION" != "failure" ] && [ "$CONCLUSION" != "cancelled" ] && [ "$CONCLUSION" != "timed_out" ] && [ "$CONCLUSION" != "action_required" ]; then
+              echo "⚠️ Workflow concluded with: $CONCLUSION (not a failure)"
+              echo "Skipping error analysis."
+              SHOULD_SKIP="true"
+              RUN_ID=""
+            fi
           fi
           
-          if [ -z "$RUN_ID" ] || [ "$RUN_ID" == "null" ]; then
+          if [ "$SHOULD_SKIP" != "true" ] && ([ -z "$RUN_ID" ] || [ "$RUN_ID" == "null" ]); then
             echo "❌ No failed workflow run found"
-            exit 1
+            SHOULD_SKIP="true"
+            RUN_ID=""
           fi
           
           echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
-          echo "✅ Using workflow run ID: $RUN_ID"
+          echo "should_skip=$SHOULD_SKIP" >> $GITHUB_OUTPUT
+          
+          if [ "$SHOULD_SKIP" == "true" ]; then
+            echo "⏭️ Skipping error analysis"
+          else
+            echo "✅ Using workflow run ID: $RUN_ID"
+          fi
 
       - name: Get workflow run details
         id: workflow-details
+        if: steps.determine-run.outputs.should_skip != 'true' && steps.determine-run.outputs.run_id != ''
         run: |
           RUN_ID="${{ steps.determine-run.outputs.run_id }}"
           
@@ -113,7 +128,7 @@ jobs:
           echo "  Run URL: $RUN_URL"
 
       - name: Checkout correct commit
-        if: github.event_name == 'workflow_run'
+        if: github.event_name == 'workflow_run' && steps.determine-run.outputs.should_skip != 'true'
         run: |
           COMMIT_SHA="${{ steps.workflow-details.outputs.commit_sha }}"
           if [ -n "$COMMIT_SHA" ] && [ "$COMMIT_SHA" != "unknown" ]; then
@@ -123,6 +138,7 @@ jobs:
 
       - name: Find last successful build
         id: last-success
+        if: steps.determine-run.outputs.should_skip != 'true'
         run: |
           WORKFLOW_NAME="${{ steps.workflow-details.outputs.workflow_name }}"
           BRANCH="${{ steps.workflow-details.outputs.branch }}"
@@ -157,6 +173,7 @@ jobs:
 
       - name: Download workflow logs
         id: download-logs
+        if: steps.determine-run.outputs.should_skip != 'true' && steps.determine-run.outputs.run_id != ''
         run: |
           RUN_ID="${{ steps.determine-run.outputs.run_id }}"
           
@@ -200,6 +217,7 @@ jobs:
 
       - name: Extract comprehensive error details
         id: extract-errors
+        if: steps.determine-run.outputs.should_skip != 'true' && steps.download-logs.outputs.logs_file != ''
         run: |
           LOG_FILE="${{ steps.download-logs.outputs.logs_file }}"
           LAST_SUCCESS_SHA="${{ steps.last-success.outputs.last_success_sha }}"
@@ -376,6 +394,7 @@ jobs:
 
       - name: Generate actionable fix suggestions
         id: generate-fixes
+        if: steps.determine-run.outputs.should_skip != 'true' && steps.download-logs.outputs.logs_file != ''
         run: |
           LOG_FILE="${{ steps.download-logs.outputs.logs_file }}"
           FIX_SUGGESTIONS="fix-suggestions-auth.md"
@@ -485,6 +504,7 @@ jobs:
           echo "✅ Fix suggestions generated: $FIX_SUGGESTIONS"
 
       - name: Create GitHub Issue with comprehensive report
+        if: steps.determine-run.outputs.should_skip != 'true' && steps.extract-errors.outputs.error_report_file != ''
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -580,39 +600,76 @@ jobs:
           fi
 
       - name: Generate workflow summary
+        if: always()
         run: |
-          echo "## 🔴 Authentication WebApp Workflow Failure Analysis" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Application:** Authentication WebApp" >> $GITHUB_STEP_SUMMARY
-          echo "**Workflow:** ${{ steps.workflow-details.outputs.workflow_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Status:** ❌ Failed" >> $GITHUB_STEP_SUMMARY
-          echo "**Run ID:** ${{ steps.determine-run.outputs.run_id }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Total Errors:** ${{ steps.extract-errors.outputs.total_errors }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Branch:** ${{ steps.workflow-details.outputs.branch }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Commit:** ${{ steps.workflow-details.outputs.commit_sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**View Logs:** [${{ steps.workflow-details.outputs.run_url }}](${{ steps.workflow-details.outputs.run_url }})" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📊 Error Breakdown" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "See the GitHub issue created above for comprehensive error details including:" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ All C# compilation errors with file paths and line numbers" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ All TypeScript/Angular errors with file paths and line numbers" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ NPM and dependency errors" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Build configuration errors" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Railway deployment errors" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ .NET build errors" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Test failures" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ File changes since last successful build" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Step-by-step fix suggestions for Cursor AI" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🔧 Quick Actions" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "1. Review the GitHub issue created above" >> $GITHUB_STEP_SUMMARY
-          echo "2. Use Cursor AI to fix errors using the detailed report" >> $GITHUB_STEP_SUMMARY
-          echo "3. Re-run the failed workflow to verify fixes" >> $GITHUB_STEP_SUMMARY
-          echo "4. Close the issue once the build succeeds" >> $GITHUB_STEP_SUMMARY
+          SHOULD_SKIP="${{ steps.determine-run.outputs.should_skip }}"
+          
+          if [ "$SHOULD_SKIP" == "true" ]; then
+            echo "## ℹ️ Authentication WebApp Error Handler" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            if [ "${{ github.event_name }}" == "workflow_run" ]; then
+              CONCLUSION="${{ github.event.workflow_run.conclusion }}"
+              echo "**Workflow Conclusion:** $CONCLUSION" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              if [ "$CONCLUSION" == "success" ]; then
+                echo "✅ The workflow succeeded. No error analysis needed." >> $GITHUB_STEP_SUMMARY
+              else
+                echo "⚠️ Workflow concluded with: $CONCLUSION" >> $GITHUB_STEP_SUMMARY
+                echo "This error handler only processes failed workflows. Manual trigger may be needed." >> $GITHUB_STEP_SUMMARY
+              fi
+            else
+              echo "**Status:** Skipped - No failed workflow run found" >> $GITHUB_STEP_SUMMARY
+              echo "Use workflow_dispatch with a workflow_run_id to analyze a specific failed run." >> $GITHUB_STEP_SUMMARY
+            fi
+          elif [ -n "$SHOULD_SKIP" ] && [ "$SHOULD_SKIP" == "false" ]; then
+            echo "## 🔴 Authentication WebApp Workflow Failure Analysis" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Application:** Authentication WebApp" >> $GITHUB_STEP_SUMMARY
+            WORKFLOW_NAME="${{ steps.workflow-details.outputs.workflow_name }}"
+            RUN_ID="${{ steps.determine-run.outputs.run_id }}"
+            TOTAL_ERRORS="${{ steps.extract-errors.outputs.total_errors }}"
+            BRANCH="${{ steps.workflow-details.outputs.branch }}"
+            COMMIT_SHA="${{ steps.workflow-details.outputs.commit_sha }}"
+            RUN_URL="${{ steps.workflow-details.outputs.run_url }}"
+            
+            echo "**Workflow:** ${WORKFLOW_NAME:-Unknown}" >> $GITHUB_STEP_SUMMARY
+            echo "**Status:** ❌ Failed" >> $GITHUB_STEP_SUMMARY
+            echo "**Run ID:** ${RUN_ID:-Unknown}" >> $GITHUB_STEP_SUMMARY
+            echo "**Total Errors:** ${TOTAL_ERRORS:-0}" >> $GITHUB_STEP_SUMMARY
+            echo "**Branch:** ${BRANCH:-unknown}" >> $GITHUB_STEP_SUMMARY
+            echo "**Commit:** ${COMMIT_SHA:-unknown}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            if [ -n "$RUN_URL" ]; then
+              echo "**View Logs:** [$RUN_URL]($RUN_URL)" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "### 📊 Error Breakdown" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "See the GitHub issue created above for comprehensive error details including:" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ All C# compilation errors with file paths and line numbers" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ All TypeScript/Angular errors with file paths and line numbers" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ NPM and dependency errors" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Build configuration errors" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Railway deployment errors" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ .NET build errors" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Test failures" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ File changes since last successful build" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Step-by-step fix suggestions for Cursor AI" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 🔧 Quick Actions" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "1. Review the GitHub issue created above" >> $GITHUB_STEP_SUMMARY
+            echo "2. Use Cursor AI to fix errors using the detailed report" >> $GITHUB_STEP_SUMMARY
+            echo "3. Re-run the failed workflow to verify fixes" >> $GITHUB_STEP_SUMMARY
+            echo "4. Close the issue once the build succeeds" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ⚠️ Authentication WebApp Error Handler" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Status:** Could not determine workflow status" >> $GITHUB_STEP_SUMMARY
+            echo "The workflow may have encountered an error during setup." >> $GITHUB_STEP_SUMMARY
+            echo "Check the workflow logs for details." >> $GITHUB_STEP_SUMMARY
+          fi
 
       - name: Upload error reports as artifacts
         uses: actions/upload-artifact@v4

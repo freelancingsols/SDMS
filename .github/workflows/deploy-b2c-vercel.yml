@@ -13,29 +13,114 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    # Only deploy if:
-    # 1. CI workflow completed successfully (for workflow_run trigger)
-    # 2. Or manual dispatch (workflow_dispatch)
-    # 3. And on release branch (for workflow_run) or any branch (for manual dispatch)
+    # Deployment rules:
+    # 1. For workflow_run: Only deploy if CI succeeded AND CI ran on release branch
+    # 2. For workflow_dispatch: Allow manual deployment from any branch
     if: |
-      (github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.head_branch == 'release' || github.event.workflow_run.head_branch == 'Release')) ||
+      (github.event_name == 'workflow_run' && 
+       github.event.workflow_run.conclusion == 'success' && 
+       (github.event.workflow_run.head_branch == 'release' || github.event.workflow_run.head_branch == 'Release')) ||
       github.event_name == 'workflow_dispatch'
     steps:
-      - name: Verify CI Status
+      - name: Deployment Summary
+        run: |
+          echo "╔════════════════════════════════════════════════════════════╗"
+          echo "║         B2C WebApp Deployment to Vercel                    ║"
+          echo "╚════════════════════════════════════════════════════════════╝"
+          echo ""
+          echo "📦 Application: B2C WebApp"
+          echo "🚀 Target Platform: Vercel"
+          echo "🌿 Trigger: ${{ github.event_name }}"
+          if [ "${{ github.event_name }}" == "workflow_run" ]; then
+            echo "📋 CI Workflow: ${{ github.event.workflow_run.name }}"
+            echo "🌿 CI Branch: ${{ github.event.workflow_run.head_branch }}"
+            echo "✅ CI Status: ${{ github.event.workflow_run.conclusion }}"
+            echo "🔖 CI Commit: ${{ github.event.workflow_run.head_sha }}"
+          else
+            echo "🌿 Branch: ${{ github.ref }}"
+            echo "🔖 Commit: ${{ github.sha }}"
+          fi
+          echo ""
+          echo "📝 Deployment will:"
+          echo "   1. Verify CI status and release branch"
+          echo "   2. Sync environment variables to Vercel"
+          echo "   3. Build Angular application"
+          echo "   4. Deploy to Vercel production"
+          echo ""
+
+      - name: Verify CI Status and Application
         if: github.event_name == 'workflow_run'
         run: |
-          echo "🔍 Checking CI workflow status..."
-          echo "Workflow Run ID: ${{ github.event.workflow_run.id }}"
-          echo "Workflow Run Conclusion: ${{ github.event.workflow_run.conclusion }}"
-          echo "Workflow Run Branch: ${{ github.event.workflow_run.head_branch }}"
-          echo "Workflow Run Commit SHA: ${{ github.event.workflow_run.head_sha }}"
+          echo "🔍 Verifying CI workflow status for B2C WebApp deployment..."
           echo ""
-          if [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
-            echo "❌ CI workflow did not complete successfully. Deployment cancelled."
-            echo "   Conclusion: ${{ github.event.workflow_run.conclusion }}"
+          echo "📋 Deployment Information:"
+          echo "  Application: B2C WebApp"
+          echo "  Target: Vercel"
+          echo "  Workflow Run ID: ${{ github.event.workflow_run.id }}"
+          echo "  CI Workflow: ${{ github.event.workflow_run.name }}"
+          echo "  Workflow Run Conclusion: ${{ github.event.workflow_run.conclusion }}"
+          echo "  Workflow Run Branch: ${{ github.event.workflow_run.head_branch }}"
+          echo "  Workflow Run Commit SHA: ${{ github.event.workflow_run.head_sha }}"
+          echo ""
+          
+          # Verify this is the correct CI workflow
+          CI_WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
+          if [[ "$CI_WORKFLOW_NAME" != *"B2C WebApp"* ]]; then
+            echo "⚠️  WARNING: This deployment is for B2C WebApp, but CI workflow name doesn't match: $CI_WORKFLOW_NAME"
+            echo "   Expected: CI workflow should contain 'B2C WebApp'"
+            echo "   Continuing anyway, but please verify this is the correct deployment."
+          else
+            echo "✅ Verified: This is the B2C WebApp CI workflow"
+          fi
+          echo ""
+          
+          # Verify branch is release
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
+          if [ "$BRANCH" != "release" ] && [ "$BRANCH" != "Release" ]; then
+            echo "❌ Deployment cancelled: CI workflow ran on branch '$BRANCH', but deployment only runs from 'release' branch"
+            echo "   Current branch: $BRANCH"
+            echo "   Required branch: release or Release"
             exit 1
           fi
-          echo "✅ CI workflow completed successfully. Proceeding with deployment."
+          echo "✅ Verified: CI workflow ran on release branch ($BRANCH)"
+          echo ""
+          
+          # Verify CI succeeded
+          CONCLUSION="${{ github.event.workflow_run.conclusion }}"
+          if [ "$CONCLUSION" != "success" ]; then
+            echo "❌ CI workflow did not complete successfully. Deployment cancelled."
+            echo "   Conclusion: $CONCLUSION"
+            echo "   Only successful CI runs trigger deployment."
+            exit 1
+          fi
+          echo "✅ Verified: CI workflow completed successfully"
+          echo ""
+          echo "🚀 All checks passed. Proceeding with B2C WebApp deployment to Vercel..."
+
+      - name: Verify which application triggered deployment
+        if: github.event_name == 'workflow_run'
+        run: |
+          echo "🔍 Determining which application's CI triggered this deployment..."
+          echo ""
+          
+          CI_WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
+          
+          echo "CI Workflow: $CI_WORKFLOW_NAME"
+          echo "Branch: $BRANCH"
+          echo ""
+          
+          # Check if this is B2C WebApp CI
+          if [[ "$CI_WORKFLOW_NAME" == *"B2C WebApp"* ]]; then
+            echo "✅ Confirmed: B2C WebApp CI workflow triggered this deployment"
+            echo "   This deployment will deploy B2C WebApp to Vercel"
+          else
+            echo "⚠️  WARNING: Unexpected CI workflow name: $CI_WORKFLOW_NAME"
+            echo "   This deployment workflow is for B2C WebApp"
+            echo "   Please verify this is the correct deployment"
+          fi
+          echo ""
+          echo "📌 Deployment will proceed for: B2C WebApp → Vercel"
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -43,6 +128,7 @@ jobs:
           # For workflow_run trigger, use the commit SHA from the CI workflow
           # For manual dispatch, use the default branch/ref
           ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+          fetch-depth: 0  # Fetch full history for better operations
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -537,6 +623,262 @@ jobs:
           echo ""
         shell: bash
 
+      - name: Verify Vercel project structure
+        working-directory: SDMSApps/SDMS.B2CWebApp
+        run: |
+          echo "🔍 Verifying project structure..."
+          echo "Current directory: $(pwd)"
+          echo ""
+          echo "Checking for required files:"
+          ls -la || echo "Could not list directory"
+          echo ""
+          if [ -f "vercel.json" ]; then
+            echo "✅ vercel.json exists"
+            cat vercel.json
+          else
+            echo "❌ vercel.json not found!"
+            exit 1
+          fi
+          echo ""
+          if [ -d "ClientApp" ]; then
+            echo "✅ ClientApp directory exists"
+            ls -la ClientApp/ | head -10
+          else
+            echo "❌ ClientApp directory not found!"
+            exit 1
+          fi
+          echo ""
+          if [ -f "ClientApp/package.json" ]; then
+            echo "✅ ClientApp/package.json exists"
+          else
+            echo "❌ ClientApp/package.json not found!"
+            exit 1
+          fi
+          echo ""
+          if [ -f "ClientApp/scripts/build-vercel.js" ]; then
+            echo "✅ ClientApp/scripts/build-vercel.js exists"
+          else
+            echo "❌ ClientApp/scripts/build-vercel.js not found!"
+            exit 1
+          fi
+          echo ""
+          echo "✅ All required files and directories are present"
+
+      - name: Install Vercel CLI
+        run: |
+          echo "📦 Installing Vercel CLI..."
+          npm install -g vercel@latest
+          vercel --version
+          echo ""
+          
+          # Verify Vercel CLI can authenticate
+          export VERCEL_TOKEN="${{ secrets.VERCEL_TOKEN }}"
+          export VERCEL_ORG_ID="${{ vars.VERCEL_ORG_ID }}"
+          export VERCEL_PROJECT_ID="${{ vars.VERCEL_PROJECT_ID }}"
+          
+          echo "Testing Vercel CLI authentication..."
+          echo "VERCEL_TOKEN is set: $([ -n "$VERCEL_TOKEN" ] && echo "yes" || echo "no")"
+          echo "VERCEL_ORG_ID: $VERCEL_ORG_ID"
+          echo "VERCEL_PROJECT_ID: $VERCEL_PROJECT_ID"
+          echo ""
+
+      - name: Update Vercel project root directory setting
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+        run: |
+          echo "🔧 Updating Vercel project root directory setting..."
+          echo ""
+          
+          # Install jq if not available
+          if ! command -v jq &> /dev/null; then
+            echo "Installing jq..."
+            sudo apt-get update && sudo apt-get install -y jq || echo "jq installation skipped"
+          fi
+          
+          # The Root Directory should be set to the path relative to repo root where vercel.json is located
+          ROOT_DIRECTORY="SDMSApps/SDMS.B2CWebApp"
+          
+          echo "Target Root Directory: $ROOT_DIRECTORY"
+          echo ""
+          
+          # First, get current project settings to verify
+          echo "📥 Fetching current project settings..."
+          CURRENT_SETTINGS=$(curl -s -X GET \
+            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            -H "Content-Type: application/json" 2>&1)
+          
+          if echo "$CURRENT_SETTINGS" | grep -q "rootDirectory"; then
+            CURRENT_ROOT=$(echo "$CURRENT_SETTINGS" | jq -r '.rootDirectory // "not set"' 2>/dev/null || echo "unknown")
+            echo "Current Root Directory: $CURRENT_ROOT"
+            
+            if [ "$CURRENT_ROOT" == "$ROOT_DIRECTORY" ]; then
+              echo "✅ Root Directory is already set correctly to: $ROOT_DIRECTORY"
+              
+              # Verify it's actually set by checking again
+              VERIFY_SETTINGS=$(curl -s -X GET \
+                "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
+                -H "Authorization: Bearer $VERCEL_TOKEN" \
+                -H "Content-Type: application/json" 2>&1)
+              VERIFY_ROOT=$(echo "$VERIFY_SETTINGS" | jq -r '.rootDirectory // "not set"' 2>/dev/null || echo "unknown")
+              
+              if [ "$VERIFY_ROOT" == "$ROOT_DIRECTORY" ]; then
+                echo "✅ Verified: Root Directory is correctly set to: $ROOT_DIRECTORY"
+                exit 0
+              else
+                echo "⚠️  Verification failed: Root Directory shows as '$VERIFY_ROOT' instead of '$ROOT_DIRECTORY'"
+                echo "   Will attempt to update..."
+              fi
+            fi
+          else
+            echo "⚠️  Could not fetch current settings, will attempt to update"
+          fi
+          echo ""
+          
+          # Update project configuration using Vercel API
+          echo "🔄 Updating Root Directory to: $ROOT_DIRECTORY"
+          echo "   API Endpoint: https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID"
+          echo "   Team ID: $VERCEL_ORG_ID"
+          echo ""
+          
+          # Try updating via API
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X PATCH \
+            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"rootDirectory\": \"$ROOT_DIRECTORY\"
+            }" 2>&1)
+          
+          HTTP_STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
+          RESPONSE_BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS:/d')
+          
+          echo "API Response Status: $HTTP_STATUS"
+          echo "API Response Body:"
+          echo "$RESPONSE_BODY" | jq '.' 2>/dev/null || echo "$RESPONSE_BODY"
+          echo ""
+          
+          if [ "$HTTP_STATUS" == "200" ] || [ "$HTTP_STATUS" == "201" ]; then
+            echo "✅ API call successful (HTTP $HTTP_STATUS)"
+            echo "$RESPONSE_BODY" | jq '.' 2>/dev/null || echo "$RESPONSE_BODY"
+            echo ""
+            
+            # Wait a moment for the update to propagate
+            echo "⏳ Waiting 3 seconds for settings to propagate..."
+            sleep 3
+            echo ""
+            
+            # Verify the update was successful
+            echo "🔍 Verifying Root Directory was updated..."
+            VERIFY_SETTINGS=$(curl -s -X GET \
+              "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
+              -H "Authorization: Bearer $VERCEL_TOKEN" \
+              -H "Content-Type: application/json" 2>&1)
+            
+            if echo "$VERIFY_SETTINGS" | grep -q "rootDirectory"; then
+              VERIFY_ROOT=$(echo "$VERIFY_SETTINGS" | jq -r '.rootDirectory // "not set"' 2>/dev/null || echo "unknown")
+              echo "Verified Root Directory: $VERIFY_ROOT"
+              
+              if [ "$VERIFY_ROOT" == "$ROOT_DIRECTORY" ]; then
+                echo "✅ SUCCESS: Root Directory is now set to: $ROOT_DIRECTORY"
+              else
+                echo "❌ ERROR: Root Directory verification failed!"
+                echo "   Expected: $ROOT_DIRECTORY"
+                echo "   Actual: $VERIFY_ROOT"
+                echo ""
+                echo "   The API call succeeded but the setting was not updated correctly."
+                echo "   This might be a Vercel API issue or permission problem."
+                echo ""
+                echo "   Please update manually in Vercel dashboard:"
+                echo "   1. Go to https://vercel.com/dashboard"
+                echo "   2. Select your team and project"
+                echo "   3. Go to Settings → General"
+                echo "   4. Set 'Root Directory' to: $ROOT_DIRECTORY"
+                echo "   5. Click 'Save'"
+                exit 1
+              fi
+            else
+              echo "⚠️  Could not verify Root Directory update (response doesn't contain rootDirectory)"
+              echo "   Response: $VERIFY_SETTINGS"
+              echo "   Continuing anyway, but deployment may fail if setting is incorrect."
+            fi
+          else
+            echo "❌ ERROR: Failed to update Root Directory via API (HTTP $HTTP_STATUS)"
+            echo "Response: $RESPONSE_BODY"
+            echo ""
+            echo "❌ DEPLOYMENT WILL FAIL:"
+            echo "   The Root Directory in Vercel project settings must be updated manually."
+            echo ""
+            echo "   Steps to fix:"
+            echo "   1. Go to https://vercel.com/dashboard"
+            echo "   2. Select your team and project: $VERCEL_PROJECT_ID"
+            echo "   3. Go to Settings → General"
+            echo "   4. Find 'Root Directory' setting"
+            echo "   5. Change it to: $ROOT_DIRECTORY"
+            echo "   6. Click 'Save'"
+            echo ""
+            echo "   Current error: The API call failed with HTTP $HTTP_STATUS"
+            echo "   This might be due to:"
+            echo "   - Invalid VERCEL_TOKEN"
+            echo "   - Invalid VERCEL_ORG_ID or VERCEL_PROJECT_ID"
+            echo "   - Insufficient permissions"
+            echo "   - Vercel API issue"
+            echo ""
+            echo "   After fixing manually, re-run this workflow."
+            exit 1
+          fi
+          echo ""
+
+      - name: Verify Vercel project settings before deployment
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+        run: |
+          echo "🔍 Final verification of Vercel project settings..."
+          echo ""
+          
+          ROOT_DIRECTORY="SDMSApps/SDMS.B2CWebApp"
+          
+          # Get the latest project settings
+          FINAL_SETTINGS=$(curl -s -X GET \
+            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            -H "Content-Type: application/json" 2>&1)
+          
+          if echo "$FINAL_SETTINGS" | grep -q "rootDirectory"; then
+            FINAL_ROOT=$(echo "$FINAL_SETTINGS" | jq -r '.rootDirectory // "not set"' 2>/dev/null || echo "unknown")
+            echo "Current Root Directory in Vercel: $FINAL_ROOT"
+            echo "Expected Root Directory: $ROOT_DIRECTORY"
+            echo ""
+            
+            if [ "$FINAL_ROOT" != "$ROOT_DIRECTORY" ]; then
+              echo "❌ ERROR: Root Directory mismatch!"
+              echo "   Vercel has: $FINAL_ROOT"
+              echo "   Expected: $ROOT_DIRECTORY"
+              echo ""
+              echo "   This will cause deployment to fail."
+              echo "   Please update manually in Vercel dashboard or check API permissions."
+              echo ""
+              echo "   Manual fix:"
+              echo "   1. Go to https://vercel.com/dashboard"
+              echo "   2. Select project: $VERCEL_PROJECT_ID"
+              echo "   3. Settings → General → Root Directory"
+              echo "   4. Set to: $ROOT_DIRECTORY"
+              echo "   5. Save"
+              exit 1
+            else
+              echo "✅ Root Directory is correctly set to: $ROOT_DIRECTORY"
+            fi
+          else
+            echo "⚠️  Could not verify Root Directory from API response"
+            echo "   Response: $FINAL_SETTINGS"
+            echo "   Continuing with deployment, but it may fail if setting is incorrect."
+          fi
+          echo ""
+
       - name: Deploy to Vercel
         uses: amondnet/vercel-action@v25
         env:
@@ -548,4 +890,5 @@ jobs:
           vercel-args: '--prod --force'
           working-directory: SDMSApps/SDMS.B2CWebApp
           scope: ${{ vars.VERCEL_ORG_ID }}
+        continue-on-error: false
 

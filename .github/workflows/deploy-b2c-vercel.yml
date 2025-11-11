@@ -1,23 +1,48 @@
 name: Deploy B2C WebApp to Vercel
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI - B2C WebApp (Build, Test, and Lint)"]
+    types:
+      - completed
     branches:
       - release
       - Release
-    paths:
-      - 'SDMSApps/SDMS.B2CWebApp/**'
-      - '.github/workflows/deploy-b2c-vercel.yml'
   workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    # Restrict production deploys to release branch
-    if: github.ref == 'refs/heads/release' || github.ref == 'refs/heads/Release' || github.event_name == 'workflow_dispatch'
+    # Only deploy if:
+    # 1. CI workflow completed successfully (for workflow_run trigger)
+    # 2. Or manual dispatch (workflow_dispatch)
+    # 3. And on release branch (for workflow_run) or any branch (for manual dispatch)
+    if: |
+      (github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.head_branch == 'release' || github.event.workflow_run.head_branch == 'Release')) ||
+      github.event_name == 'workflow_dispatch'
     steps:
+      - name: Verify CI Status
+        if: github.event_name == 'workflow_run'
+        run: |
+          echo "🔍 Checking CI workflow status..."
+          echo "Workflow Run ID: ${{ github.event.workflow_run.id }}"
+          echo "Workflow Run Conclusion: ${{ github.event.workflow_run.conclusion }}"
+          echo "Workflow Run Branch: ${{ github.event.workflow_run.head_branch }}"
+          echo "Workflow Run Commit SHA: ${{ github.event.workflow_run.head_sha }}"
+          echo ""
+          if [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
+            echo "❌ CI workflow did not complete successfully. Deployment cancelled."
+            echo "   Conclusion: ${{ github.event.workflow_run.conclusion }}"
+            exit 1
+          fi
+          echo "✅ CI workflow completed successfully. Proceeding with deployment."
+
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # For workflow_run trigger, use the commit SHA from the CI workflow
+          # For manual dispatch, use the default branch/ref
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -468,9 +493,49 @@ jobs:
           echo "✅ Environment variable listing complete"
         shell: bash
 
-      - name: Build WebApp
-        working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
-        run: npm ci && npm run build:prod
+      - name: Verify Environment Variables Are Set in Vercel
+        working-directory: SDMSApps/SDMS.B2CWebApp
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+        run: |
+          echo "🔍 Verifying environment variables are set in Vercel before deployment..."
+          echo ""
+          
+          # Function to verify environment variable exists
+          verify_var_exists() {
+            local var_name=$1
+            local environment=$2
+            
+            if vercel env ls "$environment" --token="$VERCEL_TOKEN" 2>/dev/null | grep -q "^$var_name"; then
+              echo "  ✅ $var_name exists in $environment environment"
+              return 0
+            else
+              echo "  ❌ $var_name NOT found in $environment environment"
+              return 1
+            fi
+          }
+          
+          echo "=== Verifying Production Environment Variables ==="
+          all_exist=true
+          verify_var_exists "SDMS_B2CWebApp_url" "production" || all_exist=false
+          verify_var_exists "SDMS_AuthenticationWebApp_url" "production" || all_exist=false
+          verify_var_exists "SDMS_AuthenticationWebApp_clientid" "production" || all_exist=false
+          verify_var_exists "SDMS_AuthenticationWebApp_redirectUri" "production" || all_exist=false
+          verify_var_exists "SDMS_AuthenticationWebApp_scope" "production" || all_exist=false
+          
+          echo ""
+          if [ "$all_exist" = true ]; then
+            echo "✅ All environment variables are set in Vercel Production environment"
+            echo "   These will be available during the build process"
+          else
+            echo "⚠️  WARNING: Some environment variables are missing in Vercel!"
+            echo "   The build will proceed, but may use default values"
+            echo "   Check the 'List Vercel Environment Variables (AFTER Sync)' step above for details"
+          fi
+          echo ""
+        shell: bash
 
       - name: Deploy to Vercel
         uses: amondnet/vercel-action@v25
@@ -480,7 +545,7 @@ jobs:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ vars.VERCEL_ORG_ID }}
           vercel-project-id: ${{ vars.VERCEL_PROJECT_ID }}
-          vercel-args: '--prod'
+          vercel-args: '--prod --force'
           working-directory: SDMSApps/SDMS.B2CWebApp
           scope: ${{ vars.VERCEL_ORG_ID }}
 

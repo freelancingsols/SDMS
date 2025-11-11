@@ -1,22 +1,49 @@
 name: Deploy Authentication WebApp to Railway
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI - Authentication WebApp (Build, Test, and Lint)"]
+    types:
+      - completed
     branches:
       - release
       - Release
-    paths:
-      - 'SDMSApps/SDMS.AuthenticationWebApp/**'
-      - '.github/workflows/deploy-auth-railway.yml'
   workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Only deploy if:
+    # 1. CI workflow completed successfully (for workflow_run trigger)
+    # 2. Or manual dispatch (workflow_dispatch)
+    # 3. And on release branch (for workflow_run) or any branch (for manual dispatch)
+    if: |
+      (github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.head_branch == 'release' || github.event.workflow_run.head_branch == 'Release')) ||
+      github.event_name == 'workflow_dispatch'
 
     steps:
+      - name: Verify CI Status
+        if: github.event_name == 'workflow_run'
+        run: |
+          echo "🔍 Checking CI workflow status..."
+          echo "Workflow Run ID: ${{ github.event.workflow_run.id }}"
+          echo "Workflow Run Conclusion: ${{ github.event.workflow_run.conclusion }}"
+          echo "Workflow Run Branch: ${{ github.event.workflow_run.head_branch }}"
+          echo "Workflow Run Commit SHA: ${{ github.event.workflow_run.head_sha }}"
+          echo ""
+          if [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
+            echo "❌ CI workflow did not complete successfully. Deployment cancelled."
+            echo "   Conclusion: ${{ github.event.workflow_run.conclusion }}"
+            exit 1
+          fi
+          echo "✅ CI workflow completed successfully. Proceeding with deployment."
+
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # For workflow_run trigger, use the commit SHA from the CI workflow
+          # For manual dispatch, use the default branch/ref
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4

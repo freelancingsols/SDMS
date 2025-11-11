@@ -3,24 +3,31 @@ name: CI - Authentication WebApp (Build, Test, and Lint)
 on:
   push:
     branches:
+      # Release branch: Always run CI on any push (including merged PRs from stage)
+      # This ensures CI runs when PRs are merged, even if paths filter might miss merge commits
+      - release
+      - Release
+      # Other branches: Run CI on pushes (paths filter removed to ensure release branch works)
       - main
       - master
       - develop
-      - release
-      - Release
-    paths:
-      - 'SDMSApps/SDMS.AuthenticationWebApp/**'
-      - '.github/workflows/ci-authentication-webapp.yml'
+      - stage
+      - Stage
+      - staging
+      - Staging
+    # Note: Paths filter removed for push events to ensure CI runs on release branch merges
+    # The paths filter on pull_request events prevents unnecessary CI runs on PRs
   pull_request:
     branches:
-      - main
-      - master
-      - develop
-      - release
-      - Release
+      - '**'  # Run on PRs targeting any branch
     paths:
       - 'SDMSApps/SDMS.AuthenticationWebApp/**'
       - '.github/workflows/ci-authentication-webapp.yml'
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
   workflow_dispatch:
 
 jobs:
@@ -30,6 +37,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for better git operations
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -50,6 +59,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for better git operations
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -100,6 +111,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for better git operations
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -154,6 +167,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for better git operations
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4

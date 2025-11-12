@@ -185,6 +185,7 @@ jobs:
           SDMS_AuthenticationWebApp_WebhookSecret: ${{ secrets.SDMS_AuthenticationWebApp_WebhookSecret }}
           # Vars
           SDMS_AuthenticationWebApp_FrontendUrl: ${{ vars.SDMS_AuthenticationWebApp_FrontendUrl }}
+          SDMS_B2CWebApp_url: ${{ vars.SDMS_B2CWebApp_url }}
           SDMS_AuthenticationWebApp_LoginUrl: ${{ vars.SDMS_AuthenticationWebApp_LoginUrl }}
           SDMS_AuthenticationWebApp_LogoutUrl: ${{ vars.SDMS_AuthenticationWebApp_LogoutUrl }}
           SDMS_AuthenticationWebApp_ErrorUrl: ${{ vars.SDMS_AuthenticationWebApp_ErrorUrl }}
@@ -353,6 +354,7 @@ jobs:
           declare -A VARS_TO_SYNC
           VARS_TO_SYNC["SDMS_AuthenticationWebApp_ConnectionString"]="$SDMS_AuthenticationWebApp_ConnectionString"
           VARS_TO_SYNC["SDMS_AuthenticationWebApp_FrontendUrl"]="$SDMS_AuthenticationWebApp_FrontendUrl"
+          VARS_TO_SYNC["SDMS_B2CWebApp_url"]="$SDMS_B2CWebApp_url"
           VARS_TO_SYNC["SDMS_AuthenticationWebApp_LoginUrl"]="$SDMS_AuthenticationWebApp_LoginUrl"
           VARS_TO_SYNC["SDMS_AuthenticationWebApp_LogoutUrl"]="$SDMS_AuthenticationWebApp_LogoutUrl"
           VARS_TO_SYNC["SDMS_AuthenticationWebApp_ErrorUrl"]="$SDMS_AuthenticationWebApp_ErrorUrl"

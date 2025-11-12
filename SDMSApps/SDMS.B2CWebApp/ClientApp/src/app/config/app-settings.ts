@@ -32,7 +32,7 @@
  */
 export class AppSettings {
   private static _sdmsB2CWebAppUrl: string = 'http://localhost:4200';
-  private static _sdmsAuthenticationWebAppUrl: string = 'https://localhost:7001';
+  private static _sdmsAuthenticationWebAppUrl: string = 'http://localhost:5000';
   private static _sdmsAuthenticationWebAppClientId: string = 'sdms_frontend';
   private static _sdmsAuthenticationWebAppRedirectUri: string = 'http://localhost:4200/auth-callback';
   private static _sdmsAuthenticationWebAppScope: string = 'openid profile email roles api';

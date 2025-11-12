@@ -46,9 +46,24 @@ public class AuthorizationController : Controller
     [IgnoreAntiforgeryToken]
     public async Task<IActionResult> Authorize()
     {
-        // Get the OpenIddict request using the extension method
-        var request = HttpContext.GetOpenIddictServerRequest() ??
+        // Get the OpenIddict request - try multiple ways to access it
+        object? requestObj = null;
+        if (HttpContext.Items.TryGetValue("openiddict-server-request", out var item))
+        {
+            requestObj = item;
+        }
+        else if (HttpContext.Items.TryGetValue("openiddict_request", out item))
+        {
+            requestObj = item;
+        }
+        
+        if (requestObj == null)
+        {
             throw new InvalidOperationException("The OpenID Connect request cannot be retrieved.");
+        }
+        
+        // Use dynamic to access the request properties
+        dynamic request = requestObj;
 
         // Retrieve the user principal stored in the authentication cookie.
         var result = await HttpContext.AuthenticateAsync(IdentityConstants.ApplicationScheme);

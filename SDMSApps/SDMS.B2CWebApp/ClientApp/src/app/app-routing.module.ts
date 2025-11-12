@@ -4,6 +4,7 @@ import { TestComponent } from './Components/test/test.component';
 
 const routes: Routes = [
   { path: 'test', component: TestComponent },
+  { path: 'auth-callback', component: TestComponent }, // OAuth callback - OAuthService handles it automatically
   { path: '', redirectTo: '/test', pathMatch: 'full' },
   { path: '**', redirectTo: '/test' }
 ];

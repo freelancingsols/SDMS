@@ -393,7 +393,7 @@ using (var scope = app.Services.CreateScope())
     await context.Database.EnsureCreatedAsync();
 
     // Get B2C URL from configuration or use default
-    var b2cUrl = builder.Configuration["SDMS_B2CWebApp_url"] ?? "https://sdms-pi.vercel.app";
+    var b2cUrlForClient = builder.Configuration["SDMS_B2CWebApp_url"] ?? "https://sdms-pi.vercel.app";
     
     // Create or update OpenIddict client
     var clientDescriptor = new OpenIddictApplicationDescriptor
@@ -419,13 +419,13 @@ using (var scope = app.Services.CreateScope())
         {
             new Uri("http://localhost:4200/auth-callback"),
             new Uri("https://localhost:4200/auth-callback"),
-            new Uri($"{b2cUrl}/auth-callback"),
+            new Uri($"{b2cUrlForClient}/auth-callback"),
         },
         PostLogoutRedirectUris =
         {
             new Uri("http://localhost:4200/"),
             new Uri("https://localhost:4200/"),
-            new Uri($"{b2cUrl}/"),
+            new Uri($"{b2cUrlForClient}/"),
         },
         Requirements =
         {

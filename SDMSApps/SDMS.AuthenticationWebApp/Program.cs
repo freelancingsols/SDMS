@@ -21,9 +21,12 @@ using Microsoft.Extensions.Logging;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Load configuration from environment variables
-// Environment variables take precedence over appsettings.json
-// This allows configuration to be set via environment variables in any deployment platform
+// Configuration loading order (highest to lowest priority):
+// 1. Environment Variables (loaded here - highest priority)
+// 2. appsettings.json (loaded automatically by CreateBuilder - base/default values with local development values)
+//
+// Note: We use a single appsettings.json file with local development values.
+// Production values are set via environment variables at runtime, which override the default values in appsettings.json.
 builder.Configuration.AddEnvironmentVariables();
 
 // Configure server URLs from configuration

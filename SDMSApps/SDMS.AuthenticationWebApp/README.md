@@ -82,7 +82,7 @@ CREATE DATABASE sdms_auth;
 
 ### 2. Configure Environment Variables
 
-Create `appsettings.Development.json` or set environment variables:
+Set environment variables or update `appsettings.json` for local development:
 
 ```json
 {
@@ -206,7 +206,7 @@ curl -X POST https://localhost:7001/account/login \
 
 ### Test External Login
 
-1. Configure Auth0 or Google credentials in `appsettings.Development.json`
+1. Configure Auth0 or Google credentials in `appsettings.json` or via environment variables
 2. Open frontend at `http://localhost:4200`
 3. Click "Sign in with Auth0" or "Sign in with Google"
 4. Complete external authentication
@@ -277,7 +277,7 @@ GOOGLE_CLIENT_SECRET=your-google-client-secret
 ### Database Connection Issues
 
 - Verify PostgreSQL is running
-- Check connection string in `appsettings.Development.json`
+- Check connection string in `appsettings.json` or environment variables
 - Ensure database exists
 
 ### External Auth Not Working

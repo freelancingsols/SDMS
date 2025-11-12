@@ -299,6 +299,9 @@ app.MapGet("/", () => Results.Json(new {
     environment = app.Environment.EnvironmentName
 })).AllowAnonymous();
 
+// Note: OpenIddict automatically exposes /.well-known/openid-configuration
+// No explicit mapping needed - OpenIddict middleware handles it
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -370,6 +373,9 @@ using (var scope = app.Services.CreateScope())
     
     await context.Database.EnsureCreatedAsync();
 
+    // Get B2C URL from configuration or use default
+    var b2cUrl = builder.Configuration["SDMS_B2CWebApp_url"] ?? "https://sdms-pi.vercel.app";
+    
     // Create or update OpenIddict client
     var clientDescriptor = new OpenIddictApplicationDescriptor
     {
@@ -394,11 +400,13 @@ using (var scope = app.Services.CreateScope())
         {
             new Uri("http://localhost:4200/auth-callback"),
             new Uri("https://localhost:4200/auth-callback"),
+            new Uri($"{b2cUrl}/auth-callback"),
         },
         PostLogoutRedirectUris =
         {
             new Uri("http://localhost:4200/"),
             new Uri("https://localhost:4200/"),
+            new Uri($"{b2cUrl}/"),
         },
         Requirements =
         {

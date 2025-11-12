@@ -245,14 +245,30 @@ builder.Services.AddHttpClient();
 
 // CORS
 var frontendUrl = builder.Configuration[ConfigurationKeys.FrontendUrl] ?? "http://localhost:4200";
+var b2cUrl = builder.Configuration["SDMS_B2CWebApp_url"] ?? "http://localhost:4200";
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins(
+        var origins = new List<string>
+        {
             "http://localhost:4200",
-            "https://localhost:4200",
-            frontendUrl)
+            "https://localhost:4200"
+        };
+        
+        // Add frontend URL if not already in list
+        if (!string.IsNullOrEmpty(frontendUrl) && !origins.Contains(frontendUrl))
+        {
+            origins.Add(frontendUrl);
+        }
+        
+        // Add B2C URL if not already in list
+        if (!string.IsNullOrEmpty(b2cUrl) && !origins.Contains(b2cUrl))
+        {
+            origins.Add(b2cUrl);
+        }
+        
+        policy.WithOrigins(origins.ToArray())
             .AllowAnyMethod()
             .AllowAnyHeader()
             .AllowCredentials();

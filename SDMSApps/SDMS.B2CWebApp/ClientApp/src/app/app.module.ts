@@ -10,7 +10,8 @@ import { FrameworkModule } from './framework/framework.module';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { TestComponent } from './Components/test/test.component';
 import { OAuthModule } from 'angular-oauth2-oidc';
-import { AuthInterceptor } from './interceptors/auth.interceptor';
+import { ApiAuthorizationModule } from './api-authorization/api-authorization.module';
+import { AuthorizeInterceptor } from './api-authorization/authorize.interceptor';
 
 // Angular Material imports
 import { MatToolbarModule } from '@angular/material/toolbar';
@@ -48,6 +49,7 @@ import { MatSortModule } from '@angular/material/sort';
     FrameworkModule,
     BrowserAnimationsModule,
     OAuthModule.forRoot(),
+    ApiAuthorizationModule,
     // Angular Material modules
     MatToolbarModule,
     MatButtonModule,
@@ -66,7 +68,7 @@ import { MatSortModule } from '@angular/material/sort';
     MatSortModule
   ],
   providers: [
-    { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true }
+    { provide: HTTP_INTERCEPTORS, useClass: AuthorizeInterceptor, multi: true }
   ],
   bootstrap: [AppComponent]
 })

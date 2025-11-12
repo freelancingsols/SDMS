@@ -180,27 +180,29 @@ var returnUrlParameter = builder.Configuration[ConfigurationKeys.ReturnUrlParame
 // Configure authentication defaults
 // AddIdentity already registers Identity.Application and Identity.External schemes
 // Do NOT add them again here to avoid duplicate scheme registration
-builder.Services.AddAuthentication(options =>
+var authBuilder = builder.Services.AddAuthentication(options =>
 {
     options.DefaultScheme = IdentityConstants.ApplicationScheme;
     options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
     options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme;
-})
-.AddGoogle(options =>
+});
+
+// Only add Google authentication if credentials are provided
+var googleClientId = builder.Configuration[ConfigurationKeys.ExternalAuthGoogleClientId];
+var googleClientSecret = builder.Configuration[ConfigurationKeys.ExternalAuthGoogleClientSecret];
+
+if (!string.IsNullOrEmpty(googleClientId) && !string.IsNullOrEmpty(googleClientSecret))
 {
-    var clientId = builder.Configuration[ConfigurationKeys.ExternalAuthGoogleClientId];
-    var clientSecret = builder.Configuration[ConfigurationKeys.ExternalAuthGoogleClientSecret];
-    
-    if (!string.IsNullOrEmpty(clientId) && !string.IsNullOrEmpty(clientSecret))
+    authBuilder.AddGoogle(options =>
     {
-        options.ClientId = clientId;
-        options.ClientSecret = clientSecret;
+        options.ClientId = googleClientId;
+        options.ClientSecret = googleClientSecret;
         options.SignInScheme = IdentityConstants.ExternalScheme;
         options.SaveTokens = true;
         // GetClaimsFromUserInfoEndpoint is automatically enabled in ASP.NET Core 8.0
         // No need to set it explicitly
-    }
-});
+    });
+}
 
 // Authorization - configure to redirect to login for unauthorized requests
 builder.Services.AddAuthorization(options =>

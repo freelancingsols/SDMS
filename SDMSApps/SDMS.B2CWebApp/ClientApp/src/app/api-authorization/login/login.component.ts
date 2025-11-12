@@ -23,7 +23,9 @@ export class LoginComponent implements OnInit {
 
   async ngOnInit() {
     const action = this.activatedRoute.snapshot.url[0];
-    switch (action.path) {
+    const actionPath = action?.path || LoginActions.Login;
+    
+    switch (actionPath) {
       case LoginActions.Login:
         await this.login(this.getReturnUrl());
         break;
@@ -44,7 +46,9 @@ export class LoginComponent implements OnInit {
         this.redirectToRegister();
         break;
       default:
-        throw new Error(`Invalid action '${action}'`);
+        // Default to login if no action specified
+        await this.login(this.getReturnUrl());
+        break;
     }
   }
 
@@ -112,9 +116,9 @@ export class LoginComponent implements OnInit {
       // This is an extra check to prevent open redirects.
       throw new Error('Invalid return url. The return url needs to have the same origin as the current page.');
     }
-    return "http://localhost:5000"+((state && state.returnUrl) ||
+    return (state && state.returnUrl) ||
       fromQuery ||
-      ApplicationPaths.DefaultLoginRedirectPath);
+      ApplicationPaths.DefaultLoginRedirectPath;
   }
 
   private redirectToApiAuthorizationPath(apiAuthorizationPath: string) {

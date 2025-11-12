@@ -32,7 +32,7 @@ export class TestComponent implements OnInit {
     private authService: AuthService
   ) { }
 
-  ngOnInit() {
+  async ngOnInit() {
     // Check if this is an OAuth callback
     const currentUrl = this.router.url;
     if (currentUrl.includes('/auth-callback')) {
@@ -43,20 +43,26 @@ export class TestComponent implements OnInit {
         if (this.authService.isAuthenticated()) {
           this.router.navigate(['/test']);
         } else {
-          this.router.navigate(['/test']);
+          this.router.navigate(['/login']);
         }
       }, 1000);
       return;
     }
     
+    // Check authentication - if not authenticated, redirect to login
+    if (!this.authService.isAuthenticated()) {
+      this.router.navigate(['/login'], {
+        queryParams: { returnUrl: this.router.url }
+      });
+      return;
+    }
+    
     // Use dummy data instead of API call
     // If authenticated, get user info from auth service
-    if (this.authService.isAuthenticated()) {
-      const userInfo = this.authService.getUserInfo();
-      if (userInfo) {
-        this.userInfo = userInfo;
-        this.username = userInfo.displayName || userInfo.email || 'User';
-      }
+    const userInfo = this.authService.getUserInfo();
+    if (userInfo) {
+      this.userInfo = userInfo;
+      this.username = userInfo.displayName || userInfo.email || 'User';
     }
   }
 

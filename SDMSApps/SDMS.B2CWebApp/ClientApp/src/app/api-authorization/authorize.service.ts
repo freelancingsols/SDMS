@@ -1,7 +1,10 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, concat, Observable, of } from 'rxjs';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { BehaviorSubject, concat, Observable, of, firstValueFrom } from 'rxjs';
 import { filter, map, take, tap } from 'rxjs/operators';
 import { OAuthService } from 'angular-oauth2-oidc';
+import { AppSettings } from '../config/app-settings';
+import { environment } from '../../environments/environment';
 
 export type IAuthenticationResult =
   SuccessAuthenticationResult |
@@ -36,14 +39,58 @@ export interface IUser {
   providedIn: 'root'
 })
 export class AuthorizeService {
+  private apiUrl = AppSettings.SDMS_AuthenticationWebApp_url;
+
   constructor(
-    private oauthService: OAuthService
+    private oauthService: OAuthService,
+    private http: HttpClient
   ) {
+    this.configureOAuth();
   }
   // By default pop ups are disabled because they don't work properly on Edge.
   // If you want to enable pop up authentication simply set this flag to false.
 
   private userSubject: BehaviorSubject<IUser | null> = new BehaviorSubject<IUser | null>(null);
+
+  private configureOAuth() {
+    // Determine if we should use silent refresh
+    // Silent refresh requires a refresh token, which is obtained from authorization code or password grant
+    const enableSilentRefresh = true; // Set to false to disable silent refresh
+
+    this.oauthService.configure({
+      issuer: AppSettings.SDMS_AuthenticationWebApp_url,
+      redirectUri: AppSettings.SDMS_AuthenticationWebApp_redirectUri,
+      clientId: AppSettings.SDMS_AuthenticationWebApp_clientid,
+      responseType: 'code',
+      scope: AppSettings.SDMS_AuthenticationWebApp_scope + ' offline_access', // Add offline_access for refresh tokens
+      requireHttps: environment.production, // Require HTTPS in production for security
+      showDebugInformation: !environment.production, // Only show debug info in development
+      strictDiscoveryDocumentValidation: false,
+      
+      // Silent refresh configuration
+      useSilentRefresh: enableSilentRefresh,
+      silentRefreshRedirectUri: window.location.origin + '/silent-refresh.html',
+      silentRefreshTimeout: 5000, // 5 seconds timeout for silent refresh
+      
+      // Token refresh settings
+      timeoutFactor: 0.75, // Refresh token when 75% of lifetime has passed (default: 0.75)
+      sessionChecksEnabled: true, // Check if user session is still valid
+      
+      disableAtHashCheck: true
+    });
+
+    // Setup automatic silent refresh if enabled
+    if (enableSilentRefresh) {
+      this.oauthService.setupAutomaticSilentRefresh();
+    }
+
+    // Load discovery document and try to login automatically if token exists
+    this.oauthService.loadDiscoveryDocumentAndTryLogin().then(() => {
+      if (this.oauthService.hasValidAccessToken()) {
+        this.loadUserProfile();
+      }
+    });
+  }
 
   public isAuthenticated(): Observable<boolean> {
     return this.getUser().pipe(map(u => !!u));
@@ -141,10 +188,34 @@ export class AuthorizeService {
   private async loadUserProfile(): Promise<void> {
     if (this.oauthService.hasValidAccessToken()) {
       try {
+        // Try to get user info from API first (more complete user data)
+        try {
+          const token = this.oauthService.getAccessToken();
+          if (token) {
+            const headers = new HttpHeaders({
+              'Authorization': `Bearer ${token}`
+            });
+            const userInfo = await firstValueFrom(
+              this.http.get<any>(`${this.apiUrl}/account/userinfo`, { headers })
+            );
+            if (userInfo) {
+              const user: IUser = {
+                name: userInfo.displayName || userInfo.email || userInfo.name || ''
+              };
+              this.userSubject.next(user);
+              return;
+            }
+          }
+        } catch (apiError) {
+          // If API call fails, fall back to identity claims
+          console.warn('Could not fetch user info from API, using identity claims:', apiError);
+        }
+
+        // Fallback to identity claims from token
         const claims = this.oauthService.getIdentityClaims();
         if (claims) {
           const user: IUser = {
-            name: claims['name'] || claims['sub'] || ''
+            name: claims['name'] || claims['email'] || claims['sub'] || ''
           };
           this.userSubject.next(user);
         }

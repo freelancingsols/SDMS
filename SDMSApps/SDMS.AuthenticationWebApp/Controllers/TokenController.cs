@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Reflection;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
@@ -61,10 +62,16 @@ public class TokenController : ControllerBase
             throw new InvalidOperationException("The OpenID Connect request cannot be retrieved.");
         }
         
-        // Use dynamic to access the request properties
-        dynamic request = requestObj;
+        // Use reflection to access the OpenIddict request methods
+        // The request type is internal, so we access it via reflection
+        var request = requestObj;
 
-        if (request.IsAuthorizationCodeGrantType() || request.IsRefreshTokenGrantType())
+        var isAuthCodeMethod = request.GetType().GetMethod("IsAuthorizationCodeGrantType", BindingFlags.Public | BindingFlags.Instance);
+        var isRefreshTokenMethod = request.GetType().GetMethod("IsRefreshTokenGrantType", BindingFlags.Public | BindingFlags.Instance);
+        var isAuthCode = isAuthCodeMethod != null && (bool)isAuthCodeMethod.Invoke(request, null)!;
+        var isRefreshToken = isRefreshTokenMethod != null && (bool)isRefreshTokenMethod.Invoke(request, null)!;
+        
+        if (isAuthCode || isRefreshToken)
         {
             // Retrieve the claims principal stored in the authorization code/refresh token.
             var result = await HttpContext.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
@@ -106,18 +113,24 @@ public class TokenController : ControllerBase
                     .SetClaims(Claims.Role, (await _userManager.GetRolesAsync(user)).ToImmutableArray());
 
             // Set the list of scopes granted to the client application.
-            identity.SetScopes(request.GetScopes());
-            identity.SetResources(await GetResourcesAsync(request.GetScopes()));
+            var getScopesMethod2 = request.GetType().GetMethod("GetScopes", BindingFlags.Public | BindingFlags.Instance);
+            var scopes2 = getScopesMethod2 != null ? (IEnumerable<string>)getScopesMethod2.Invoke(request, null)! : Array.Empty<string>();
+            identity.SetScopes(scopes2);
+            identity.SetResources(await GetResourcesAsync(scopes2));
             identity.SetDestinations(GetDestinations);
 
             return SignIn(new ClaimsPrincipal(identity), OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         }
 
-        else if (request.IsPasswordGrantType())
+        var isPasswordMethod = request.GetType().GetMethod("IsPasswordGrantType", BindingFlags.Public | BindingFlags.Instance);
+        var isPassword = isPasswordMethod != null && (bool)isPasswordMethod.Invoke(request, null)!;
+        
+        if (isPassword)
         {
             // Password grant type - validate username/email and password
             // Try to find user by username first, then by email (since users can login with email)
-            var username = request.Username ?? string.Empty;
+            var usernameProp = request.GetType().GetProperty("Username", BindingFlags.Public | BindingFlags.Instance);
+            var username = usernameProp?.GetValue(request)?.ToString() ?? string.Empty;
             var user = await _userManager.FindByNameAsync(username);
             if (user == null)
             {
@@ -137,7 +150,9 @@ public class TokenController : ControllerBase
             }
 
             // Validate the password
-            if (!await _userManager.CheckPasswordAsync(user, request.Password ?? string.Empty))
+            var passwordProp = request.GetType().GetProperty("Password", BindingFlags.Public | BindingFlags.Instance);
+            var password = passwordProp?.GetValue(request)?.ToString() ?? string.Empty;
+            if (!await _userManager.CheckPasswordAsync(user, password))
             {
                 return Forbid(
                     authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
@@ -177,19 +192,26 @@ public class TokenController : ControllerBase
                     .SetClaims(Claims.Role, (await _userManager.GetRolesAsync(user)).ToImmutableArray());
 
             // Set the list of scopes granted to the client application.
-            identity.SetScopes(request.GetScopes());
-            identity.SetResources(await GetResourcesAsync(request.GetScopes()));
+            var getScopesMethod2 = request.GetType().GetMethod("GetScopes", BindingFlags.Public | BindingFlags.Instance);
+            var scopes2 = getScopesMethod2 != null ? (IEnumerable<string>)getScopesMethod2.Invoke(request, null)! : Array.Empty<string>();
+            identity.SetScopes(scopes2);
+            identity.SetResources(await GetResourcesAsync(scopes2));
             identity.SetDestinations(GetDestinations);
 
             return SignIn(new ClaimsPrincipal(identity), OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         }
 
-        else if (request.IsClientCredentialsGrantType())
+        var isClientCredentialsMethod = request.GetType().GetMethod("IsClientCredentialsGrantType", BindingFlags.Public | BindingFlags.Instance);
+        var isClientCredentials = isClientCredentialsMethod != null && (bool)isClientCredentialsMethod.Invoke(request, null)!;
+        
+        if (isClientCredentials)
         {
             // Note: the client credentials are automatically validated by OpenIddict:
             // if client_id or client_secret are invalid, this action won't be invoked.
 
-            var application = await _applicationManager.FindByClientIdAsync(request.ClientId ?? string.Empty) ??
+            var clientIdProp2 = request.GetType().GetProperty("ClientId", BindingFlags.Public | BindingFlags.Instance);
+            var clientId2 = clientIdProp2?.GetValue(request)?.ToString() ?? string.Empty;
+            var application = await _applicationManager.FindByClientIdAsync(clientId2) ??
                 throw new InvalidOperationException("The application details cannot be found in the database.");
 
             // Create a new ClaimsIdentity containing the claims that
@@ -204,8 +226,10 @@ public class TokenController : ControllerBase
             identity.SetClaim(Claims.Name, await _applicationManager.GetDisplayNameAsync(application, CancellationToken.None) ?? string.Empty);
 
             // Set the list of scopes granted to the client application.
-            identity.SetScopes(request.GetScopes());
-            identity.SetResources(await GetResourcesAsync(request.GetScopes()));
+            var getScopesMethod2 = request.GetType().GetMethod("GetScopes", BindingFlags.Public | BindingFlags.Instance);
+            var scopes2 = getScopesMethod2 != null ? (IEnumerable<string>)getScopesMethod2.Invoke(request, null)! : Array.Empty<string>();
+            identity.SetScopes(scopes2);
+            identity.SetResources(await GetResourcesAsync(scopes2));
             identity.SetDestinations(GetDestinations);
 
             return SignIn(new ClaimsPrincipal(identity), OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);

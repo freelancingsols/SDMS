@@ -3,6 +3,7 @@ import { HttpInterceptor, HttpRequest, HttpHandler, HttpEvent } from '@angular/c
 import { Observable } from 'rxjs';
 import { AuthorizeService } from './authorize.service';
 import { mergeMap } from 'rxjs/operators';
+import { AppSettings } from '../config/app-settings';
 
 @Injectable({
   providedIn: 'root'
@@ -31,6 +32,12 @@ export class AuthorizeInterceptor implements HttpInterceptor {
   }
 
   private isSameOriginUrl(req: any) {
+    // Always add token to requests to the authentication server
+    const authServerUrl = AppSettings.SDMS_AuthenticationWebApp_url;
+    if (authServerUrl && req.url.startsWith(authServerUrl)) {
+      return true;
+    }
+
     // It's an absolute url with the same origin.
     if (req.url.startsWith(`${window.location.origin}/`)) {
       return true;

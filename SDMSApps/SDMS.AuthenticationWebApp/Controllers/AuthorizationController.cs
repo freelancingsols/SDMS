@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Reflection;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
@@ -62,8 +63,9 @@ public class AuthorizationController : Controller
             throw new InvalidOperationException("The OpenID Connect request cannot be retrieved.");
         }
         
-        // Use dynamic to access the request properties
-        dynamic request = requestObj;
+        // Cast to the OpenIddict request - the actual type is internal, so we use it via the interface
+        // The request object implements methods we need, so we'll access them directly
+        var request = requestObj;
 
         // Retrieve the user principal stored in the authentication cookie.
         var result = await HttpContext.AuthenticateAsync(IdentityConstants.ApplicationScheme);
@@ -89,17 +91,22 @@ public class AuthorizationController : Controller
             throw new InvalidOperationException("The user details cannot be retrieved.");
 
         // Retrieve the application details from the database.
-        var application = await _applicationManager.FindByClientIdAsync(request.ClientId ?? string.Empty) ??
+        var clientIdProp = request.GetType().GetProperty("ClientId", BindingFlags.Public | BindingFlags.Instance);
+        var clientId = clientIdProp?.GetValue(request)?.ToString() ?? string.Empty;
+        var application = await _applicationManager.FindByClientIdAsync(clientId) ??
             throw new InvalidOperationException("Details concerning the calling client application cannot be found.");
 
         // Retrieve the permanent authorizations associated with the user and the calling client application.
+        var getScopesMethod = request.GetType().GetMethod("GetScopes", BindingFlags.Public | BindingFlags.Instance);
+        var scopes = getScopesMethod != null ? (IEnumerable<string>)getScopesMethod.Invoke(request, null)! : Array.Empty<string>();
+        var scopesArray = scopes.ToImmutableArray();
         var authorizationsList = new List<object>();
         await foreach (var authorization in _authorizationManager.FindAsync(
             subject: await _userManager.GetUserIdAsync(user),
             client: await _applicationManager.GetIdAsync(application, CancellationToken.None) ?? string.Empty,
             status: Statuses.Valid,
             type: AuthorizationTypes.Permanent,
-            scopes: request.GetScopes()))
+            scopes: scopesArray))
         {
             authorizationsList.Add(authorization);
         }
@@ -123,7 +130,20 @@ public class AuthorizationController : Controller
             // return an authorization response without displaying the consent form.
             case ConsentTypes.Implicit:
             case ConsentTypes.External when authorizations.Any():
-            case ConsentTypes.Explicit when authorizations.Any() && !request.HasPrompt(Prompts.Consent):
+            case ConsentTypes.Explicit when authorizations.Any():
+                var hasPromptMethod = request.GetType().GetMethod("HasPrompt", BindingFlags.Public | BindingFlags.Instance);
+                var hasConsentPrompt = hasPromptMethod != null && (bool)hasPromptMethod.Invoke(request, new object[] { Prompts.Consent })!;
+                if (hasConsentPrompt)
+                {
+                    // Need to show consent form - this case should be handled elsewhere
+                    return Forbid(
+                        authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+                        properties: new AuthenticationProperties(new Dictionary<string, string?>
+                        {
+                            [OpenIddictServerAspNetCoreConstants.Properties.Error] = Errors.ConsentRequired,
+                            [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "User consent is required."
+                        }));
+                }
                 // Create the claims-based identity that will be used by OpenIddict to generate tokens.
                 var identity = new ClaimsIdentity(
                     authenticationType: TokenValidationParameters.DefaultAuthenticationType,
@@ -137,8 +157,10 @@ public class AuthorizationController : Controller
                         .SetClaims(Claims.Role, (await _userManager.GetRolesAsync(user)).ToImmutableArray());
 
                 // Set the list of scopes granted to the client application.
-                identity.SetScopes(request.GetScopes());
-                identity.SetResources(await GetResourcesAsync(request.GetScopes()));
+                var getScopesMethod2 = request.GetType().GetMethod("GetScopes", BindingFlags.Public | BindingFlags.Instance);
+                var scopes2 = getScopesMethod2 != null ? (IEnumerable<string>)getScopesMethod2.Invoke(request, null)! : Array.Empty<string>();
+                identity.SetScopes(scopes2);
+                identity.SetResources(await GetResourcesAsync(scopes2));
                 identity.SetDestinations(GetDestinations);
 
                 return SignIn(new ClaimsPrincipal(identity), OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);

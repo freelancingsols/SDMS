@@ -40,6 +40,9 @@ export interface IUser {
 })
 export class AuthorizeService {
   private apiUrl = AppSettings.SDMS_AuthenticationWebApp_url;
+  private popUpDisabled = true; // By default pop ups are disabled because they don't work properly on Edge.
+  private userSubject: BehaviorSubject<IUser | null> = new BehaviorSubject<IUser | null>(null);
+  private oauthConfigured = false;
 
   constructor(
     private oauthService: OAuthService,
@@ -47,34 +50,39 @@ export class AuthorizeService {
   ) {
     this.configureOAuth();
   }
-  // By default pop ups are disabled because they don't work properly on Edge.
-  // If you want to enable pop up authentication simply set this flag to false.
-
-  private userSubject: BehaviorSubject<IUser | null> = new BehaviorSubject<IUser | null>(null);
 
   private configureOAuth() {
+    if (this.oauthConfigured) {
+      return;
+    }
+
     // Determine if we should use silent refresh
-    // Silent refresh requires a refresh token, which is obtained from authorization code or password grant
-    const enableSilentRefresh = true; // Set to false to disable silent refresh
+    const enableSilentRefresh = true;
+
+    // Normalize issuer URL - ensure it ends with a slash to match discovery document
+    let issuerUrl = AppSettings.SDMS_AuthenticationWebApp_url;
+    if (!issuerUrl.endsWith('/')) {
+      issuerUrl = issuerUrl + '/';
+    }
 
     this.oauthService.configure({
-      issuer: AppSettings.SDMS_AuthenticationWebApp_url,
+      issuer: issuerUrl,
       redirectUri: AppSettings.SDMS_AuthenticationWebApp_redirectUri,
       clientId: AppSettings.SDMS_AuthenticationWebApp_clientid,
       responseType: 'code',
-      scope: AppSettings.SDMS_AuthenticationWebApp_scope + ' offline_access', // Add offline_access for refresh tokens
-      requireHttps: environment.production, // Require HTTPS in production for security
-      showDebugInformation: !environment.production, // Only show debug info in development
+      scope: AppSettings.SDMS_AuthenticationWebApp_scope + ' offline_access',
+      requireHttps: environment.production,
+      showDebugInformation: !environment.production,
       strictDiscoveryDocumentValidation: false,
       
       // Silent refresh configuration
       useSilentRefresh: enableSilentRefresh,
       silentRefreshRedirectUri: window.location.origin + '/silent-refresh.html',
-      silentRefreshTimeout: 5000, // 5 seconds timeout for silent refresh
+      silentRefreshTimeout: 5000,
       
       // Token refresh settings
-      timeoutFactor: 0.75, // Refresh token when 75% of lifetime has passed (default: 0.75)
-      sessionChecksEnabled: true, // Check if user session is still valid
+      timeoutFactor: 0.75,
+      sessionChecksEnabled: true,
       
       disableAtHashCheck: true
     });
@@ -87,12 +95,35 @@ export class AuthorizeService {
     // Load discovery document and try to login automatically if token exists
     this.oauthService.loadDiscoveryDocumentAndTryLogin().then(() => {
       if (this.oauthService.hasValidAccessToken()) {
+        this.loadUserProfile().catch(err => console.error('Error loading user profile on init:', err));
+      }
+    }).catch(err => {
+      console.warn('Error loading discovery document:', err);
+    });
+
+    // Listen for token events
+    this.oauthService.events.subscribe(event => {
+      if (event.type === 'token_received' || event.type === 'token_refreshed') {
         this.loadUserProfile();
+      } else if (event.type === 'logout') {
+        this.userSubject.next(null);
       }
     });
+
+    this.oauthConfigured = true;
   }
 
   public isAuthenticated(): Observable<boolean> {
+    // Check if we have a valid access token
+    const hasToken = this.oauthService.hasValidAccessToken();
+    if (hasToken) {
+      // If we have a token but no user loaded, try to load it
+      if (!this.userSubject.value) {
+        this.loadUserProfile().catch(err => console.error('Error loading user profile:', err));
+      }
+      return of(true);
+    }
+    // If no token, check if user is in storage
     return this.getUser().pipe(map(u => !!u));
   }
 
@@ -118,19 +149,50 @@ export class AuthorizeService {
   //    redirect flow.
   public async signIn(state: any): Promise<IAuthenticationResult> {
     try {
-      // Try silent refresh first
+      // Try silent refresh first (equivalent to signinSilent)
       if (this.oauthService.hasValidAccessToken()) {
         await this.loadUserProfile();
         return this.success(state);
       }
 
-      // If silent refresh fails, try code flow
+      // Try silent refresh
       try {
-        this.oauthService.initCodeFlow();
-        return this.redirect();
-      } catch (redirectError) {
-        console.log('Redirect authentication error: ', redirectError);
-        return this.error(String(redirectError));
+        await this.oauthService.loadDiscoveryDocument();
+        await this.oauthService.tryLoginCodeFlow();
+        if (this.oauthService.hasValidAccessToken()) {
+          await this.loadUserProfile();
+          return this.success(state);
+        }
+      } catch (silentError) {
+        console.log('Silent authentication error: ', silentError);
+      }
+
+      // User might not be authenticated, fallback to popup authentication
+      try {
+        if (this.popUpDisabled) {
+          throw new Error('Popup disabled. Change \'authorize.service.ts:AuthorizeService.popupDisabled\' to false to enable it.');
+        }
+        
+        // Popup authentication - OAuthService doesn't have direct popup support
+        // We'll use redirect flow instead
+        throw new Error('Popup authentication not supported, using redirect');
+      } catch (popupError: unknown) {
+        const errorMessage = popupError instanceof Error ? popupError.message : String(popupError);
+        if (errorMessage === 'Popup window closed' || errorMessage.includes('Popup')) {
+          // Fall through to redirect
+        } else if (!this.popUpDisabled) {
+          console.log('Popup authentication error: ', popupError);
+        }
+
+        // PopUps might be blocked by the user, fallback to redirect
+        try {
+          await this.oauthService.loadDiscoveryDocument();
+          this.oauthService.initCodeFlow();
+          return this.redirect();
+        } catch (redirectError) {
+          console.log('Redirect authentication error: ', redirectError);
+          return this.error(String(redirectError));
+        }
       }
     } catch (error) {
       console.log('Authentication error: ', error);
@@ -141,23 +203,48 @@ export class AuthorizeService {
   public async completeSignIn(_url: string, _callbackAction: string): Promise<IAuthenticationResult> {
     try {
       // OAuth callback is handled by angular-oauth2-oidc automatically
-      await this.oauthService.loadDiscoveryDocumentAndTryLogin();
-      await this.loadUserProfile();
-      return this.success(null);
+      // Load discovery document first
+      await this.oauthService.loadDiscoveryDocument();
+      
+      // Try to process the callback URL
+      await this.oauthService.tryLoginCodeFlow();
+      
+      // Check if we got a valid token
+      if (this.oauthService.hasValidAccessToken()) {
+        await this.loadUserProfile();
+        return this.success(null);
+      } else {
+        return this.error('No access token received after login.');
+      }
     } catch (error) {
       console.log('There was an error signing in: ', error);
-      return this.error('There was an error signing in.');
+      return this.error('There was an error signing in: ' + (error instanceof Error ? error.message : String(error)));
     }
   }
 
   public async signOut(state: any): Promise<IAuthenticationResult> {
     try {
+      if (this.popUpDisabled) {
+        // Use redirect logout
+        this.oauthService.logOut();
+        this.userSubject.next(null);
+        return this.success(state);
+      }
+
+      // Popup logout not directly supported, use redirect
       this.oauthService.logOut();
       this.userSubject.next(null);
       return this.success(state);
-    } catch (error) {
-      console.log('Signout error: ', error);
-      return this.error(String(error));
+    } catch (popupSignOutError) {
+      console.log('Signout error: ', popupSignOutError);
+      try {
+        this.oauthService.logOut();
+        this.userSubject.next(null);
+        return this.success(state);
+      } catch (redirectSignOutError) {
+        console.log('Redirect signout error: ', redirectSignOutError);
+        return this.error(String(redirectSignOutError));
+      }
     }
   }
 
@@ -171,7 +258,6 @@ export class AuthorizeService {
       return this.error(String(error));
     }
   }
-
 
   private error(message: string): IAuthenticationResult {
     return { status: AuthenticationResultStatus.Fail, message };
@@ -231,7 +317,7 @@ export class AuthorizeService {
         const claims = this.oauthService.getIdentityClaims();
         if (claims) {
           const user: IUser = {
-            name: claims['name'] || claims['sub'] || ''
+            name: claims['name'] || claims['email'] || claims['sub'] || ''
           };
           return of(user);
         }

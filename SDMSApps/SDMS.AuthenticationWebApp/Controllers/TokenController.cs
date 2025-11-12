@@ -46,15 +46,39 @@ public class TokenController : ControllerBase
     [Produces("application/json")]
     public async Task<IActionResult> Exchange()
     {
-        // Get the OpenIddict request - try multiple ways to access it
+        // Get the OpenIddict request from HttpContext.Items
+        // With passthrough enabled, OpenIddict stores the request in HttpContext.Items
         object? requestObj = null;
-        if (HttpContext.Items.TryGetValue("openiddict-server-request", out var item))
+        
+        // Try all possible key names that OpenIddict might use
+        var possibleKeys = new[]
         {
-            requestObj = item;
+            "openiddict-server-request",
+            "openiddict_request",
+            "openiddict.server.request",
+            "openiddict.server.request.feature"
+        };
+        
+        foreach (var key in possibleKeys)
+        {
+            if (HttpContext.Items.TryGetValue(key, out var item) && item != null)
+            {
+                requestObj = item;
+                break;
+            }
         }
-        else if (HttpContext.Items.TryGetValue("openiddict_request", out item))
+        
+        // If still not found, try to find any item that has "OpenIddict" in its type name
+        if (requestObj == null)
         {
-            requestObj = item;
+            foreach (var item in HttpContext.Items.Values)
+            {
+                if (item != null && item.GetType().FullName?.Contains("OpenIddict") == true)
+                {
+                    requestObj = item;
+                    break;
+                }
+            }
         }
         
         if (requestObj == null)

@@ -151,7 +151,7 @@ builder.Services.AddOpenIddict()
         options.AllowClientCredentialsFlow();
         options.AllowPasswordFlow(); // Allow password grant for testing and API access
 
-        options.RegisterScopes(Scopes.Email, Scopes.Profile, Scopes.Roles, "api");
+        options.RegisterScopes(Scopes.Email, Scopes.Profile, Scopes.Roles, "api", "offline_access");
 
         // Signing and encryption - use development certificates for now
         options.AddDevelopmentEncryptionCertificate()
@@ -302,22 +302,64 @@ if (app.Environment.IsDevelopment())
 // In production (Railway), skip HTTPS redirection as the proxy handles SSL/TLS
 
 app.UseCors();
+
+// Serve static files from Angular build output BEFORE routing
+// This ensures static files are checked before endpoint routing
+// Angular 17+ builds to a 'browser' subdirectory
+var angularDistPath = Path.Combine(builder.Environment.ContentRootPath, "ClientApp", "dist", "sdms-auth-client", "browser");
+var wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
+
+var fileProviders = new List<IFileProvider>();
+
+// Only add Angular dist file provider if directory exists
+if (Directory.Exists(angularDistPath))
+{
+    fileProviders.Add(new PhysicalFileProvider(angularDistPath));
+    Console.WriteLine($"✓ Angular dist directory found at: {angularDistPath}");
+}
+else
+{
+    // Log warning to console (will be logged properly after app is built)
+    Console.WriteLine($"✗ Warning: Angular dist directory not found at {angularDistPath}. Angular app will not be served.");
+}
+
+// Only add wwwroot file provider if directory exists
+if (Directory.Exists(wwwrootPath))
+{
+    fileProviders.Add(new PhysicalFileProvider(wwwrootPath));
+}
+
+if (fileProviders.Count > 0)
+{
+    var fileProvider = new CompositeFileProvider(fileProviders);
+    
+    // Serve static files from Angular build output
+    // This comes BEFORE UseRouting so files are checked first
+    app.UseDefaultFiles(new DefaultFilesOptions()
+    {
+        FileProvider = fileProvider,
+        DefaultFileNames = new List<string>() { "index.html" }
+    });
+
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = fileProvider
+    });
+}
+else
+{
+    Console.WriteLine("✗ No file providers configured. Static files will not be served.");
+}
+
 app.UseRouting();
 
-// Map health check, ping, and root endpoints BEFORE authentication/authorization
+// Map health check and ping endpoints BEFORE authentication/authorization
 // This allows Railway and other platforms to check if the container is healthy
 app.MapHealthChecks("/health").AllowAnonymous();
 app.MapGet("/ping", () => Results.Ok(new { 
     status = "ok",
     message = "pong",
     timestamp = DateTime.UtcNow
-})).AllowAnonymous();
-app.MapGet("/", () => Results.Json(new { 
-    status = "ok", 
-    service = "SDMS Authentication API", 
-    version = "1.0",
-    timestamp = DateTime.UtcNow,
-    environment = app.Environment.EnvironmentName
 })).AllowAnonymous();
 
 // Note: OpenIddict automatically exposes /.well-known/openid-configuration
@@ -329,60 +371,16 @@ app.UseAuthorization();
 // Map controllers - OpenIddict endpoints are handled automatically by middleware
 app.MapControllers();
 
-// Serve static files from Angular build output
-var angularDistPath = Path.Combine(builder.Environment.ContentRootPath, "ClientApp", "dist", "sdms-auth-client");
-var wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
-
-var fileProviders = new List<IFileProvider>();
-
-// Only add Angular dist file provider if directory exists
-if (Directory.Exists(angularDistPath))
+// SPA fallback: serve index.html for all routes that don't match controllers or other endpoints
+// MapFallbackToFile automatically excludes routes matched by MapControllers, MapHealthChecks, etc.
+if (fileProviders.Count > 0)
 {
-    fileProviders.Add(new PhysicalFileProvider(angularDistPath));
-}
-else
-{
-    // Log warning to console (will be logged properly after app is built)
-    Console.WriteLine($"Warning: Angular dist directory not found at {angularDistPath}. Angular app will not be served.");
-}
-
-// Only add wwwroot file provider if directory exists
-if (Directory.Exists(wwwrootPath))
-{
-    fileProviders.Add(new PhysicalFileProvider(wwwrootPath));
-}
-
-var fileProvider = new CompositeFileProvider(fileProviders);
-
-// SPA fallback: redirect non-API routes to index.html
-// Exclude health check, root, and API endpoints from SPA fallback
-app.Use(async (HttpContext context, Func<Task> next) =>
-{
-    await next.Invoke();
-    var path = context.Request.Path.Value ?? "";
-    if (context.Response.StatusCode == (int)HttpStatusCode.NotFound 
-        && !path.StartsWith("/api")
-        && !path.StartsWith("/connect")
-        && !path.StartsWith("/swagger")
-        && path != "/"
-        && path != "/health"
-        && path != "/ping")
+    var fallbackFileProvider = new CompositeFileProvider(fileProviders);
+    app.MapFallbackToFile("index.html", new StaticFileOptions
     {
-        context.Request.Path = new PathString("/index.html");
-        await next.Invoke();
-    }
-});
-
-app.UseDefaultFiles(new DefaultFilesOptions()
-{
-    FileProvider = fileProvider,
-    DefaultFileNames = new List<string>() { "index.html" }
-});
-
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = fileProvider
-});
+        FileProvider = fallbackFileProvider
+    });
+}
 
 // Initialize database and OpenIddict
 using (var scope = app.Services.CreateScope())
@@ -416,6 +414,8 @@ using (var scope = app.Services.CreateScope())
             Permissions.Scopes.Email,
             Permissions.Scopes.Profile,
             Permissions.Scopes.Roles,
+            Permissions.Prefixes.Scope + "api",
+            Permissions.Prefixes.Scope + "offline_access",
         },
         RedirectUris =
         {
@@ -444,9 +444,9 @@ using (var scope = app.Services.CreateScope())
     }
     else
     {
-        // Update existing client to ensure it has password grant permission
+        // Update existing client to ensure it has all required permissions and scopes
         await applicationManager.UpdateAsync(existingClient, clientDescriptor);
-        Console.WriteLine("Updated OpenIddict client: sdms_frontend (added password grant permission)");
+        Console.WriteLine("Updated OpenIddict client: sdms_frontend (updated with latest permissions and scopes)");
     }
 
     // Create default roles

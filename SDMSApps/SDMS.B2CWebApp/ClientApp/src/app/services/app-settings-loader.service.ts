@@ -29,7 +29,7 @@ export class AppSettingsLoaderService {
   async loadAppSettings(): Promise<void> {
     const defaultConfig: AppSettingsConfig = {
       SDMS_B2CWebApp_url: 'http://localhost:4200',
-      SDMS_AuthenticationWebApp_url: 'http://localhost:5000',
+      SDMS_AuthenticationWebApp_url: 'https://localhost:7001',
       SDMS_AuthenticationWebApp_clientid: 'sdms_frontend',
       SDMS_AuthenticationWebApp_redirectUri: 'http://localhost:4200/auth-callback',
       SDMS_AuthenticationWebApp_scope: 'openid profile email roles api'
@@ -94,7 +94,7 @@ export async function loadAppSettingsBeforeBootstrap(): Promise<void> {
     // Default configuration (used as fallback)
     const defaultConfig: AppSettingsConfig = {
       SDMS_B2CWebApp_url: 'http://localhost:4200',
-      SDMS_AuthenticationWebApp_url: 'http://localhost:5000',
+      SDMS_AuthenticationWebApp_url: 'https://localhost:7001',
       SDMS_AuthenticationWebApp_clientid: 'sdms_frontend',
       SDMS_AuthenticationWebApp_redirectUri: 'http://localhost:4200/auth-callback',
       SDMS_AuthenticationWebApp_scope: 'openid profile email roles api'

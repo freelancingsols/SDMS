@@ -33,8 +33,14 @@ export class AuthService {
   }
 
   private configureOAuth() {
+    // Normalize issuer URL - ensure it ends with a slash to match discovery document
+    let issuerUrl = environment.authServer;
+    if (!issuerUrl.endsWith('/')) {
+      issuerUrl = issuerUrl + '/';
+    }
+
     this.oauthService.configure({
-      issuer: environment.authServer,
+      issuer: issuerUrl,
       redirectUri: window.location.origin + '/auth-callback',
       clientId: environment.clientId,
       responseType: 'code',
@@ -73,17 +79,23 @@ export class AuthService {
 
   async loginWithEmail(email: string, password: string): Promise<boolean> {
     try {
-      const response = await this.http.post<any>(`${this.apiUrl}/account/login`, {
-        email,
-        password
-      }).toPromise();
+      // Use withCredentials to ensure cookies are sent and received
+      const response = await this.http.post<any>(
+        `${this.apiUrl}/account/login`,
+        { email, password },
+        { withCredentials: true }
+      ).toPromise();
 
-      if (response) {
+      if (response && response.success) {
+        // Wait a bit to ensure cookie is set
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
         // After successful backend login, initiate OpenIddict OAuth flow to get tokens
         // The backend has signed the user in, now we get the authorization code
         await this.oauthService.loadDiscoveryDocument();
         
-        // Initiate authorization code flow
+        // Initiate authorization code flow - this will redirect to /connect/authorize
+        // The cookie set by SignInManager should be sent with this request
         this.oauthService.initCodeFlow();
         return true;
       }

@@ -24,7 +24,6 @@ export class LoginComponent implements OnInit {
   async ngOnInit() {
     const action = this.activatedRoute.snapshot.url[0];
     const actionPath = action?.path || LoginActions.Login;
-    
     switch (actionPath) {
       case LoginActions.Login:
         await this.login(this.getReturnUrl());
@@ -46,7 +45,6 @@ export class LoginComponent implements OnInit {
         this.redirectToRegister();
         break;
       default:
-        // Default to login if no action specified
         await this.login(this.getReturnUrl());
         break;
     }
@@ -84,7 +82,7 @@ export class LoginComponent implements OnInit {
         await this.navigateToReturnUrl(this.getReturnUrl(result.state));
         break;
       case AuthenticationResultStatus.Fail:
-        this.message.next(result.message);
+        this.message.next(result.message || null);
         break;
     }
   }

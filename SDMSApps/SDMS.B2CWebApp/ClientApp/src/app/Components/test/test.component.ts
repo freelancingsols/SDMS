@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
-import { AuthService } from '../../services/auth.service';
+import { AuthorizeService } from 'src/app/api-authorization/authorize.service';
+import { take } from 'rxjs/operators';
 
 @Component({
   selector: 'app-test',
@@ -8,67 +9,55 @@ import { AuthService } from '../../services/auth.service';
   styleUrls: ['./test.component.css']
 })
 export class TestComponent implements OnInit {
-  // Dummy data instead of API calls
-  username: string = 'John Doe';
-  userInfo: any = {
-    userId: '123',
-    email: 'john.doe@example.com',
-    displayName: 'John Doe',
-    roles: ['User']
-  };
-  
-  // Dummy data for display
-  items = [
-    { id: 1, name: 'Premium Headphones', description: 'High-quality wireless headphones with noise cancellation', price: 199.99 },
-    { id: 2, name: 'Smart Watch', description: 'Feature-rich smartwatch with health tracking', price: 299.99 },
-    { id: 3, name: 'Laptop Stand', description: 'Ergonomic aluminum laptop stand for better posture', price: 49.99 },
-    { id: 4, name: 'Wireless Mouse', description: 'Ergonomic wireless mouse with long battery life', price: 39.99 },
-    { id: 5, name: 'Mechanical Keyboard', description: 'RGB backlit mechanical keyboard with blue switches', price: 89.99 },
-    { id: 6, name: 'USB-C Hub', description: 'Multi-port USB-C hub with HDMI and SD card reader', price: 59.99 }
-  ];
+  public username: string = '';
 
   constructor(
     private router: Router,
-    private authService: AuthService
+    private authorizeService: AuthorizeService
   ) { }
 
   async ngOnInit() {
-    // Check if this is an OAuth callback
+    // Check if this is the OAuth callback route
     const currentUrl = this.router.url;
     if (currentUrl.includes('/auth-callback')) {
-      // OAuth callback - let the OAuthService handle it
-      // The OAuthService should process the callback automatically
-      // After processing, redirect to home
-      setTimeout(() => {
-        if (this.authService.isAuthenticated()) {
-          this.router.navigate(['/test']);
+      // Let OAuthService handle the callback
+      try {
+        await this.authorizeService.completeSignIn(window.location.href, 'redirect');
+        // After callback, check if authenticated and redirect
+        const isAuthenticated = await this.authorizeService.isAuthenticated().pipe(take(1)).toPromise();
+        if (isAuthenticated) {
+          this.router.navigate(['/test'], { replaceUrl: true });
         } else {
-          this.router.navigate(['/login']);
+          this.router.navigate(['/login'], { replaceUrl: true });
         }
-      }, 1000);
+      } catch (error) {
+        console.error('Error handling OAuth callback:', error);
+        this.router.navigate(['/login'], { replaceUrl: true });
+      }
       return;
     }
-    
-    // Check authentication - if not authenticated, redirect to login
-    if (!this.authService.isAuthenticated()) {
+
+    // For regular routes, check authentication
+    const isAuthenticated = await this.authorizeService.isAuthenticated().pipe(take(1)).toPromise();
+    if (!isAuthenticated) {
       this.router.navigate(['/login'], {
         queryParams: { returnUrl: this.router.url }
       });
       return;
     }
-    
-    // Use dummy data instead of API call
-    // If authenticated, get user info from auth service
-    const userInfo = this.authService.getUserInfo();
-    if (userInfo) {
-      this.userInfo = userInfo;
-      this.username = userInfo.displayName || userInfo.email || 'User';
-    }
+
+    // Load user if authenticated
+    this.authorizeService.getUser().subscribe(user => {
+      if (user && user.name) {
+        this.username = user.name;
+      }
+    });
   }
 
-  public loadTest() {
-    this.router.navigateByUrl('/login', {
+  public loadTest()
+  {
+     this.router.navigateByUrl('/login',{
       replaceUrl: true
-    });
+    })
   }
 }

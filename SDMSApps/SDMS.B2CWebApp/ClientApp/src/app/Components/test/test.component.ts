@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
-import { AuthorizeService } from 'src/app/api-authorization/authorize.service';
+import { AuthorizeService, AuthenticationResultStatus } from 'src/app/api-authorization/authorize.service';
 import { take } from 'rxjs/operators';
 
 @Component({
@@ -22,12 +22,20 @@ export class TestComponent implements OnInit {
     if (currentUrl.includes('/auth-callback')) {
       // Let OAuthService handle the callback
       try {
-        await this.authorizeService.completeSignIn(window.location.href, 'redirect');
+        const result = await this.authorizeService.completeSignIn(window.location.href, 'redirect');
         // After callback, check if authenticated and redirect
-        const isAuthenticated = await this.authorizeService.isAuthenticated().pipe(take(1)).toPromise();
-        if (isAuthenticated) {
-          this.router.navigate(['/test'], { replaceUrl: true });
+        if (result.status === AuthenticationResultStatus.Success) {
+          // Wait a bit for token to be processed
+          await new Promise(resolve => setTimeout(resolve, 100));
+          const isAuthenticated = await this.authorizeService.isAuthenticated().pipe(take(1)).toPromise();
+          if (isAuthenticated) {
+            this.router.navigate(['/test'], { replaceUrl: true });
+          } else {
+            this.router.navigate(['/login'], { replaceUrl: true });
+          }
         } else {
+          const errorMessage = 'message' in result ? result.message : 'Authentication failed';
+          console.error('Authentication failed:', errorMessage);
           this.router.navigate(['/login'], { replaceUrl: true });
         }
       } catch (error) {

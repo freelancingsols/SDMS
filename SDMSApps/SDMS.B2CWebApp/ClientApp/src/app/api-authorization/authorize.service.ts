@@ -82,9 +82,13 @@ export class AuthorizeService {
       
       // Token refresh settings
       timeoutFactor: 0.75,
-      sessionChecksEnabled: true,
+      sessionChecksEnabled: false, // Disabled because OpenIddict doesn't provide check_session_iframe endpoint
       
-      disableAtHashCheck: true
+      disableAtHashCheck: true,
+      
+      // Skip JWKS validation if it fails (for development)
+      skipIssuerCheck: false,
+      skipSubjectCheck: false
     });
 
     // Setup automatic silent refresh if enabled
@@ -98,7 +102,20 @@ export class AuthorizeService {
         this.loadUserProfile().catch(err => console.error('Error loading user profile on init:', err));
       }
     }).catch(err => {
+      // Log the full error for debugging
       console.warn('Error loading discovery document:', err);
+      if (err instanceof Error) {
+        console.warn('Error details:', err.message, err.stack);
+      } else if (err && typeof err === 'object') {
+        // Handle OAuthErrorEvent
+        console.warn('OAuth error details:', JSON.stringify(err, null, 2));
+        if ('reason' in err) {
+          console.warn('Error reason:', (err as any).reason);
+        }
+        if ('params' in err) {
+          console.warn('Error params:', (err as any).params);
+        }
+      }
     });
 
     // Listen for token events
@@ -203,22 +220,73 @@ export class AuthorizeService {
   public async completeSignIn(_url: string, _callbackAction: string): Promise<IAuthenticationResult> {
     try {
       // OAuth callback is handled by angular-oauth2-oidc automatically
-      // Load discovery document first
-      await this.oauthService.loadDiscoveryDocument();
-      
-      // Try to process the callback URL
-      await this.oauthService.tryLoginCodeFlow();
-      
-      // Check if we got a valid token
+      // Check if we already have a valid token (prevent multiple processing)
       if (this.oauthService.hasValidAccessToken()) {
         await this.loadUserProfile();
         return this.success(null);
-      } else {
-        return this.error('No access token received after login.');
+      }
+
+      // Load discovery document first
+      try {
+        await this.oauthService.loadDiscoveryDocument();
+      } catch (discoveryError) {
+        console.error('Error loading discovery document in completeSignIn:', discoveryError);
+        if (discoveryError && typeof discoveryError === 'object') {
+          console.error('Discovery error details:', JSON.stringify(discoveryError, null, 2));
+        }
+        return this.error('Failed to load discovery document. Please check the authentication server is running.');
+      }
+      
+      // Try to process the callback URL
+      // tryLoginCodeFlow() automatically reads from window.location and exchanges the code for tokens
+      try {
+        console.log('Processing OAuth callback, current URL:', window.location.href);
+        await this.oauthService.tryLoginCodeFlow();
+        
+        // Wait a bit for token to be stored
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        // Check if we got a valid token
+        const hasToken = this.oauthService.hasValidAccessToken();
+        console.log('Has valid access token after tryLoginCodeFlow:', hasToken);
+        
+        if (hasToken) {
+          const token = this.oauthService.getAccessToken();
+          console.log('Access token received, length:', token?.length || 0);
+          await this.loadUserProfile();
+          return this.success(null);
+        } else {
+          // Check if there's an error in the URL
+          const urlParams = new URLSearchParams(window.location.search);
+          const error = urlParams.get('error');
+          const errorDescription = urlParams.get('error_description');
+          if (error) {
+            console.error('OAuth error in URL:', error, errorDescription);
+            return this.error(`OAuth error: ${error} - ${errorDescription || ''}`);
+          }
+          
+          // Check identity claims as fallback
+          const claims = this.oauthService.getIdentityClaims();
+          console.log('Identity claims:', claims);
+          
+          return this.error('No access token received after login. Check browser console for details.');
+        }
+      } catch (loginError) {
+        console.error('Error in tryLoginCodeFlow:', loginError);
+        if (loginError && typeof loginError === 'object') {
+          console.error('Login error details:', JSON.stringify(loginError, null, 2));
+        }
+        return this.error('Failed to process OAuth callback: ' + (loginError instanceof Error ? loginError.message : String(loginError)));
       }
     } catch (error) {
-      console.log('There was an error signing in: ', error);
-      return this.error('There was an error signing in: ' + (error instanceof Error ? error.message : String(error)));
+      console.error('There was an error signing in: ', error);
+      // Log full error details
+      if (error && typeof error === 'object') {
+        console.error('Full error object:', JSON.stringify(error, null, 2));
+      }
+      // Don't throw error to prevent redirect loops - just return error result
+      const errorMessage = error instanceof Error ? error.message : (error && typeof error === 'object' ? JSON.stringify(error) : String(error));
+      return this.error('There was an error signing in: ' + errorMessage);
     }
   }
 

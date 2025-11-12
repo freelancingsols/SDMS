@@ -7,6 +7,7 @@ using OpenIddict.Server.AspNetCore;
 using SDMS.AuthenticationWebApp.Models;
 using SDMS.AuthenticationWebApp.Services;
 using static OpenIddict.Abstractions.OpenIddictConstants;
+using OpenIddictConstants = OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace SDMS.AuthenticationWebApp.Controllers;
 
@@ -179,13 +180,17 @@ public class AccountController : ControllerBase
         }
     }
 
-    [Authorize(AuthenticationSchemes = "Identity.Application")]
+    [Authorize] // Accept both cookie and Bearer token authentication
     [HttpGet("userinfo")]
     public async Task<IActionResult> UserInfo()
     {
         try
         {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            // Try to get user ID from Bearer token first (OpenIddict)
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) 
+                ?? User.FindFirstValue("sub") 
+                ?? User.FindFirstValue(OpenIddictConstants.Claims.Subject);
+            
             if (string.IsNullOrEmpty(userId))
             {
                 return Unauthorized();

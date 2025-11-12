@@ -399,9 +399,10 @@ using (var scope = app.Services.CreateScope())
     var clientDescriptor = new OpenIddictApplicationDescriptor
     {
         ClientId = "sdms_frontend",
-        ClientSecret = "sdms_frontend_secret",
-        ClientType = ClientTypes.Confidential, // Required: Confidential client (has secret)
+        // No ClientSecret for public clients (SPA/frontend apps)
+        ClientType = ClientTypes.Public, // Public client for SPA (cannot securely store secrets)
         DisplayName = "SDMS Frontend Application",
+        ConsentType = ConsentTypes.Implicit, // Use implicit consent for trusted first-party client
         Permissions =
         {
             Permissions.Endpoints.Authorization,
@@ -421,12 +422,20 @@ using (var scope = app.Services.CreateScope())
         {
             new Uri("http://localhost:4200/auth-callback"),
             new Uri("https://localhost:4200/auth-callback"),
+            new Uri("http://localhost:7001/auth-callback"),
+            new Uri("https://localhost:7001/auth-callback"),
+            new Uri("http://localhost:5000/auth-callback"),
+            new Uri("https://localhost:5000/auth-callback"),
             new Uri($"{b2cUrlForClient}/auth-callback"),
         },
         PostLogoutRedirectUris =
         {
             new Uri("http://localhost:4200/"),
             new Uri("https://localhost:4200/"),
+            new Uri("http://localhost:7001/"),
+            new Uri("https://localhost:7001/"),
+            new Uri("http://localhost:5000/"),
+            new Uri("https://localhost:5000/"),
             new Uri($"{b2cUrlForClient}/"),
         },
         Requirements =
@@ -445,8 +454,9 @@ using (var scope = app.Services.CreateScope())
     else
     {
         // Update existing client to ensure it has all required permissions and scopes
+        // This will also update the client type to Public (removing client secret requirement)
         await applicationManager.UpdateAsync(existingClient, clientDescriptor);
-        Console.WriteLine("Updated OpenIddict client: sdms_frontend (updated with latest permissions and scopes)");
+        Console.WriteLine("Updated OpenIddict client: sdms_frontend (updated to Public client type with latest permissions and scopes)");
     }
 
     // Create default roles

@@ -4,8 +4,9 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
-import { ServiceWorkerModule } from '@angular/service-worker';
-import { environment } from '../environments/environment';
+// Service worker disabled for now
+// import { ServiceWorkerModule } from '@angular/service-worker';
+// import { environment } from '../environments/environment';
 import { FrameworkModule } from './framework/framework.module';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { TestComponent } from './Components/test/test.component';
@@ -42,10 +43,11 @@ import { MatSortModule } from '@angular/material/sort';
     FormsModule,
     ReactiveFormsModule,
     // Routes are defined in AppRoutingModule to avoid duplication
-    ServiceWorkerModule.register('ngsw-worker.js', { 
-      enabled: environment.production,
-      registrationStrategy: 'registerWhenStable:30000'
-    }),
+    // Service worker disabled for now - can be enabled in production if needed
+    // ServiceWorkerModule.register('ngsw-worker.js', { 
+    //   enabled: environment.production,
+    //   registrationStrategy: 'registerWhenStable:30000'
+    // }),
     FrameworkModule,
     BrowserAnimationsModule,
     OAuthModule.forRoot(),

@@ -395,6 +395,69 @@ using (var scope = app.Services.CreateScope())
     // Get B2C URL from configuration or use default
     var b2cUrlForClient = builder.Configuration["SDMS_B2CWebApp_url"] ?? "https://sdms-pi.vercel.app";
     
+    // Helper function to parse comma-separated URIs from configuration
+    static HashSet<Uri> ParseUrisFromConfig(string? configValue, HashSet<Uri> defaultUris)
+    {
+        var uris = new HashSet<Uri>();
+        
+        if (!string.IsNullOrWhiteSpace(configValue))
+        {
+            // Parse comma-separated values
+            var uriStrings = configValue.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            foreach (var uriString in uriStrings)
+            {
+                if (Uri.TryCreate(uriString, UriKind.Absolute, out var uri))
+                {
+                    uris.Add(uri);
+                }
+                else
+                {
+                    Console.WriteLine($"Warning: Invalid URI in configuration: {uriString}");
+                }
+            }
+        }
+        
+        // If no URIs were parsed from config, use defaults
+        if (uris.Count == 0)
+        {
+            uris = defaultUris;
+        }
+        
+        return uris;
+    }
+    
+    // Default redirect URIs (fallback if not configured)
+    var defaultRedirectUris = new HashSet<Uri>
+    {
+        new Uri("http://localhost:4200/auth-callback"),
+        new Uri("https://localhost:4200/auth-callback"),
+        new Uri("http://localhost:7001/auth-callback"),
+        new Uri("https://localhost:7001/auth-callback"),
+        new Uri("http://localhost:5000/auth-callback"),
+        new Uri("https://localhost:5000/auth-callback"),
+        new Uri($"{b2cUrlForClient}/auth-callback"),
+    };
+    
+    // Default post-logout redirect URIs (fallback if not configured)
+    var defaultPostLogoutRedirectUris = new HashSet<Uri>
+    {
+        new Uri("http://localhost:4200/"),
+        new Uri("https://localhost:4200/"),
+        new Uri("http://localhost:7001/"),
+        new Uri("https://localhost:7001/"),
+        new Uri("http://localhost:5000/"),
+        new Uri("https://localhost:5000/"),
+        new Uri($"{b2cUrlForClient}/"),
+    };
+    
+    // Get redirect URIs from configuration
+    var redirectUrisConfig = builder.Configuration[ConfigurationKeys.RedirectUris];
+    var redirectUris = ParseUrisFromConfig(redirectUrisConfig, defaultRedirectUris);
+    
+    // Get post-logout redirect URIs from configuration
+    var postLogoutRedirectUrisConfig = builder.Configuration[ConfigurationKeys.PostLogoutRedirectUris];
+    var postLogoutRedirectUris = ParseUrisFromConfig(postLogoutRedirectUrisConfig, defaultPostLogoutRedirectUris);
+    
     // Create or update OpenIddict client
     var clientDescriptor = new OpenIddictApplicationDescriptor
     {
@@ -418,26 +481,8 @@ using (var scope = app.Services.CreateScope())
             Permissions.Prefixes.Scope + "api",
             Permissions.Prefixes.Scope + "offline_access",
         },
-        RedirectUris =
-        {
-            new Uri("http://localhost:4200/auth-callback"),
-            new Uri("https://localhost:4200/auth-callback"),
-            new Uri("http://localhost:7001/auth-callback"),
-            new Uri("https://localhost:7001/auth-callback"),
-            new Uri("http://localhost:5000/auth-callback"),
-            new Uri("https://localhost:5000/auth-callback"),
-            new Uri($"{b2cUrlForClient}/auth-callback"),
-        },
-        PostLogoutRedirectUris =
-        {
-            new Uri("http://localhost:4200/"),
-            new Uri("https://localhost:4200/"),
-            new Uri("http://localhost:7001/"),
-            new Uri("https://localhost:7001/"),
-            new Uri("http://localhost:5000/"),
-            new Uri("https://localhost:5000/"),
-            new Uri($"{b2cUrlForClient}/"),
-        },
+        RedirectUris = redirectUris,
+        PostLogoutRedirectUris = postLogoutRedirectUris,
         Requirements =
         {
             Requirements.Features.ProofKeyForCodeExchange

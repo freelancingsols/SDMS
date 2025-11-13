@@ -42,5 +42,9 @@ public static class ConfigurationKeys
     
     // Signing Key
     public const string SigningKeyPath = "SDMS_AuthenticationWebApp_SigningKeyPath";
+    
+    // OpenIddict Client Configuration
+    public const string RedirectUris = "SDMS_AuthenticationWebApp_RedirectUris";
+    public const string PostLogoutRedirectUris = "SDMS_AuthenticationWebApp_PostLogoutRedirectUris";
 }
 

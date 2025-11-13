@@ -5,16 +5,16 @@ import { LoginComponent } from './login/login.component';
 import { LogoutComponent } from './logout/logout.component';
 import { RouterModule } from '@angular/router';
 import { HttpClientModule } from '@angular/common/http';
-import { ApiAuthorizationRoutingModule } from './api-authorization.routing.module';
+import { AuthRoutingModule } from './auth-routing.module';
 
 @NgModule({
   imports: [
     CommonModule,
     HttpClientModule,
     RouterModule,
-    ApiAuthorizationRoutingModule,
+    AuthRoutingModule,
   ],
   declarations: [LoginMenuComponent, LoginComponent, LogoutComponent],
   exports: [LoginMenuComponent, LoginComponent, LogoutComponent]
 })
-export class ApiAuthorizationModule { }
+export class AuthModule { }

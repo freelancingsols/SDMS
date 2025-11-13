@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
-import { AuthorizeService, AuthenticationResultStatus } from 'src/app/api-authorization/authorize.service';
+import { AuthorizeService, AuthenticationResultStatus } from 'src/app/auth/authorize.service';
 import { take } from 'rxjs/operators';
 
 @Component({

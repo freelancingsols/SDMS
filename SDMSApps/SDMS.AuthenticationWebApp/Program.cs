@@ -228,6 +228,7 @@ builder.Services.ConfigureApplicationCookie(options =>
     {
         // For API calls, always return 401 instead of redirecting
         if (context.Request.Path.StartsWithSegments("/api") || 
+            context.Request.Path.StartsWithSegments("/account") ||
             context.Request.Path.StartsWithSegments("/connect/token") ||
             context.Request.Path.StartsWithSegments("/connect/userinfo"))
         {
@@ -373,13 +374,15 @@ app.MapControllers();
 
 // SPA fallback: serve index.html for all routes that don't match controllers or other endpoints
 // MapFallbackToFile automatically excludes routes matched by MapControllers, MapHealthChecks, etc.
+// Explicitly exclude API routes to ensure they're not caught by the fallback
 if (fileProviders.Count > 0)
 {
     var fallbackFileProvider = new CompositeFileProvider(fileProviders);
     app.MapFallbackToFile("index.html", new StaticFileOptions
     {
-        FileProvider = fallbackFileProvider
-    });
+        FileProvider = fallbackFileProvider,
+        RequestPath = "" // Only match routes that don't start with /api, /account, /connect, etc.
+    }).ExcludeFromDescription(); // Exclude from API documentation
 }
 
 // Initialize database and OpenIddict
@@ -481,13 +484,23 @@ using (var scope = app.Services.CreateScope())
             Permissions.Prefixes.Scope + "api",
             Permissions.Prefixes.Scope + "offline_access",
         },
-        RedirectUris = redirectUris,
-        PostLogoutRedirectUris = postLogoutRedirectUris,
         Requirements =
         {
             Requirements.Features.ProofKeyForCodeExchange
         }
     };
+    
+    // Add redirect URIs (collection is read-only, so we add items individually)
+    foreach (var uri in redirectUris)
+    {
+        clientDescriptor.RedirectUris.Add(uri);
+    }
+    
+    // Add post-logout redirect URIs (collection is read-only, so we add items individually)
+    foreach (var uri in postLogoutRedirectUris)
+    {
+        clientDescriptor.PostLogoutRedirectUris.Add(uri);
+    }
     
     var existingClient = await applicationManager.FindByClientIdAsync("sdms_frontend");
     if (existingClient == null)

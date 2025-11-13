@@ -29,11 +29,16 @@ const envVars = {
 };
 
 // Default values (fallback)
+// Note: These defaults are used if environment variables are not set
+// For production, environment variables should be set in Vercel
+// For local development, these defaults allow localhost usage
+// VERCEL_ENV is set by Vercel: 'production', 'preview', or 'development'
+const isVercelProduction = process.env.VERCEL_ENV === 'production';
 const defaults = {
-  SDMS_B2CWebApp_url: 'http://localhost:4200',
-  SDMS_AuthenticationWebApp_url: 'https://localhost:7001',
+  SDMS_B2CWebApp_url: isVercelProduction ? 'https://sdms-pi.vercel.app' : 'http://localhost:4200',
+  SDMS_AuthenticationWebApp_url: isVercelProduction ? 'https://sdms-production.up.railway.app' : 'https://localhost:7001',
   SDMS_AuthenticationWebApp_clientid: 'sdms_frontend',
-  SDMS_AuthenticationWebApp_redirectUri: 'http://localhost:4200/auth-callback',
+  SDMS_AuthenticationWebApp_redirectUri: isVercelProduction ? 'https://sdms-pi.vercel.app/auth-callback' : 'http://localhost:4200/auth-callback',
   SDMS_AuthenticationWebApp_scope: 'openid profile email roles api'
 };
 

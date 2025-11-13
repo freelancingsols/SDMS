@@ -1,6 +1,6 @@
 import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
-import { ApplicationPaths, CallbackActions } from './api-authorization.constants';
+import { ApplicationPaths, CallbackActions } from './auth.constants';
 import { LoginComponent } from './login/login.component';
 import { LogoutComponent } from './logout/logout.component';
 
@@ -27,5 +27,4 @@ const routes: Routes = [
     ],
     providers: []
 })
-export class ApiAuthorizationRoutingModule { }
-
+export class AuthRoutingModule { }

@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { AuthorizeService, AuthenticationResultStatus } from '../authorize.service';
 import { ActivatedRoute, Router } from '@angular/router';
 import { BehaviorSubject } from 'rxjs';
-import { LoginActions, QueryParameterNames, ApplicationPaths, ReturnUrlType, CallbackActions } from '../api-authorization.constants';
+import { LoginActions, QueryParameterNames, ApplicationPaths, ReturnUrlType, CallbackActions } from '../auth.constants';
 
 // The main responsibility of this component is to handle the user's login process.
 // This is the starting point for the login process. Any component that needs to authenticate
@@ -23,7 +23,8 @@ export class LoginComponent implements OnInit {
 
   async ngOnInit() {
     const action = this.activatedRoute.snapshot.url[0];
-    switch (action.path) {
+    const actionPath = action?.path || LoginActions.Login;
+    switch (actionPath) {
       case LoginActions.Login:
         await this.login(this.getReturnUrl());
         break;
@@ -44,7 +45,8 @@ export class LoginComponent implements OnInit {
         this.redirectToRegister();
         break;
       default:
-        throw new Error(`Invalid action '${action}'`);
+        await this.login(this.getReturnUrl());
+        break;
     }
   }
 
@@ -80,7 +82,7 @@ export class LoginComponent implements OnInit {
         await this.navigateToReturnUrl(this.getReturnUrl(result.state));
         break;
       case AuthenticationResultStatus.Fail:
-        this.message.next(result.message);
+        this.message.next(result.message || null);
         break;
     }
   }
@@ -112,9 +114,9 @@ export class LoginComponent implements OnInit {
       // This is an extra check to prevent open redirects.
       throw new Error('Invalid return url. The return url needs to have the same origin as the current page.');
     }
-    return "http://localhost:5000"+((state && state.returnUrl) ||
+    return (state && state.returnUrl) ||
       fromQuery ||
-      ApplicationPaths.DefaultLoginRedirectPath);
+      ApplicationPaths.DefaultLoginRedirectPath;
   }
 
   private redirectToApiAuthorizationPath(apiAuthorizationPath: string) {

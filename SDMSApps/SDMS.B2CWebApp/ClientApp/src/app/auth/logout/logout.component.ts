@@ -1,9 +1,9 @@
 import { Component, OnInit } from '@angular/core';
 import { AuthenticationResultStatus, AuthorizeService } from '../authorize.service';
-import { BehaviorSubject, firstValueFrom } from 'rxjs';
+import { BehaviorSubject } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
 import { take } from 'rxjs/operators';
-import { LogoutActions, ApplicationPaths, ReturnUrlType } from '../api-authorization.constants';
+import { LogoutActions, ApplicationPaths, ReturnUrlType } from '../auth.constants';
 
 // The main responsibility of this component is to handle the user's logout process.
 // This is the starting point for the logout process, which is usually initiated when a
@@ -46,9 +46,9 @@ export class LogoutComponent implements OnInit {
 
   private async logout(returnUrl: string): Promise<void> {
     const state: INavigationState = { returnUrl };
-    const isauthenticated = await firstValueFrom(
-      this.authorizeService.isAuthenticated().pipe(take(1))
-    );
+    const isauthenticated = await this.authorizeService.isAuthenticated().pipe(
+      take(1)
+    ).toPromise();
     if (isauthenticated) {
       const result = await this.authorizeService.signOut(state);
       switch (result.status) {
@@ -80,7 +80,7 @@ export class LogoutComponent implements OnInit {
         await this.navigateToReturnUrl(this.getReturnUrl(result.state));
         break;
       case AuthenticationResultStatus.Fail:
-        this.message.next(result.message);
+        this.message.next(result.message || null);
         break;
       default:
         throw new Error('Invalid authentication result status.');

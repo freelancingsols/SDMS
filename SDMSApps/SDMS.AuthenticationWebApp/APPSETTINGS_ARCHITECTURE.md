@@ -9,30 +9,26 @@ The AuthenticationWebApp uses **ASP.NET Core's built-in configuration system** w
 ```
 1. Environment Variables (Highest Priority)
    ↓
-2. appsettings.Production.json (Production environment)
+2. appsettings.json (Single file with local development values)
    ↓
-3. appsettings.Development.json (Development environment)
-   ↓
-4. appsettings.json (Base/Default)
-   ↓
-5. Hardcoded defaults (Fallback)
+3. Hardcoded defaults (Fallback)
 ```
 
 ## Configuration Files
 
-### 1. `appsettings.json` (Base Configuration)
-- Contains default/fallback values
+### 1. `appsettings.json` (Single Configuration File)
+- Contains local development values (localhost URLs, local database, etc.)
 - Committed to source control
-- Used as base template
+- Used as base template for all environments
+- **Production values are set via environment variables at runtime**
+- Environment variables override values in this file
 
-### 2. `appsettings.Development.json` (Development)
-- Overrides base settings for development
-- More detailed logging, local database, etc.
-
-### 3. `appsettings.Production.json` (Production)
-- Empty values (placeholders)
-- Environment variables override these values
-- Not committed with sensitive data
+### Note: Single File Approach
+- **We use only `appsettings.json` file**
+- Contains local development values (localhost)
+- Production values are loaded from environment variables at runtime
+- Environment variables have the highest priority and override appsettings.json
+- No separate development or production files needed
 
 ## How It Works
 
@@ -48,10 +44,11 @@ builder.Configuration.AddEnvironmentVariables();
 
 **Key Points:**
 - `WebApplication.CreateBuilder(args)` automatically loads:
-  - `appsettings.json`
-  - `appsettings.{Environment}.json` (based on `ASPNETCORE_ENVIRONMENT`)
+  - `appsettings.json` (always loaded - contains local development values)
 - `AddEnvironmentVariables()` adds environment variables with **highest priority**
-- Environment variables use `:` as separator (e.g., `Frontend:Url`)
+- Environment variables override values from appsettings.json
+- Environment variables use the same key names as in appsettings.json (e.g., `SDMS_AuthenticationWebApp_FrontendUrl`)
+- **Single file approach**: Only `appsettings.json` is used, no environment-specific files
 
 ### 2. Configuration Access
 
@@ -94,7 +91,7 @@ var loginUrl = builder.Configuration[ConfigurationKeys.AuthenticationLoginUrl] ?
 ### 3. Configuration Priority Example
 
 ```csharp
-// Priority: Environment Variable > appsettings.Production.json > appsettings.json
+// Priority: Environment Variable > appsettings.{Environment}.json > appsettings.json
 var port = Environment.GetEnvironmentVariable("PORT") 
     ?? builder.Configuration[ConfigurationKeys.ServerPort];
 var urls = builder.Configuration[ConfigurationKeys.ServerUrls];
@@ -250,7 +247,7 @@ builder.Services.AddCors(options =>
 1. **Use Constants**: Define configuration keys in `ConfigurationKeys` class
 2. **Provide Defaults**: Always provide fallback values using `??` operator
 3. **Environment Variables**: Use environment variables for sensitive data (secrets, connection strings)
-4. **Empty Production Files**: Keep `appsettings.Production.json` with empty values
+4. **Single Configuration File**: Use only `appsettings.json` with default values. Production values come from environment variables.
 5. **Don't Commit Secrets**: Never commit sensitive data to source control
 
 ## Summary

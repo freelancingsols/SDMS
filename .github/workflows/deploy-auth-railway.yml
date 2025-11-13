@@ -185,6 +185,7 @@ jobs:
           SDMS_AuthenticationWebApp_WebhookSecret: ${{ secrets.SDMS_AuthenticationWebApp_WebhookSecret }}
           # Vars
           SDMS_AuthenticationWebApp_FrontendUrl: ${{ vars.SDMS_AuthenticationWebApp_FrontendUrl }}
+          SDMS_B2CWebApp_url: ${{ vars.SDMS_B2CWebApp_url }}
           SDMS_AuthenticationWebApp_LoginUrl: ${{ vars.SDMS_AuthenticationWebApp_LoginUrl }}
           SDMS_AuthenticationWebApp_LogoutUrl: ${{ vars.SDMS_AuthenticationWebApp_LogoutUrl }}
           SDMS_AuthenticationWebApp_ErrorUrl: ${{ vars.SDMS_AuthenticationWebApp_ErrorUrl }}
@@ -196,6 +197,8 @@ jobs:
           SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain: ${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain }}
           SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId: ${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId }}
           SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri: ${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri }}
+          SDMS_AuthenticationWebApp_RedirectUris: ${{ vars.SDMS_AuthenticationWebApp_RedirectUris }}
+          SDMS_AuthenticationWebApp_PostLogoutRedirectUris: ${{ vars.SDMS_AuthenticationWebApp_PostLogoutRedirectUris }}
         working-directory: SDMSApps/SDMS.AuthenticationWebApp
         run: |
           echo "=== Syncing Railway Environment Variables ==="
@@ -353,6 +356,7 @@ jobs:
           declare -A VARS_TO_SYNC
           VARS_TO_SYNC["SDMS_AuthenticationWebApp_ConnectionString"]="$SDMS_AuthenticationWebApp_ConnectionString"
           VARS_TO_SYNC["SDMS_AuthenticationWebApp_FrontendUrl"]="$SDMS_AuthenticationWebApp_FrontendUrl"
+          VARS_TO_SYNC["SDMS_B2CWebApp_url"]="$SDMS_B2CWebApp_url"
           VARS_TO_SYNC["SDMS_AuthenticationWebApp_LoginUrl"]="$SDMS_AuthenticationWebApp_LoginUrl"
           VARS_TO_SYNC["SDMS_AuthenticationWebApp_LogoutUrl"]="$SDMS_AuthenticationWebApp_LogoutUrl"
           VARS_TO_SYNC["SDMS_AuthenticationWebApp_ErrorUrl"]="$SDMS_AuthenticationWebApp_ErrorUrl"
@@ -366,6 +370,8 @@ jobs:
           VARS_TO_SYNC["SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId"]="$SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId"
           VARS_TO_SYNC["SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret"]="$SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret"
           VARS_TO_SYNC["SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri"]="$SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri"
+          VARS_TO_SYNC["SDMS_AuthenticationWebApp_RedirectUris"]="$SDMS_AuthenticationWebApp_RedirectUris"
+          VARS_TO_SYNC["SDMS_AuthenticationWebApp_PostLogoutRedirectUris"]="$SDMS_AuthenticationWebApp_PostLogoutRedirectUris"
           VARS_TO_SYNC["SDMS_AuthenticationWebApp_WebhookSecret"]="$SDMS_AuthenticationWebApp_WebhookSecret"
           
           # Step 3: Compare and sync

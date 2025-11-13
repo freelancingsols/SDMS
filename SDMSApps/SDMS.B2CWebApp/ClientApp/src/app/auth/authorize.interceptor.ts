@@ -1,24 +1,25 @@
 import { Injectable } from '@angular/core';
 import { HttpInterceptor, HttpRequest, HttpHandler, HttpEvent } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { AuthorizeService } from './authorize.service';
-import { mergeMap } from 'rxjs/operators';
+import { OAuthService } from 'angular-oauth2-oidc';
+import { AppSettings } from '../config/app-settings';
 
 @Injectable({
   providedIn: 'root'
 })
 export class AuthorizeInterceptor implements HttpInterceptor {
-  constructor(private authorize: AuthorizeService) { }
+  constructor(private oauthService: OAuthService) { }
 
   intercept(req: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
-    return this.authorize.getAccessToken()
-      .pipe(mergeMap(token => this.processRequestWithToken(token, req, next)));
+    // Get token directly from OAuthService to avoid circular dependency
+    const token = this.oauthService.getAccessToken();
+    return this.processRequestWithToken(token || '', req, next);
   }
 
-  // Checks if there is an access_token available in the authorize service
-  // and adds it to the request in case it's targeted at the same origin as the
-  // single page application.
-  private processRequestWithToken(token: string, req: HttpRequest<any>, next: HttpHandler) {
+  // Checks if there is an access_token available and adds it to the request
+  // in case it's targeted at the same origin as the single page application
+  // or the authentication server.
+  private processRequestWithToken(token: string, req: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
     if (!!token && this.isSameOriginUrl(req)) {
       req = req.clone({
         setHeaders: {
@@ -31,6 +32,12 @@ export class AuthorizeInterceptor implements HttpInterceptor {
   }
 
   private isSameOriginUrl(req: any) {
+    // Always add token to requests to the authentication server
+    const authServerUrl = AppSettings.SDMS_AuthenticationWebApp_url;
+    if (authServerUrl && req.url.startsWith(authServerUrl)) {
+      return true;
+    }
+
     // It's an absolute url with the same origin.
     if (req.url.startsWith(`${window.location.origin}/`)) {
       return true;

@@ -21,9 +21,12 @@ using Microsoft.Extensions.Logging;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Load configuration from environment variables
-// Environment variables take precedence over appsettings.json
-// This allows configuration to be set via environment variables in any deployment platform
+// Configuration loading order (highest to lowest priority):
+// 1. Environment Variables (loaded here - highest priority)
+// 2. appsettings.json (loaded automatically by CreateBuilder - base/default values with local development values)
+//
+// Note: We use a single appsettings.json file with local development values.
+// Production values are set via environment variables at runtime, which override the default values in appsettings.json.
 builder.Configuration.AddEnvironmentVariables();
 
 // Configure server URLs from configuration
@@ -148,7 +151,7 @@ builder.Services.AddOpenIddict()
         options.AllowClientCredentialsFlow();
         options.AllowPasswordFlow(); // Allow password grant for testing and API access
 
-        options.RegisterScopes(Scopes.Email, Scopes.Profile, Scopes.Roles, "api");
+        options.RegisterScopes(Scopes.Email, Scopes.Profile, Scopes.Roles, "api", "offline_access");
 
         // Signing and encryption - use development certificates for now
         options.AddDevelopmentEncryptionCertificate()
@@ -177,27 +180,31 @@ var returnUrlParameter = builder.Configuration[ConfigurationKeys.ReturnUrlParame
 // Configure authentication defaults
 // AddIdentity already registers Identity.Application and Identity.External schemes
 // Do NOT add them again here to avoid duplicate scheme registration
-builder.Services.AddAuthentication(options =>
+var authBuilder = builder.Services.AddAuthentication(options =>
 {
     options.DefaultScheme = IdentityConstants.ApplicationScheme;
     options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
     options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme;
-})
-.AddGoogle(options =>
+    // Allow Bearer token authentication for API endpoints
+    options.DefaultAuthenticateScheme = IdentityConstants.ApplicationScheme;
+});
+
+// Only add Google authentication if credentials are provided
+var googleClientId = builder.Configuration[ConfigurationKeys.ExternalAuthGoogleClientId];
+var googleClientSecret = builder.Configuration[ConfigurationKeys.ExternalAuthGoogleClientSecret];
+
+if (!string.IsNullOrEmpty(googleClientId) && !string.IsNullOrEmpty(googleClientSecret))
 {
-    var clientId = builder.Configuration[ConfigurationKeys.ExternalAuthGoogleClientId];
-    var clientSecret = builder.Configuration[ConfigurationKeys.ExternalAuthGoogleClientSecret];
-    
-    if (!string.IsNullOrEmpty(clientId) && !string.IsNullOrEmpty(clientSecret))
+    authBuilder.AddGoogle(options =>
     {
-        options.ClientId = clientId;
-        options.ClientSecret = clientSecret;
+        options.ClientId = googleClientId;
+        options.ClientSecret = googleClientSecret;
         options.SignInScheme = IdentityConstants.ExternalScheme;
         options.SaveTokens = true;
         // GetClaimsFromUserInfoEndpoint is automatically enabled in ASP.NET Core 8.0
         // No need to set it explicitly
-    }
-});
+    });
+}
 
 // Authorization - configure to redirect to login for unauthorized requests
 builder.Services.AddAuthorization(options =>
@@ -223,6 +230,7 @@ builder.Services.ConfigureApplicationCookie(options =>
     {
         // For API calls, always return 401 instead of redirecting
         if (context.Request.Path.StartsWithSegments("/api") || 
+            context.Request.Path.StartsWithSegments("/account") ||
             context.Request.Path.StartsWithSegments("/connect/token") ||
             context.Request.Path.StartsWithSegments("/connect/userinfo"))
         {
@@ -245,14 +253,30 @@ builder.Services.AddHttpClient();
 
 // CORS
 var frontendUrl = builder.Configuration[ConfigurationKeys.FrontendUrl] ?? "http://localhost:4200";
+var b2cUrl = builder.Configuration["SDMS_B2CWebApp_url"] ?? "http://localhost:4200";
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins(
+        var origins = new List<string>
+        {
             "http://localhost:4200",
-            "https://localhost:4200",
-            frontendUrl)
+            "https://localhost:4200"
+        };
+        
+        // Add frontend URL if not already in list
+        if (!string.IsNullOrEmpty(frontendUrl) && !origins.Contains(frontendUrl))
+        {
+            origins.Add(frontendUrl);
+        }
+        
+        // Add B2C URL if not already in list
+        if (!string.IsNullOrEmpty(b2cUrl) && !origins.Contains(b2cUrl))
+        {
+            origins.Add(b2cUrl);
+        }
+        
+        policy.WithOrigins(origins.ToArray())
             .AllowAnyMethod()
             .AllowAnyHeader()
             .AllowCredentials();
@@ -281,32 +305,11 @@ if (app.Environment.IsDevelopment())
 // In production (Railway), skip HTTPS redirection as the proxy handles SSL/TLS
 
 app.UseCors();
-app.UseRouting();
 
-// Map health check, ping, and root endpoints BEFORE authentication/authorization
-// This allows Railway and other platforms to check if the container is healthy
-app.MapHealthChecks("/health").AllowAnonymous();
-app.MapGet("/ping", () => Results.Ok(new { 
-    status = "ok",
-    message = "pong",
-    timestamp = DateTime.UtcNow
-})).AllowAnonymous();
-app.MapGet("/", () => Results.Json(new { 
-    status = "ok", 
-    service = "SDMS Authentication API", 
-    version = "1.0",
-    timestamp = DateTime.UtcNow,
-    environment = app.Environment.EnvironmentName
-})).AllowAnonymous();
-
-app.UseAuthentication();
-app.UseAuthorization();
-
-// Map controllers - OpenIddict endpoints are handled automatically by middleware
-app.MapControllers();
-
-// Serve static files from Angular build output
-var angularDistPath = Path.Combine(builder.Environment.ContentRootPath, "ClientApp", "dist", "sdms-auth-client");
+// Serve static files from Angular build output BEFORE routing
+// This ensures static files are checked before endpoint routing
+// Angular 17+ builds to a 'browser' subdirectory
+var angularDistPath = Path.Combine(builder.Environment.ContentRootPath, "ClientApp", "dist", "sdms-auth-client", "browser");
 var wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
 
 var fileProviders = new List<IFileProvider>();
@@ -315,11 +318,12 @@ var fileProviders = new List<IFileProvider>();
 if (Directory.Exists(angularDistPath))
 {
     fileProviders.Add(new PhysicalFileProvider(angularDistPath));
+    Console.WriteLine($"✓ Angular dist directory found at: {angularDistPath}");
 }
 else
 {
     // Log warning to console (will be logged properly after app is built)
-    Console.WriteLine($"Warning: Angular dist directory not found at {angularDistPath}. Angular app will not be served.");
+    Console.WriteLine($"✗ Warning: Angular dist directory not found at {angularDistPath}. Angular app will not be served.");
 }
 
 // Only add wwwroot file provider if directory exists
@@ -328,37 +332,60 @@ if (Directory.Exists(wwwrootPath))
     fileProviders.Add(new PhysicalFileProvider(wwwrootPath));
 }
 
-var fileProvider = new CompositeFileProvider(fileProviders);
-
-// SPA fallback: redirect non-API routes to index.html
-// Exclude health check, root, and API endpoints from SPA fallback
-app.Use(async (HttpContext context, Func<Task> next) =>
+if (fileProviders.Count > 0)
 {
-    await next.Invoke();
-    var path = context.Request.Path.Value ?? "";
-    if (context.Response.StatusCode == (int)HttpStatusCode.NotFound 
-        && !path.StartsWith("/api")
-        && !path.StartsWith("/connect")
-        && !path.StartsWith("/swagger")
-        && path != "/"
-        && path != "/health"
-        && path != "/ping")
+    var fileProvider = new CompositeFileProvider(fileProviders);
+    
+    // Serve static files from Angular build output
+    // This comes BEFORE UseRouting so files are checked first
+    app.UseDefaultFiles(new DefaultFilesOptions()
     {
-        context.Request.Path = new PathString("/index.html");
-        await next.Invoke();
-    }
-});
+        FileProvider = fileProvider,
+        DefaultFileNames = new List<string>() { "index.html" }
+    });
 
-app.UseDefaultFiles(new DefaultFilesOptions()
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = fileProvider
+    });
+}
+else
 {
-    FileProvider = fileProvider,
-    DefaultFileNames = new List<string>() { "index.html" }
-});
+    Console.WriteLine("✗ No file providers configured. Static files will not be served.");
+}
 
-app.UseStaticFiles(new StaticFileOptions
+app.UseRouting();
+
+// Map health check and ping endpoints BEFORE authentication/authorization
+// This allows Railway and other platforms to check if the container is healthy
+app.MapHealthChecks("/health").AllowAnonymous();
+app.MapGet("/ping", () => Results.Ok(new { 
+    status = "ok",
+    message = "pong",
+    timestamp = DateTime.UtcNow
+})).AllowAnonymous();
+
+// Note: OpenIddict automatically exposes /.well-known/openid-configuration
+// No explicit mapping needed - OpenIddict middleware handles it
+
+app.UseAuthentication();
+app.UseAuthorization();
+
+// Map controllers - OpenIddict endpoints are handled automatically by middleware
+app.MapControllers();
+
+// SPA fallback: serve index.html for all routes that don't match controllers or other endpoints
+// MapFallbackToFile automatically excludes routes matched by MapControllers, MapHealthChecks, etc.
+// Explicitly exclude API routes to ensure they're not caught by the fallback
+if (fileProviders.Count > 0)
 {
-    FileProvider = fileProvider
-});
+    var fallbackFileProvider = new CompositeFileProvider(fileProviders);
+    app.MapFallbackToFile("index.html", new StaticFileOptions
+    {
+        FileProvider = fallbackFileProvider,
+        RequestPath = "" // Only match routes that don't start with /api, /account, /connect, etc.
+    }).ExcludeFromDescription(); // Exclude from API documentation
+}
 
 // Initialize database and OpenIddict
 using (var scope = app.Services.CreateScope())
@@ -370,13 +397,84 @@ using (var scope = app.Services.CreateScope())
     
     await context.Database.EnsureCreatedAsync();
 
+    // Get B2C URL from configuration or use default
+    var b2cUrlForClient = builder.Configuration["SDMS_B2CWebApp_url"] ?? "https://sdms-pi.vercel.app";
+    
+    // Helper function to parse comma-separated URIs from configuration
+    static HashSet<Uri> ParseUrisFromConfig(string? configValue, HashSet<Uri> defaultUris)
+    {
+        var uris = new HashSet<Uri>();
+        
+        if (!string.IsNullOrWhiteSpace(configValue))
+        {
+            // Parse comma-separated values
+            var uriStrings = configValue.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            foreach (var uriString in uriStrings)
+            {
+                if (Uri.TryCreate(uriString, UriKind.Absolute, out var uri))
+                {
+                    uris.Add(uri);
+                }
+                else
+                {
+                    Console.WriteLine($"Warning: Invalid URI in configuration: {uriString}");
+                }
+            }
+        }
+        
+        // If no URIs were parsed from config, use defaults
+        if (uris.Count == 0)
+        {
+            uris = defaultUris;
+        }
+        
+        return uris;
+    }
+    
+    // Default redirect URIs (fallback if not configured)
+    var defaultRedirectUris = new HashSet<Uri>
+    {
+        new Uri("http://localhost:4200/auth-callback"),
+        new Uri("https://localhost:4200/auth-callback"),
+        new Uri("http://localhost:7001/auth-callback"),
+        new Uri("https://localhost:7001/auth-callback"),
+        new Uri("http://localhost:5000/auth-callback"),
+        new Uri("https://localhost:5000/auth-callback"),
+        new Uri($"{b2cUrlForClient}/auth-callback"),
+    };
+    
+    // Default post-logout redirect URIs (fallback if not configured)
+    var defaultPostLogoutRedirectUris = new HashSet<Uri>
+    {
+        new Uri("http://localhost:4200/"),
+        new Uri("https://localhost:4200/"),
+        new Uri("http://localhost:7001/"),
+        new Uri("https://localhost:7001/"),
+        new Uri("http://localhost:7001/auth-callback"),
+        new Uri("https://localhost:7001/auth-callback"),
+        new Uri("http://localhost:5000/"),
+        new Uri("https://localhost:5000/"),
+        new Uri("http://localhost:5000/auth-callback"),
+        new Uri("https://localhost:5000/auth-callback"),
+        new Uri($"{b2cUrlForClient}/"),
+    };
+    
+    // Get redirect URIs from configuration
+    var redirectUrisConfig = builder.Configuration[ConfigurationKeys.RedirectUris];
+    var redirectUris = ParseUrisFromConfig(redirectUrisConfig, defaultRedirectUris);
+    
+    // Get post-logout redirect URIs from configuration
+    var postLogoutRedirectUrisConfig = builder.Configuration[ConfigurationKeys.PostLogoutRedirectUris];
+    var postLogoutRedirectUris = ParseUrisFromConfig(postLogoutRedirectUrisConfig, defaultPostLogoutRedirectUris);
+    
     // Create or update OpenIddict client
     var clientDescriptor = new OpenIddictApplicationDescriptor
     {
         ClientId = "sdms_frontend",
-        ClientSecret = "sdms_frontend_secret",
-        ClientType = ClientTypes.Confidential, // Required: Confidential client (has secret)
+        // No ClientSecret for public clients (SPA/frontend apps)
+        ClientType = ClientTypes.Public, // Public client for SPA (cannot securely store secrets)
         DisplayName = "SDMS Frontend Application",
+        ConsentType = ConsentTypes.Implicit, // Use implicit consent for trusted first-party client
         Permissions =
         {
             Permissions.Endpoints.Authorization,
@@ -389,22 +487,26 @@ using (var scope = app.Services.CreateScope())
             Permissions.Scopes.Email,
             Permissions.Scopes.Profile,
             Permissions.Scopes.Roles,
-        },
-        RedirectUris =
-        {
-            new Uri("http://localhost:4200/auth-callback"),
-            new Uri("https://localhost:4200/auth-callback"),
-        },
-        PostLogoutRedirectUris =
-        {
-            new Uri("http://localhost:4200/"),
-            new Uri("https://localhost:4200/"),
+            Permissions.Prefixes.Scope + "api",
+            Permissions.Prefixes.Scope + "offline_access",
         },
         Requirements =
         {
             Requirements.Features.ProofKeyForCodeExchange
         }
     };
+    
+    // Add redirect URIs (collection is read-only, so we add items individually)
+    foreach (var uri in redirectUris)
+    {
+        clientDescriptor.RedirectUris.Add(uri);
+    }
+    
+    // Add post-logout redirect URIs (collection is read-only, so we add items individually)
+    foreach (var uri in postLogoutRedirectUris)
+    {
+        clientDescriptor.PostLogoutRedirectUris.Add(uri);
+    }
     
     var existingClient = await applicationManager.FindByClientIdAsync("sdms_frontend");
     if (existingClient == null)
@@ -415,9 +517,10 @@ using (var scope = app.Services.CreateScope())
     }
     else
     {
-        // Update existing client to ensure it has password grant permission
+        // Update existing client to ensure it has all required permissions and scopes
+        // This will also update the client type to Public (removing client secret requirement)
         await applicationManager.UpdateAsync(existingClient, clientDescriptor);
-        Console.WriteLine("Updated OpenIddict client: sdms_frontend (added password grant permission)");
+        Console.WriteLine("Updated OpenIddict client: sdms_frontend (updated to Public client type with latest permissions and scopes)");
     }
 
     // Create default roles

@@ -9,13 +9,15 @@ import { map } from 'rxjs/operators';
   styleUrls: ['./login-menu.component.css']
 })
 export class LoginMenuComponent implements OnInit {
-  public isAuthenticated!: Observable<boolean>;
-  public userName!: Observable<string | null>;
+  public isAuthenticated: Observable<boolean> = new Observable<boolean>();
+  public userName: Observable<string> = new Observable<string>();
 
   constructor(private authorizeService: AuthorizeService) { }
 
   ngOnInit() {
     this.isAuthenticated = this.authorizeService.isAuthenticated();
-    this.userName = this.authorizeService.getUser().pipe(map(u => u?.name || null));
+    this.userName = this.authorizeService.getUser().pipe(
+      map(u => u?.name || '')
+    );
   }
 }

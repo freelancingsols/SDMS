@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Output } from '@angular/core';
+import { Component, EventEmitter, Input, Output } from '@angular/core';
 
 @Component({
   selector: 'app-header',
@@ -6,11 +6,12 @@ import { Component, EventEmitter, Output } from '@angular/core';
   styleUrls: ['./header.component.css']
 })
 export class HeaderComponent {
+  @Input() isCollapsed = false;
   @Output() toggleLeftSidebar = new EventEmitter<void>();
   @Output() toggleRightSidebar = new EventEmitter<void>();
   @Output() loadComponent = new EventEmitter<string>();
-  
-  isCollapsed = false;
+
+  searchQuery: string = '';
 
   onToggleLeftSidebar() {
     this.toggleLeftSidebar.emit();
@@ -22,5 +23,16 @@ export class HeaderComponent {
 
   onLoadComponent(componentName: string) {
     this.loadComponent.emit(componentName);
+  }
+
+  onSearch() {
+    if (this.searchQuery.trim()) {
+      console.log('Searching for:', this.searchQuery);
+      // Implement search functionality here
+    }
+  }
+
+  clearSearch() {
+    this.searchQuery = '';
   }
 }

@@ -1,31 +1,69 @@
 <div class="app-layout">
-  <app-header 
-    (toggleLeftSidebar)="onToggleLeftSidebar()"
-    (toggleRightSidebar)="onToggleRightSidebar()"
-    (loadComponent)="onLoadComponent($event)">
-  </app-header>
+  <div class="header-wrapper" [class.collapsed]="headerCollapsed">
+    <app-header 
+      [isCollapsed]="headerCollapsed"
+      (toggleLeftSidebar)="onToggleLeftSidebar()"
+      (toggleRightSidebar)="onToggleRightSidebar()"
+      (loadComponent)="onLoadComponent($event)">
+    </app-header>
+    <!-- Floating collapse button outside header component -->
+    <button mat-fab 
+            (click)="onToggleHeader()" 
+            class="header-collapse-btn floating-btn" 
+            aria-label="Toggle header"
+            [class.collapsed]="headerCollapsed">
+      <mat-icon>{{ headerCollapsed ? 'keyboard_arrow_down' : 'keyboard_arrow_up' }}</mat-icon>
+    </button>
+  </div>
   
-  <div class="main-content-wrapper">
+  <div class="main-content-wrapper" [class.header-collapsed]="headerCollapsed" [class.footer-collapsed]="footerCollapsed">
     <div class="left-sidebar-wrapper" [class.collapsed]="leftSidebarCollapsed">
       <app-left-sidebar 
         [isCollapsed]="leftSidebarCollapsed"
-        (toggle)="onToggleLeftSidebar()"
         (loadComponent)="onLoadComponent($event)">
       </app-left-sidebar>
+      <!-- Floating collapse button outside left sidebar component -->
+      <button mat-fab 
+              (click)="onToggleLeftSidebar()" 
+              class="left-sidebar-collapse-btn floating-btn" 
+              aria-label="Toggle left sidebar"
+              [class.collapsed]="leftSidebarCollapsed">
+        <mat-icon>{{ leftSidebarCollapsed ? 'chevron_right' : 'chevron_left' }}</mat-icon>
+      </button>
     </div>
     
     <div class="center-content" [class.left-collapsed]="leftSidebarCollapsed" [class.right-collapsed]="rightSidebarCollapsed">
-      <app-center-canvas #centerCanvas></app-center-canvas>
+      <app-center-canvas [componentToLoad]="currentComponent"></app-center-canvas>
     </div>
     
     <div class="right-sidebar-wrapper" [class.collapsed]="rightSidebarCollapsed">
       <app-right-sidebar 
         [isCollapsed]="rightSidebarCollapsed"
-        (toggle)="onToggleRightSidebar()"
         (loadComponent)="onLoadComponent($event)">
       </app-right-sidebar>
+      <!-- Floating collapse button outside right sidebar component -->
+      <button mat-fab 
+              (click)="onToggleRightSidebar()" 
+              class="right-sidebar-collapse-btn floating-btn" 
+              aria-label="Toggle right sidebar"
+              [class.collapsed]="rightSidebarCollapsed">
+        <mat-icon>{{ rightSidebarCollapsed ? 'chevron_left' : 'chevron_right' }}</mat-icon>
+      </button>
     </div>
   </div>
   
-  <app-footer></app-footer>
+  <div class="footer-wrapper" [class.collapsed]="footerCollapsed">
+    <app-footer 
+      [isCollapsed]="footerCollapsed"
+      (loadComponent)="onLoadComponent($event)">
+    </app-footer>
+    <!-- Floating collapse button outside footer component -->
+    <button mat-fab 
+            (click)="onToggleFooter()" 
+            class="footer-collapse-btn floating-btn" 
+            aria-label="Toggle footer"
+            [class.collapsed]="footerCollapsed">
+      <mat-icon>{{ footerCollapsed ? 'keyboard_arrow_up' : 'keyboard_arrow_down' }}</mat-icon>
+    </button>
+  </div>
 </div>

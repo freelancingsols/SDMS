@@ -9,7 +9,6 @@ import { AppComponent } from './app.component';
 // import { environment } from '../environments/environment';
 import { FrameworkModule } from './framework/framework.module';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
-import { TestComponent } from './Components/test/test.component';
 import { OAuthModule } from 'angular-oauth2-oidc';
 import { AuthModule } from './auth/auth.module';
 import { AuthorizeInterceptor } from './auth/authorize.interceptor';
@@ -32,18 +31,9 @@ import { MatPaginatorModule } from '@angular/material/paginator';
 import { MatSortModule } from '@angular/material/sort';
 import { MatSidenavModule } from '@angular/material/sidenav';
 
-// New components
-import { LeftSidebarComponent } from './Components/left-sidebar/left-sidebar.component';
-import { RightSidebarComponent } from './Components/right-sidebar/right-sidebar.component';
-import { CenterCanvasComponent } from './Components/center-canvas/center-canvas.component';
-
 @NgModule({
   declarations: [
-    AppComponent,
-    TestComponent,
-    LeftSidebarComponent,
-    RightSidebarComponent,
-    CenterCanvasComponent
+    AppComponent
   ],
   imports: [
     BrowserModule,

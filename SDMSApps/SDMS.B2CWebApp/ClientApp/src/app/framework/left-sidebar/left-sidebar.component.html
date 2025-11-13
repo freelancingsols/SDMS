@@ -1,9 +1,4 @@
 <div class="sidebar-container">
-  <!-- TEST: This should always be visible -->
-  <div style="position: absolute; top: 0; left: 0; background: red; color: white; padding: 10px; z-index: 9999;">
-    LEFT SIDEBAR TEST - isCollapsed: {{ isCollapsed }}
-  </div>
-  <!-- Debug: isCollapsed = {{ isCollapsed }} -->
   <div class="sidebar" [class.collapsed]="isCollapsed">
     <div class="sidebar-header" *ngIf="!isCollapsed">
       <h3>Navigation</h3>
@@ -87,3 +82,4 @@
     </div>
   </div>
 </div>
+

@@ -1,5 +1,4 @@
-import { Component, OnInit, ViewChild } from '@angular/core';
-import { CenterCanvasComponent } from '../../Components/center-canvas/center-canvas.component';
+import { Component, OnInit } from '@angular/core';
 
 @Component({
   selector: 'app-framework-body',
@@ -7,14 +6,18 @@ import { CenterCanvasComponent } from '../../Components/center-canvas/center-can
   styleUrls: ['./framework-body.component.css']
 })
 export class FrameworkBodyComponent implements OnInit {
-  @ViewChild('centerCanvas') centerCanvas!: CenterCanvasComponent;
-  
   leftSidebarCollapsed = false;
   rightSidebarCollapsed = false;
+  headerCollapsed = false;
+  footerCollapsed = false;
+  currentComponent: string = 'test';
 
   constructor() { }
 
   ngOnInit() {
+    console.log('FrameworkBody initialized');
+    console.log('leftSidebarCollapsed:', this.leftSidebarCollapsed);
+    console.log('rightSidebarCollapsed:', this.rightSidebarCollapsed);
   }
 
   onToggleLeftSidebar() {
@@ -25,9 +28,15 @@ export class FrameworkBodyComponent implements OnInit {
     this.rightSidebarCollapsed = !this.rightSidebarCollapsed;
   }
 
+  onToggleHeader() {
+    this.headerCollapsed = !this.headerCollapsed;
+  }
+
+  onToggleFooter() {
+    this.footerCollapsed = !this.footerCollapsed;
+  }
+
   onLoadComponent(componentName: string) {
-    if (this.centerCanvas) {
-      this.centerCanvas.loadComponent(componentName);
-    }
+    this.currentComponent = componentName;
   }
 }

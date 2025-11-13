@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, EventEmitter, Input, Output } from '@angular/core';
 
 @Component({
   selector: 'app-footer',
@@ -6,5 +6,11 @@ import { Component } from '@angular/core';
   styleUrls: ['./footer.component.css']
 })
 export class FooterComponent {
+  @Input() isCollapsed = false;
+  @Output() loadComponent = new EventEmitter<string>();
   currentYear = new Date().getFullYear();
+
+  onLoadComponent(componentName: string) {
+    this.loadComponent.emit(componentName);
+  }
 }

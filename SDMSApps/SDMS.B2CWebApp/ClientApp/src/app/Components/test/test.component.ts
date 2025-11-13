@@ -68,4 +68,25 @@ export class TestComponent implements OnInit {
       replaceUrl: true
     })
   }
+
+  public async logout() {
+    try {
+      // Clear username immediately
+      this.username = '';
+      
+      // Call signOut - it will clear OAuth tokens and user state
+      await this.authorizeService.signOut({ returnUrl: '/' });
+      
+      // Wait a bit for OAuth service to process logout
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Navigate to login page
+      this.router.navigate(['/login'], { replaceUrl: true });
+    } catch (error) {
+      console.error('Error during logout:', error);
+      // Still navigate to login even if logout fails
+      this.username = '';
+      this.router.navigate(['/login'], { replaceUrl: true });
+    }
+  }
 }

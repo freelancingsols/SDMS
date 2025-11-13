@@ -185,6 +185,8 @@ var authBuilder = builder.Services.AddAuthentication(options =>
     options.DefaultScheme = IdentityConstants.ApplicationScheme;
     options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
     options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme;
+    // Allow Bearer token authentication for API endpoints
+    options.DefaultAuthenticateScheme = IdentityConstants.ApplicationScheme;
 });
 
 // Only add Google authentication if credentials are provided

@@ -450,8 +450,12 @@ using (var scope = app.Services.CreateScope())
         new Uri("https://localhost:4200/"),
         new Uri("http://localhost:7001/"),
         new Uri("https://localhost:7001/"),
+        new Uri("http://localhost:7001/auth-callback"),
+        new Uri("https://localhost:7001/auth-callback"),
         new Uri("http://localhost:5000/"),
         new Uri("https://localhost:5000/"),
+        new Uri("http://localhost:5000/auth-callback"),
+        new Uri("https://localhost:5000/auth-callback"),
         new Uri($"{b2cUrlForClient}/"),
     };
     

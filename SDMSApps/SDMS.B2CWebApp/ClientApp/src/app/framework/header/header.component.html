@@ -1,98 +1,37 @@
-<nav class="navbar navbar-expand-lg navbar-dark sticky" style="background-color: #F3C20A;">
-    <div class="container-fluid">
-        <!-- <a class="navbar-brand" href="#">
-            ONLINE <span> SHOP</span>
-        </a> -->
-        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#main-nav"
-        aria-controls="main-nav" aria-expanded="false" aria-label="Toggle navigation">
-        <span class="fa fa-bars"></span>
-        </button>
-        <div class="images d-flex h-100 logo-img-wrapper">
-            <img class="mx-auto my-auto logo-img" src="assets/SiltonShopper2.png">
-        </div>
-        <div class="form-group mb-0 ml-5 w-50">
-            <input type="text" class="form-control" placeholder="Search Products">
-        </div>      
-        <div class="collapse navbar-collapse" id="main-nav">
-            <ul class="navbar-nav mr-auto w-100 justify-content-end">
-                <li class="nav-item" [routerLinkActiveOptions]="{exact: true}" routerLinkActive="active">
-                    <a class="nav-link " routerLink="/">Home</a>
-                </li>
-                <li class="nav-item" routerLinkActive="active">
-                    <a class="nav-link" routerLink="/about">ABOUT</a>
-                </li>
+<mat-toolbar color="primary" class="header-toolbar">
+  <button mat-icon-button (click)="onToggleLeftSidebar()" class="toggle-btn" aria-label="Toggle left sidebar">
+    <mat-icon>menu</mat-icon>
+  </button>
+  
+  <div class="header-brand">
+    <mat-icon class="brand-icon">store</mat-icon>
+    <span class="brand-text">SDMS B2C</span>
+  </div>
 
-                <li class="nav-item" routerLinkActive="active">
-                    <a class="nav-link" routerLink="/products">PRODUCTS</a>
-                </li>
+  <span class="spacer"></span>
 
-                <li class="nav-item" routerLinkActive="active">
-                    <a class="nav-link" routerLink="/contact-us">Contact Us</a>
-                </li>
-                <ng-template #anonymous>
-                    <li class="nav-item" routerLinkActive="active">
-                        <a class="nav-link" routerLink="/login">LOGIN</a>
-                    </li>
-                </ng-template>
-                <li class="nav-item dropdown" *ngIf="true" routerLinkActive="active">
-                <!-- <li class="nav-item dropdown" *ngIf="appUser else anonymous" routerLinkActive="active"> -->
-                    <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button"
-                        data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                        Test user<!-- {{appUser.username}}-->
-                    </a>
-                    <div class="dropdown-menu" aria-labelledby="navbarDropdown">
-                        <a class="dropdown-item" routerLink="/dashboard" *ngIf="true">Dashboard</a><!--appUser.isAdmin-->
-                        <a class="dropdown-item" routerLink="/userorders">My Orders</a>
-                        <a class="dropdown-item" >LogOut</a>
-                        <!--<a class="dropdown-item" (click)="logout()">LogOut</a>-->
-                    </div>
-                </li>
-                <li class="nav-item" routerLinkActive="active">
-                    <div class="cart nav-link" routerLink="/card" style="outline: none;">
-                        <i class="fa fa-shopping-cart"></i>
-                        <!-- <span class="badge badge-danger badge-pill quentity" *ngIf="cart$ | async as cart">
-                            {{cart.getTotlCount}}
-                        </span> -->
-                        <span class="badge badge-danger badge-pill quentity">
-                            4
-                        </span>
-                    </div>
-                </li>
-            </ul>
-        </div>
-    </div>
-</nav>
+  <div class="header-menu-buttons">
+    <button mat-raised-button color="accent" (click)="onLoadComponent('test')" class="menu-btn">
+      <mat-icon>dashboard</mat-icon>
+      <span>Dashboard</span>
+    </button>
+    <button mat-raised-button color="accent" (click)="onLoadComponent('test')" class="menu-btn">
+      <mat-icon>shopping_cart</mat-icon>
+      <span>Products</span>
+    </button>
+    <button mat-raised-button color="accent" (click)="onLoadComponent('test')" class="menu-btn">
+      <mat-icon>receipt</mat-icon>
+      <span>Orders</span>
+    </button>
+    <button mat-raised-button color="accent" (click)="onLoadComponent('test')" class="menu-btn">
+      <mat-icon>account_circle</mat-icon>
+      <span>Profile</span>
+    </button>
+  </div>
 
-<!-- map starts -->
-<div class="pac-card" id="pac-card">
-    <div>
-        <div id="title">Autocomplete search</div>
-        <div id="type-selector" class="pac-controls">
-            <input type="radio" name="type" id="changetype-all" checked="checked" />
-            <label for="changetype-all">All</label>
+  <span class="spacer"></span>
 
-            <input type="radio" name="type" id="changetype-establishment" />
-            <label for="changetype-establishment">Establishments</label>
-
-            <input type="radio" name="type" id="changetype-address" />
-            <label for="changetype-address">Addresses</label>
-
-            <input type="radio" name="type" id="changetype-geocode" />
-            <label for="changetype-geocode">Geocodes</label>
-        </div>
-        <div id="strict-bounds-selector" class="pac-controls">
-            <input type="checkbox" id="use-strict-bounds" value="" />
-            <label for="use-strict-bounds">Strict Bounds</label>
-        </div>
-    </div>
-    <div id="pac-container">
-        <input id="pac-input" type="text" placeholder="Enter a location" />
-    </div>
-</div>
-<div id="map"></div>
-<div id="infowindow-content">
-    <img src="" width="16" height="16" id="place-icon" />
-    <span id="place-name" class="title"></span><br />
-    <span id="place-address"></span>
-</div>
-<!-- map ends -->
+  <button mat-icon-button (click)="onToggleRightSidebar()" class="toggle-btn" aria-label="Toggle right sidebar">
+    <mat-icon>more_vert</mat-icon>
+  </button>
+</mat-toolbar>

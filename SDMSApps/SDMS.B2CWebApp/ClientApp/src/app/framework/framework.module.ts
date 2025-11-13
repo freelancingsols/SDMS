@@ -29,7 +29,9 @@ import { MatFormFieldModule } from '@angular/material/form-field';
     MatFormFieldModule
   ],
   exports: [
-    FrameworkBodyComponent
+    FrameworkBodyComponent,
+    HeaderComponent,
+    FooterComponent
   ]
 })
 export class FrameworkModule { }

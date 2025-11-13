@@ -1,143 +1,31 @@
-<!-- <p>framework-body works!</p>
-<header>
+<div class="app-layout">
+  <app-header 
+    (toggleLeftSidebar)="onToggleLeftSidebar()"
+    (toggleRightSidebar)="onToggleRightSidebar()"
+    (loadComponent)="onLoadComponent($event)">
+  </app-header>
+  
+  <div class="main-content-wrapper">
+    <div class="left-sidebar-wrapper" [class.collapsed]="leftSidebarCollapsed">
+      <app-left-sidebar 
+        [isCollapsed]="leftSidebarCollapsed"
+        (toggle)="onToggleLeftSidebar()"
+        (loadComponent)="onLoadComponent($event)">
+      </app-left-sidebar>
+    </div>
     
-    <div class="wrapper">
-        <nav>
-            <div class="menu-toggle">
-                <span class="ti-menu">
-                </span>
-                <span class="ti-search"></span>
-            </div>
-            <div class="brand">
-                <h2>Shopname</h2>
-            </div>
-            <div class="cart">
-                <span class="ti-shopping-cart"></span>
-            </div>
-        </nav>
+    <div class="center-content" [class.left-collapsed]="leftSidebarCollapsed" [class.right-collapsed]="rightSidebarCollapsed">
+      <app-center-canvas #centerCanvas></app-center-canvas>
     </div>
-
-    <section class="sub-nav">
-        <div class="wrapper">
-            <div class="sub-nav-top">
-                <ul>
-                    <li><a href="">Home</a></li>
-                    <li><a href="">Track</a></li>
-                    <li><a href="">Order</a></li>
-                    <li><a href="">Contact</a></li>
-                    <li><a href="">About</a></li>
-                </ul>
-            </div>
-            <div class="sub-nav-bottom">
-                <a href="">Free Shipping</a> |
-                <a href="">Fast Delivery</a> |
-                <a href="">Free Returns</a>
-            </div>
-        </div>
-    </section>
-</header>
-<main>
-    <div class="wrapper">
-        <section class="hero">
-            <div class="hero-content">
-                <h4>Men's <span class="text-main">Skincare</span> <br> Simpified</h4>
-                <p>Global Leaders in Men's Skin <br> & Body care since 1999</p>
     
-                <div class="hero-actions-btn">
-                    <a href="" class="btn-main a-button">Shop now </a>
-                    <a href="" class="btn-secondary-outline a-button a-button-last">Free advice</a>
-                </div>
-            </div>
-            <div class="hero-image">
-                <img src="assets/image/1.png" alt="">
-            </div>
-        </section>
-
-        <section class="best-sellers">
-            <div class="section-info">
-                <h3>Best Sellers</h3>
-                <p>Lorem ipsom dolor Lorem ipsom dolor Lorem ipsom dolor Lorem ipsom dolor</p>
-            </div>
-
-            <div class="product-grid">
-                <div class="product">
-                    <div class="product-img" style="background-image: url('assets/image/hairoil.jpg')">
-                        <div class="sale-badge"><span>SALE</span></div>
-                    </div>
-                    <div class="product-desc">
-                        <h3>Privilege Title</h3>
-                        <p>Lorem ipsom dolor Lorem ipsom dolor </p>
-                        <a href="" class="text-main">View Details</a>
-                    </div>
-                </div>
-
-                <div class="product">
-                    <div class="product-img" style="background-image: url('assets/image/maggi.jpg')">
-                        <div class="sale-badge"><span>SALE</span></div>
-                    </div>
-                    <div class="product-desc">
-                        <h3>Privilege Title</h3>
-                        <p>Lorem ipsom dolor Lorem ipsom dolor </p>
-                        <a href="" class="text-main">View Details</a>
-                    </div>
-                </div>
-
-                <div class="product">
-                    <div class="product-img" style="background-image: url('assets/image/oil.jpg')">
-                        <div class="sale-badge"><span>SALE</span></div>
-                    </div>
-                    <div class="product-desc">
-                        <h3>Privilege Title</h3>
-                        <p>Lorem ipsom dolor Lorem ipsom dolor </p>
-                        <a href="" class="text-main">View Details</a>
-                    </div>
-                </div>
-
-                <div class="product">
-                    <div class="product-img" style="background-image: url('assets/image/soap.jpg')">
-                        <div class="sale-badge"><span>SALE</span></div>
-                    </div>
-                    <div class="product-desc">
-                        <h3>Privilege Title</h3>
-                        <p>Lorem ipsom dolor Lorem ipsom dolor </p>
-                        <a href="" class="text-main">View Details</a>
-                    </div>
-                </div>
-            </div>
-        </section>
+    <div class="right-sidebar-wrapper" [class.collapsed]="rightSidebarCollapsed">
+      <app-right-sidebar 
+        [isCollapsed]="rightSidebarCollapsed"
+        (toggle)="onToggleRightSidebar()"
+        (loadComponent)="onLoadComponent($event)">
+      </app-right-sidebar>
     </div>
-</main>
-
-<div class="is-mobile-menu"></div>
-
-<div class="mobile-menu">
-    <div class="menu-item">
-        <span class="ti-home">
-
-        </span>
-        <p>Home</p>
-    </div>
-    <div class="menu-item">
-        <span class="ti-folder">
-
-        </span>
-        <p>Products</p>
-    </div>
-    <div class="menu-item">
-        <span class="ti-user">
-
-        </span>
-        <p>Track</p>
-    </div>
-    <div class="menu-item">
-        <span class="ti-info">
-
-        </span>
-        <p>Help</p>
-    </div>
-</div> -->
-
-
-<app-header></app-header>
-<app-content></app-content>
-<app-footer></app-footer>
+  </div>
+  
+  <app-footer></app-footer>
+</div>

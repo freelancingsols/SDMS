@@ -45,14 +45,14 @@ export class TestComponent implements OnInit {
       return;
     }
 
-    // For regular routes, check authentication
-    const isAuthenticated = await this.authorizeService.isAuthenticated().pipe(take(1)).toPromise();
-    if (!isAuthenticated) {
-      this.router.navigate(['/login'], {
-        queryParams: { returnUrl: this.router.url }
-      });
-      return;
-    }
+    // For regular routes, check authentication (optional - can be removed if not needed)
+    // const isAuthenticated = await this.authorizeService.isAuthenticated().pipe(take(1)).toPromise();
+    // if (!isAuthenticated) {
+    //   this.router.navigate(['/login'], {
+    //     queryParams: { returnUrl: this.router.url }
+    //   });
+    //   return;
+    // }
 
     // Load user if authenticated
     this.authorizeService.getUser().subscribe(user => {
@@ -62,11 +62,10 @@ export class TestComponent implements OnInit {
     });
   }
 
-  public loadTest()
-  {
-     this.router.navigateByUrl('/login',{
+  public loadTest() {
+    this.router.navigateByUrl('/login', {
       replaceUrl: true
-    })
+    });
   }
 
   public async logout() {

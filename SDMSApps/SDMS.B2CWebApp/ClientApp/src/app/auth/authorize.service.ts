@@ -246,12 +246,29 @@ export class AuthorizeService {
         }
       }
       
-      // Check if we already have a valid token (prevent multiple processing)
+      // Check if we already have tokens (prevent multiple processing of the same callback)
       // This should be checked AFTER determining if it's a logout callback
-      if (this.oauthService.hasValidAccessToken()) {
-        console.log('Already have valid access token, loading user profile');
-        await this.loadUserProfile();
-        return this.success(null);
+      const existingAccessToken = sessionStorage.getItem('access_token');
+      const existingIdToken = sessionStorage.getItem('id_token');
+      if (existingAccessToken || existingIdToken) {
+        console.log('Tokens already exist in storage, checking if valid');
+        if (this.oauthService.hasValidAccessToken()) {
+          console.log('Already have valid access token, loading user profile');
+          await this.loadUserProfile();
+          return this.success(null);
+        } else {
+          // Tokens exist but OAuth service says invalid - try to load user profile anyway
+          console.log('Tokens exist but OAuth service reports invalid - attempting to load user profile');
+          try {
+            await this.loadUserProfile();
+            if (this.userSubject.value) {
+              return this.success(null);
+            }
+          } catch (error) {
+            console.log('Failed to load user profile with existing tokens:', error);
+            // Continue to process callback if profile load fails
+          }
+        }
       }
       
       // If we have code/state in the original URL, this is a login callback - process it
@@ -377,6 +394,34 @@ export class AuthorizeService {
       } catch (loginError) {
         console.error('Error in tryLoginCodeFlow:', loginError);
         
+        // Check if this is a 400 error (Bad Request) - might mean code already used
+        // In that case, check if we have tokens from a previous successful exchange
+        const errorObj = loginError as any;
+        const is400Error = errorObj?.status === 400 || 
+                          (errorObj?.message && errorObj.message.includes('400')) ||
+                          (errorObj?.error && errorObj.error.includes('400'));
+        
+        if (is400Error) {
+          console.log('Received 400 error - checking if tokens already exist (code may have been used)');
+          const existingAccessToken = sessionStorage.getItem('access_token');
+          const existingIdToken = sessionStorage.getItem('id_token');
+          
+          if (existingAccessToken || existingIdToken) {
+            console.log('Tokens found in storage despite 400 error - attempting to use existing tokens');
+            try {
+              await this.loadUserProfile();
+              if (this.userSubject.value) {
+                // Successfully loaded user with existing tokens
+                window.history.replaceState({}, document.title, '/test');
+                return this.success(null);
+              }
+            } catch (profileError) {
+              console.log('Failed to load user profile with existing tokens:', profileError);
+              // Continue to return error
+            }
+          }
+        }
+        
         // Extract meaningful error message from various error formats
         let errorMessage = 'Failed to process OAuth callback';
         
@@ -384,7 +429,6 @@ export class AuthorizeService {
           errorMessage += ': ' + loginError.message;
         } else if (loginError && typeof loginError === 'object') {
           // Try to extract error message from common error object properties
-          const errorObj = loginError as any;
           if (errorObj.message) {
             errorMessage += ': ' + errorObj.message;
           } else if (errorObj.error) {

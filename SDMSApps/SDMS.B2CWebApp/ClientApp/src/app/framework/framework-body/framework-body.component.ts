@@ -1,4 +1,6 @@
 import { Component, OnInit } from '@angular/core';
+import { Router, NavigationEnd } from '@angular/router';
+import { filter } from 'rxjs/operators';
 
 @Component({
   selector: 'app-framework-body',
@@ -10,14 +12,21 @@ export class FrameworkBodyComponent implements OnInit {
   rightSidebarCollapsed = false;
   headerCollapsed = false;
   footerCollapsed = false;
-  currentComponent: string = 'test';
+  currentComponent: string | null = null; // Clear by default - router-outlet will show routed components
 
-  constructor() { }
+  constructor(private router: Router) { }
 
   ngOnInit() {
     console.log('FrameworkBody initialized');
     console.log('leftSidebarCollapsed:', this.leftSidebarCollapsed);
     console.log('rightSidebarCollapsed:', this.rightSidebarCollapsed);
+    
+    // Clear currentComponent when route changes (so router-outlet takes precedence)
+    this.router.events
+      .pipe(filter(event => event instanceof NavigationEnd))
+      .subscribe(() => {
+        this.currentComponent = null;
+      });
   }
 
   onToggleLeftSidebar() {
@@ -37,6 +46,8 @@ export class FrameworkBodyComponent implements OnInit {
   }
 
   onLoadComponent(componentName: string) {
+    // When loading a component dynamically, set currentComponent
+    // This will show app-center-canvas instead of router-outlet
     this.currentComponent = componentName;
   }
 }

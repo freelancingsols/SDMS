@@ -295,25 +295,119 @@ export class AuthorizeService {
 
   public async signOut(state: any): Promise<IAuthenticationResult> {
     try {
-      if (this.popUpDisabled) {
-        // Use redirect logout
-        this.oauthService.logOut();
-        this.userSubject.next(null);
-        return this.success(state);
-      }
-
-      // Popup logout not directly supported, use redirect
-      this.oauthService.logOut();
+      // Clear user subject first to prevent getUserFromStorage from repopulating
       this.userSubject.next(null);
+      
+      // Manually clear OAuth-related storage FIRST before calling logOut()
+      // This prevents logOut() from redirecting with tokens still in storage
+      // angular-oauth2-oidc stores tokens in sessionStorage with these exact keys
+      try {
+        const oauthKeys = [
+          'access_token',
+          'access_token_stored_at',
+          'id_token',
+          'id_token_stored_at',
+          'id_token_expires_at',
+          'id_token_claims_obj',
+          'refresh_token',
+          'nonce',
+          'PKCE_verifier',
+          'session_state',
+          'granted_scopes',
+          'expires_at'
+        ];
+        
+        // Clear all OAuth keys from sessionStorage - do this synchronously
+        oauthKeys.forEach(key => {
+          try {
+            sessionStorage.removeItem(key);
+          } catch (e) {
+            // Ignore errors for individual keys
+          }
+        });
+        
+        // Also clear any keys that might match patterns - collect first, then remove
+        const sessionKeysToRemove: string[] = [];
+        for (let i = sessionStorage.length - 1; i >= 0; i--) {
+          const key = sessionStorage.key(i);
+          if (key && (
+            key.startsWith('oauth_') || 
+            key.startsWith('oidc_') ||
+            oauthKeys.includes(key)
+          )) {
+            sessionKeysToRemove.push(key);
+          }
+        }
+        sessionKeysToRemove.forEach(key => {
+          try {
+            sessionStorage.removeItem(key);
+          } catch (e) {
+            // Ignore errors
+          }
+        });
+        
+        // Clear localStorage as well - collect first, then remove
+        const localKeysToRemove: string[] = [];
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const key = localStorage.key(i);
+          if (key && (
+            key.startsWith('oauth_') || 
+            key.startsWith('oidc_') ||
+            oauthKeys.includes(key)
+          )) {
+            localKeysToRemove.push(key);
+          }
+        }
+        localKeysToRemove.forEach(key => {
+          try {
+            localStorage.removeItem(key);
+          } catch (e) {
+            // Ignore errors
+          }
+        });
+        
+        // Force clear OAuth service internal state by trying to access and clear
+        try {
+          // Clear any cached tokens in OAuth service
+          if (this.oauthService.getAccessToken()) {
+            // Token still exists - force clear by removing from storage again
+            sessionStorage.removeItem('access_token');
+            sessionStorage.removeItem('id_token');
+            sessionStorage.removeItem('refresh_token');
+          }
+        } catch (e) {
+          // Ignore
+        }
+      } catch (storageError) {
+        console.log('Error clearing storage:', storageError);
+      }
+      
+      // Don't call oauthService.logOut() - it will redirect to /connect/logout
+      // which then redirects back to /auth-callback, causing a login loop
+      // We've already cleared all storage, so logOut() is not needed
+      // The OAuth service's internal state will be cleared when tokens are removed from storage
+      
       return this.success(state);
     } catch (popupSignOutError) {
       console.log('Signout error: ', popupSignOutError);
       try {
-        this.oauthService.logOut();
+        // Ensure user is cleared even on error
         this.userSubject.next(null);
+        // Try to clear storage again
+        try {
+          const oauthKeys = ['access_token', 'id_token', 'refresh_token', 'nonce', 'PKCE_verifier', 'session_state', 'granted_scopes', 'expires_at'];
+          oauthKeys.forEach(key => {
+            try {
+              sessionStorage.removeItem(key);
+              localStorage.removeItem(key);
+            } catch (e) {}
+          });
+        } catch (e) {}
         return this.success(state);
       } catch (redirectSignOutError) {
         console.log('Redirect signout error: ', redirectSignOutError);
+        // Still clear user on error
+        this.userSubject.next(null);
         return this.error(String(redirectSignOutError));
       }
     }
@@ -383,6 +477,11 @@ export class AuthorizeService {
   }
 
   private getUserFromStorage(): Observable<IUser | null> {
+    // If userSubject is null, we're in a logout state - don't read from storage
+    if (this.userSubject.value === null) {
+      return of(null);
+    }
+    
     if (this.oauthService.hasValidAccessToken()) {
       try {
         const claims = this.oauthService.getIdentityClaims();

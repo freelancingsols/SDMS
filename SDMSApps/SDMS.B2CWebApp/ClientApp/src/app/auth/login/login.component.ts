@@ -28,6 +28,19 @@ export class LoginComponent implements OnInit {
     
     // Handle OAuth callback - check if URL contains auth-callback or login-callback
     if (currentUrl.includes('auth-callback') || currentUrl.includes('login-callback')) {
+      // Check if this is a logout callback (has 'iss' but no 'code' or 'state')
+      const urlParams = new URLSearchParams(window.location.search);
+      const hasCode = urlParams.has('code');
+      const hasState = urlParams.has('state');
+      const hasIss = urlParams.has('iss');
+      
+      // If it's a logout callback (has iss but no code/state), don't process as login
+      if (hasIss && !hasCode && !hasState) {
+        // This is a logout callback - just redirect to login page
+        await this.router.navigate(['/login'], { replaceUrl: true });
+        return;
+      }
+      
       // Determine callback action from URL or default to redirect
       let callbackAction = CallbackActions.Redirect;
       if (currentUrl.includes('popup') || actionPath.includes(CallbackActions.PopUp)) {

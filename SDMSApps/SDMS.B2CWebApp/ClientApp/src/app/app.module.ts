@@ -12,6 +12,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { OAuthModule } from 'angular-oauth2-oidc';
 import { AuthModule } from './auth/auth.module';
 import { AuthorizeInterceptor } from './auth/authorize.interceptor';
+import { LandingComponent } from './components/landing/landing.component';
 // TestComponent moved to FrameworkModule to be accessible by CenterCanvasComponent
 // import { TestComponent } from './components/test/test.component';
 
@@ -35,7 +36,8 @@ import { MatSidenavModule } from '@angular/material/sidenav';
 
 @NgModule({
   declarations: [
-    AppComponent
+    AppComponent,
+    LandingComponent
     // TestComponent moved to FrameworkModule
   ],
   imports: [

@@ -222,26 +222,58 @@ export class AuthorizeService {
 
   public async completeSignIn(_url: string, _callbackAction: string): Promise<IAuthenticationResult> {
     try {
-      // Check if this is a logout callback (has 'iss' but no 'code' or 'state')
-      // Logout callbacks should not be processed as login callbacks
-      const urlParams = new URLSearchParams(window.location.search);
+      // Parse the original URL FIRST (before angular-oauth2-oidc processes it)
+      // The _url parameter contains the original callback URL with code/state
+      const originalUrl = _url || window.location.href;
+      const urlObj = new URL(originalUrl);
+      const urlParams = urlObj.searchParams;
       const hasCode = urlParams.has('code');
       const hasState = urlParams.has('state');
       const hasIss = urlParams.has('iss');
       
+      console.log('completeSignIn - Original URL params:', { hasCode, hasState, hasIss });
+      
+      // Check if this is a logout callback (has 'iss' but no 'code' or 'state')
+      // Logout callbacks should not be processed as login
       if (hasIss && !hasCode && !hasState) {
-        // This is a logout callback - don't process as login
-        console.log('Detected logout callback in completeSignIn, skipping login processing');
-        // Clear URL and return success (logout already handled)
-        window.history.replaceState({}, document.title, '/');
-        return this.success({ returnUrl: '/' });
+        // Check if we have tokens stored - if yes, this might be a logout callback after tokens were cleared
+        // If no tokens, definitely a logout callback
+        const hasStoredTokens = !!sessionStorage.getItem('access_token') || !!sessionStorage.getItem('id_token');
+        if (!hasStoredTokens) {
+          console.log('Detected logout callback in completeSignIn (no code/state, no tokens), skipping login processing');
+          window.history.replaceState({}, document.title, '/');
+          return this.success({ returnUrl: '/' });
+        }
       }
       
-      // OAuth callback is handled by angular-oauth2-oidc automatically
       // Check if we already have a valid token (prevent multiple processing)
+      // This should be checked AFTER determining if it's a logout callback
       if (this.oauthService.hasValidAccessToken()) {
+        console.log('Already have valid access token, loading user profile');
         await this.loadUserProfile();
         return this.success(null);
+      }
+      
+      // If we have code/state in the original URL, this is a login callback - process it
+      if (!hasCode || !hasState) {
+        // No code/state in original URL - check if tokens exist in storage
+        // If tokens exist but OAuth service says invalid, try to load user profile anyway
+        const hasStoredTokens = !!sessionStorage.getItem('access_token') || !!sessionStorage.getItem('id_token');
+        if (hasStoredTokens) {
+          console.log('Tokens exist in storage but OAuth service reports invalid - attempting to load user profile');
+          try {
+            await this.loadUserProfile();
+            return this.success(null);
+          } catch (error) {
+            console.log('Failed to load user profile with stored tokens:', error);
+            // Continue to process as if no tokens
+          }
+        } else {
+          // No tokens and no code/state - this is likely a logout callback
+          console.log('No code/state in URL and no stored tokens - treating as logout callback');
+          window.history.replaceState({}, document.title, '/');
+          return this.success({ returnUrl: '/' });
+        }
       }
 
       // Load discovery document first
@@ -256,39 +288,92 @@ export class AuthorizeService {
       }
       
       // Try to process the callback URL
-      // tryLoginCodeFlow() automatically reads from window.location and exchanges the code for tokens
+      // IMPORTANT: Restore the original URL temporarily because tryLoginCodeFlow() reads from window.location.href
+      // The OAuth library may have already modified the URL to remove code/state
       try {
+        console.log('Processing OAuth callback, original URL:', originalUrl);
         console.log('Processing OAuth callback, current URL:', window.location.href);
-        await this.oauthService.tryLoginCodeFlow();
         
-        // Wait a bit for token to be stored
-        await new Promise(resolve => setTimeout(resolve, 200));
+        // Temporarily restore the original URL so tryLoginCodeFlow can extract code/state
+        const currentUrl = window.location.href;
+        window.history.replaceState({}, document.title, originalUrl);
         
-        // Check if we got a valid token
-        const hasToken = this.oauthService.hasValidAccessToken();
-        console.log('Has valid access token after tryLoginCodeFlow:', hasToken);
-        
-        if (hasToken) {
-          const token = this.oauthService.getAccessToken();
-          console.log('Access token received, length:', token?.length || 0);
-          await this.loadUserProfile();
-          return this.success(null);
-        } else {
-          // Check if there's an error in the URL
-          const urlParams = new URLSearchParams(window.location.search);
-          const error = urlParams.get('error');
-          const errorDescription = urlParams.get('error_description');
-          if (error) {
-            console.error('OAuth error in URL:', error, errorDescription);
-            return this.error(`OAuth error: ${error} - ${errorDescription || ''}`);
-          }
-          
-          // Check identity claims as fallback
-          const claims = this.oauthService.getIdentityClaims();
-          console.log('Identity claims:', claims);
-          
-          return this.error('No access token received after login. Check browser console for details.');
+        try {
+          // Now tryLoginCodeFlow can read the code/state from window.location.href
+          await this.oauthService.tryLoginCodeFlow();
+        } finally {
+          // Restore the current URL after processing
+          window.history.replaceState({}, document.title, currentUrl);
         }
+        
+        // Wait longer for token to be stored and validated by OAuth service
+        // The OAuth service needs time to process the token exchange response
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Check for stored tokens FIRST (before checking hasValidAccessToken)
+        // This is more reliable because tokens might be stored but not yet validated
+        const accessToken = sessionStorage.getItem('access_token');
+        const idToken = sessionStorage.getItem('id_token');
+        const hasStoredTokens = !!accessToken || !!idToken;
+        
+        console.log('After tryLoginCodeFlow - Stored tokens check:', {
+          hasAccessToken: !!accessToken,
+          hasIdToken: !!idToken,
+          accessTokenLength: accessToken?.length || 0,
+          idTokenLength: idToken?.length || 0
+        });
+        
+        // Check if we got a valid token via OAuth service
+        const hasValidToken = this.oauthService.hasValidAccessToken();
+        console.log('Has valid access token after tryLoginCodeFlow:', hasValidToken);
+        
+        // If we have stored tokens OR valid token, try to load user profile
+        if (hasStoredTokens || hasValidToken) {
+          console.log('Tokens found (stored or valid) - loading user profile');
+          try {
+            await this.loadUserProfile();
+            // Clear any OAuth callback parameters from URL after successful login
+            window.history.replaceState({}, document.title, '/test');
+            return this.success(null);
+          } catch (profileError) {
+            console.log('Failed to load user profile, but tokens exist:', profileError);
+            // Even if profile load fails, if we have tokens, authentication succeeded
+            // Clear URL and return success
+            window.history.replaceState({}, document.title, '/test');
+            return this.success(null);
+          }
+        }
+        
+        // Check if there's an error in the URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const error = urlParams.get('error');
+        const errorDescription = urlParams.get('error_description');
+        if (error) {
+          console.error('OAuth error in URL:', error, errorDescription);
+          return this.error(`OAuth error: ${error} - ${errorDescription || ''}`);
+        }
+        
+        // Check identity claims as final fallback
+        const claims = this.oauthService.getIdentityClaims();
+        console.log('Identity claims:', claims);
+        
+        if (claims) {
+          // We have identity claims - try to load profile
+          try {
+            await this.loadUserProfile();
+            window.history.replaceState({}, document.title, '/test');
+            return this.success(null);
+          } catch (profileError) {
+            console.log('Failed to load user profile with identity claims:', profileError);
+            // Still return success if we have claims
+            window.history.replaceState({}, document.title, '/test');
+            return this.success(null);
+          }
+        }
+        
+        // Only show error if we truly have no tokens, no claims, and no error in URL
+        console.error('No tokens, no claims, and no error in URL - authentication may have failed');
+        return this.error('No access token received after login. Check browser console for details.');
       } catch (loginError) {
         console.error('Error in tryLoginCodeFlow:', loginError);
         if (loginError && typeof loginError === 'object') {

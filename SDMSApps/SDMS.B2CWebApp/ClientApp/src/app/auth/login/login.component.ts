@@ -100,8 +100,11 @@ export class LoginComponent implements OnInit {
   }
 
   private async processLoginCallback(callbackAction : string): Promise<void> {
+    // Capture the URL immediately before any processing
+    // This ensures we have the original URL with code/state parameters
     const url = window.location.href;
-    const result = await this.authorizeService.completeSignIn(url,callbackAction);
+    console.log('Processing login callback, original URL:', url);
+    const result = await this.authorizeService.completeSignIn(url, callbackAction);
     switch (result.status) {
       case AuthenticationResultStatus.Redirect:
         // There should not be any redirects as completeSignIn never redirects.

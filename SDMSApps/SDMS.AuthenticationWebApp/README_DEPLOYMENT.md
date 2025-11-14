@@ -70,12 +70,13 @@ Add the following secrets in your GitHub repository (Settings → Secrets and va
 ## Configuration Priority
 
 The application loads configuration in this order:
-1. Environment variables (from Railway, set by GitHub Actions from GitHub Secrets) - Highest Priority
-2. `appsettings.Production.json` - Production defaults
-3. `appsettings.json` - Base defaults
-4. Hardcoded defaults - Fallback
+1. Environment variables (from Railway, set by GitHub Actions from GitHub Variables/Secrets) - Highest Priority
+2. `appsettings.json` - Single file with local development values (localhost URLs, local database, etc.)
+3. Hardcoded defaults - Fallback
 
 **All configuration keys use the `SDMS_AuthenticationWebApp_` prefix for consistency.**
+
+**Note**: We use a single `appsettings.json` file with local development values. Production values are set via environment variables at runtime, which override the values in appsettings.json.
 
 ## Alternative Platforms
 
@@ -100,10 +101,14 @@ The application loads configuration in this order:
 
 ## Configuration Files
 
-- `appsettings.json` - Development configuration
-- `appsettings.Production.json` - Production configuration template
+- `appsettings.json` - Single configuration file with local development values (localhost URLs, local database, etc.)
 - `railway.json` - Railway deployment configuration
-- `.github/workflows/deploy-railway.yml` - GitHub Actions workflow
+- `.github/workflows/deploy-auth-railway.yml` - GitHub Actions workflow
+
+**Note**: 
+- Single `appsettings.json` file contains local development values
+- Production values are set via environment variables (synced from GitHub Variables/Secrets to Railway) at runtime
+- Environment variables override values in appsettings.json
 
 ## Database Migration
 

@@ -1,0 +1,85 @@
+<div class="sidebar-container">
+  <div class="sidebar" [class.collapsed]="isCollapsed">
+    <div class="sidebar-header" *ngIf="!isCollapsed">
+      <h3>Navigation</h3>
+    </div>
+    <div class="sidebar-content" *ngIf="!isCollapsed" style="display: block !important; visibility: visible !important; opacity: 1 !important;">
+      <!-- Main Menu Section -->
+      <div class="menu-section">
+        <h4 class="menu-section-title">Main</h4>
+        <nav class="menu-list">
+          <a class="menu-item" (click)="onLoadComponent('test')" [class.active]="activeMenu === 'dashboard'">
+            <mat-icon>dashboard</mat-icon>
+            <span>Dashboard</span>
+          </a>
+          <a class="menu-item" (click)="onLoadComponent('test')" [class.active]="activeMenu === 'documents'">
+            <mat-icon>description</mat-icon>
+            <span>Documents</span>
+            <span class="badge">12</span>
+          </a>
+          <a class="menu-item" (click)="onLoadComponent('test')" [class.active]="activeMenu === 'projects'">
+            <mat-icon>folder</mat-icon>
+            <span>Projects</span>
+            <span class="badge">5</span>
+          </a>
+          <a class="menu-item" (click)="onLoadComponent('test')" [class.active]="activeMenu === 'reports'">
+            <mat-icon>assessment</mat-icon>
+            <span>Reports</span>
+          </a>
+          <a class="menu-item" (click)="onLoadComponent('test')" [class.active]="activeMenu === 'analytics'">
+            <mat-icon>analytics</mat-icon>
+            <span>Analytics</span>
+          </a>
+        </nav>
+      </div>
+
+      <mat-divider class="menu-divider"></mat-divider>
+
+      <!-- Tools Section -->
+      <div class="menu-section">
+        <h4 class="menu-section-title">Tools</h4>
+        <nav class="menu-list">
+          <a class="menu-item" (click)="onLoadComponent('test')" [class.active]="activeMenu === 'calendar'">
+            <mat-icon>calendar_today</mat-icon>
+            <span>Calendar</span>
+          </a>
+          <a class="menu-item" (click)="onLoadComponent('test')" [class.active]="activeMenu === 'tasks'">
+            <mat-icon>check_circle</mat-icon>
+            <span>Tasks</span>
+            <span class="badge warning">3</span>
+          </a>
+          <a class="menu-item" (click)="onLoadComponent('test')" [class.active]="activeMenu === 'notes'">
+            <mat-icon>note</mat-icon>
+            <span>Notes</span>
+          </a>
+          <a class="menu-item" (click)="onLoadComponent('test')" [class.active]="activeMenu === 'files'">
+            <mat-icon>folder_open</mat-icon>
+            <span>File Manager</span>
+          </a>
+        </nav>
+      </div>
+
+      <mat-divider class="menu-divider"></mat-divider>
+
+      <!-- Settings Section -->
+      <div class="menu-section">
+        <h4 class="menu-section-title">Settings</h4>
+        <nav class="menu-list">
+          <a class="menu-item" (click)="onLoadComponent('test')" [class.active]="activeMenu === 'settings'">
+            <mat-icon>settings</mat-icon>
+            <span>Settings</span>
+          </a>
+          <a class="menu-item" (click)="onLoadComponent('test')" [class.active]="activeMenu === 'profile'">
+            <mat-icon>account_circle</mat-icon>
+            <span>Profile</span>
+          </a>
+          <a class="menu-item" (click)="onLoadComponent('test')" [class.active]="activeMenu === 'preferences'">
+            <mat-icon>tune</mat-icon>
+            <span>Preferences</span>
+          </a>
+        </nav>
+      </div>
+    </div>
+  </div>
+</div>
+

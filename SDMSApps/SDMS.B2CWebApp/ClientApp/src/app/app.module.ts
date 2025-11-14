@@ -4,13 +4,17 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
-import { ServiceWorkerModule } from '@angular/service-worker';
-import { environment } from '../environments/environment';
+// Service worker disabled for now
+// import { ServiceWorkerModule } from '@angular/service-worker';
+// import { environment } from '../environments/environment';
 import { FrameworkModule } from './framework/framework.module';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
-import { TestComponent } from './Components/test/test.component';
 import { OAuthModule } from 'angular-oauth2-oidc';
-import { AuthInterceptor } from './interceptors/auth.interceptor';
+import { AuthModule } from './auth/auth.module';
+import { AuthorizeInterceptor } from './auth/authorize.interceptor';
+import { LandingComponent } from './components/landing/landing.component';
+// TestComponent moved to FrameworkModule to be accessible by CenterCanvasComponent
+// import { TestComponent } from './components/test/test.component';
 
 // Angular Material imports
 import { MatToolbarModule } from '@angular/material/toolbar';
@@ -28,11 +32,13 @@ import { MatListModule } from '@angular/material/list';
 import { MatTableModule } from '@angular/material/table';
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { MatSortModule } from '@angular/material/sort';
+import { MatSidenavModule } from '@angular/material/sidenav';
 
 @NgModule({
   declarations: [
     AppComponent,
-    TestComponent
+    LandingComponent
+    // TestComponent moved to FrameworkModule
   ],
   imports: [
     BrowserModule,
@@ -41,13 +47,15 @@ import { MatSortModule } from '@angular/material/sort';
     FormsModule,
     ReactiveFormsModule,
     // Routes are defined in AppRoutingModule to avoid duplication
-    ServiceWorkerModule.register('ngsw-worker.js', { 
-      enabled: environment.production,
-      registrationStrategy: 'registerWhenStable:30000'
-    }),
+    // Service worker disabled for now - can be enabled in production if needed
+    // ServiceWorkerModule.register('ngsw-worker.js', { 
+    //   enabled: environment.production,
+    //   registrationStrategy: 'registerWhenStable:30000'
+    // }),
     FrameworkModule,
     BrowserAnimationsModule,
     OAuthModule.forRoot(),
+    AuthModule,
     // Angular Material modules
     MatToolbarModule,
     MatButtonModule,
@@ -63,10 +71,11 @@ import { MatSortModule } from '@angular/material/sort';
     MatListModule,
     MatTableModule,
     MatPaginatorModule,
-    MatSortModule
+    MatSortModule,
+    MatSidenavModule
   ],
   providers: [
-    { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true }
+    { provide: HTTP_INTERCEPTORS, useClass: AuthorizeInterceptor, multi: true }
   ],
   bootstrap: [AppComponent]
 })

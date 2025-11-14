@@ -7,6 +7,7 @@ using OpenIddict.Server.AspNetCore;
 using SDMS.AuthenticationWebApp.Models;
 using SDMS.AuthenticationWebApp.Services;
 using static OpenIddict.Abstractions.OpenIddictConstants;
+using OpenIddictConstants = OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace SDMS.AuthenticationWebApp.Controllers;
 
@@ -85,6 +86,9 @@ public class AccountController : ControllerBase
                     var isValidPassword = await _userManager.CheckPasswordAsync(user, request.Password);
                     if (isValidPassword)
                     {
+                        // Sign the user in using Identity
+                        await _signInManager.SignInAsync(user, isPersistent: false);
+                        
                         user.LastLoginDate = DateTime.UtcNow;
                         await _userManager.UpdateAsync(user);
                         _logger.LogInformation("Local authentication successful for {Email}", request.Email);
@@ -107,15 +111,19 @@ public class AccountController : ControllerBase
                 return BadRequest(new { error = "Invalid login request" });
             }
 
-            // Generate token response will be handled by OpenIddict token endpoint
-            // Return redirect to token endpoint or return user info
+            // User is now signed in via SignInManager
+            // Return success - the Angular app will handle the OAuth flow redirect
+            // The cookie is set, so when initCodeFlow() redirects to /connect/authorize, 
+            // the user will be authenticated
+            
             return Ok(new
             {
                 userId = user.Id,
                 email = user.Email,
                 displayName = user.DisplayName,
                 externalProvider = user.ExternalProvider,
-                message = "Authentication successful. Use /connect/token to get access token."
+                success = true,
+                message = "Authentication successful. User signed in."
             });
         }
         catch (Exception ex)
@@ -172,13 +180,17 @@ public class AccountController : ControllerBase
         }
     }
 
-    [Authorize(AuthenticationSchemes = "Identity.Application")]
+    [Authorize] // Accept both cookie and Bearer token authentication
     [HttpGet("userinfo")]
     public async Task<IActionResult> UserInfo()
     {
         try
         {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            // Try to get user ID from Bearer token first (OpenIddict)
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) 
+                ?? User.FindFirstValue("sub") 
+                ?? User.FindFirstValue(OpenIddictConstants.Claims.Subject);
+            
             if (string.IsNullOrEmpty(userId))
             {
                 return Unauthorized();
@@ -207,6 +219,50 @@ public class AccountController : ControllerBase
             return StatusCode(500, new { error = "Internal server error" });
         }
     }
+
+    [HttpPost("verify-password-hash")]
+    public async Task<IActionResult> VerifyPasswordHash([FromBody] VerifyPasswordHashRequest request)
+    {
+        try
+        {
+            var user = await _userManager.FindByEmailAsync("admin@sdms.com");
+            if (user == null)
+            {
+                return NotFound(new { error = "User admin@sdms.com not found" });
+            }
+
+            // Get the stored password hash
+            var storedHash = user.PasswordHash;
+            
+            // Verify the provided hash matches the stored hash
+            bool hashMatches = storedHash == request.PasswordHash;
+            
+            // Also verify if the password "Admin@123" matches the stored hash
+            var passwordHasher = _userManager.PasswordHasher;
+            var verificationResult = passwordHasher.VerifyHashedPassword(user, storedHash ?? "", "Admin@123");
+            bool passwordMatches = verificationResult == PasswordVerificationResult.Success;
+
+            return Ok(new
+            {
+                email = user.Email,
+                storedHash = storedHash,
+                providedHash = request.PasswordHash,
+                hashMatches = hashMatches,
+                passwordMatches = passwordMatches,
+                verificationResult = verificationResult.ToString()
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error verifying password hash");
+            return StatusCode(500, new { error = "Internal server error", details = ex.Message });
+        }
+    }
+}
+
+public class VerifyPasswordHashRequest
+{
+    public string PasswordHash { get; set; } = string.Empty;
 }
 
 public class LoginRequest

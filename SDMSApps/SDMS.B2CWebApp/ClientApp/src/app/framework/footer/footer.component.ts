@@ -1,15 +1,16 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, EventEmitter, Input, Output } from '@angular/core';
 
 @Component({
   selector: 'app-footer',
   templateUrl: './footer.component.html',
   styleUrls: ['./footer.component.css']
 })
-export class FooterComponent implements OnInit {
+export class FooterComponent {
+  @Input() isCollapsed = false;
+  @Output() loadComponent = new EventEmitter<string>();
+  currentYear = new Date().getFullYear();
 
-  constructor() { }
-
-  ngOnInit() {
+  onLoadComponent(componentName: string) {
+    this.loadComponent.emit(componentName);
   }
-
 }

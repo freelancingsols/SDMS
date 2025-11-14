@@ -1,98 +1,104 @@
-<nav class="navbar navbar-expand-lg navbar-dark sticky" style="background-color: #F3C20A;">
-    <div class="container-fluid">
-        <!-- <a class="navbar-brand" href="#">
-            ONLINE <span> SHOP</span>
-        </a> -->
-        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#main-nav"
-        aria-controls="main-nav" aria-expanded="false" aria-label="Toggle navigation">
-        <span class="fa fa-bars"></span>
+<div class="header-container" [class.collapsed]="isCollapsed">
+  <mat-toolbar class="header-toolbar" *ngIf="!isCollapsed">
+    <!-- Left Section: Icon and App Name -->
+    <div class="header-left">
+      <mat-icon class="app-icon">dashboard</mat-icon>
+      <span class="app-name">SDMS</span>
+    </div>
+
+    <!-- Center Section: Search Bar -->
+    <div class="header-center">
+      <mat-form-field appearance="outline" class="search-field">
+        <mat-icon matPrefix>search</mat-icon>
+        <input matInput placeholder="Search..." [(ngModel)]="searchQuery" (keyup.enter)="onSearch()">
+        <button mat-icon-button matSuffix *ngIf="searchQuery" (click)="clearSearch()" aria-label="Clear search">
+          <mat-icon>close</mat-icon>
         </button>
-        <div class="images d-flex h-100 logo-img-wrapper">
-            <img class="mx-auto my-auto logo-img" src="assets/SiltonShopper2.png">
-        </div>
-        <div class="form-group mb-0 ml-5 w-50">
-            <input type="text" class="form-control" placeholder="Search Products">
-        </div>      
-        <div class="collapse navbar-collapse" id="main-nav">
-            <ul class="navbar-nav mr-auto w-100 justify-content-end">
-                <li class="nav-item" [routerLinkActiveOptions]="{exact: true}" routerLinkActive="active">
-                    <a class="nav-link " routerLink="/">Home</a>
-                </li>
-                <li class="nav-item" routerLinkActive="active">
-                    <a class="nav-link" routerLink="/about">ABOUT</a>
-                </li>
-
-                <li class="nav-item" routerLinkActive="active">
-                    <a class="nav-link" routerLink="/products">PRODUCTS</a>
-                </li>
-
-                <li class="nav-item" routerLinkActive="active">
-                    <a class="nav-link" routerLink="/contact-us">Contact Us</a>
-                </li>
-                <ng-template #anonymous>
-                    <li class="nav-item" routerLinkActive="active">
-                        <a class="nav-link" routerLink="/login">LOGIN</a>
-                    </li>
-                </ng-template>
-                <li class="nav-item dropdown" *ngIf="true" routerLinkActive="active">
-                <!-- <li class="nav-item dropdown" *ngIf="appUser else anonymous" routerLinkActive="active"> -->
-                    <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button"
-                        data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                        Test user<!-- {{appUser.username}}-->
-                    </a>
-                    <div class="dropdown-menu" aria-labelledby="navbarDropdown">
-                        <a class="dropdown-item" routerLink="/dashboard" *ngIf="true">Dashboard</a><!--appUser.isAdmin-->
-                        <a class="dropdown-item" routerLink="/userorders">My Orders</a>
-                        <a class="dropdown-item" >LogOut</a>
-                        <!--<a class="dropdown-item" (click)="logout()">LogOut</a>-->
-                    </div>
-                </li>
-                <li class="nav-item" routerLinkActive="active">
-                    <div class="cart nav-link" routerLink="/card" style="outline: none;">
-                        <i class="fa fa-shopping-cart"></i>
-                        <!-- <span class="badge badge-danger badge-pill quentity" *ngIf="cart$ | async as cart">
-                            {{cart.getTotlCount}}
-                        </span> -->
-                        <span class="badge badge-danger badge-pill quentity">
-                            4
-                        </span>
-                    </div>
-                </li>
-            </ul>
-        </div>
+      </mat-form-field>
     </div>
-</nav>
 
-<!-- map starts -->
-<div class="pac-card" id="pac-card">
-    <div>
-        <div id="title">Autocomplete search</div>
-        <div id="type-selector" class="pac-controls">
-            <input type="radio" name="type" id="changetype-all" checked="checked" />
-            <label for="changetype-all">All</label>
+    <!-- Right Section: Action Buttons -->
+    <div class="header-right">
+      <button mat-icon-button (click)="onLoadComponent('test')" matTooltip="Home">
+        <mat-icon>home</mat-icon>
+      </button>
+      
+      <button mat-raised-button color="accent" (click)="onLoadComponent('test')" matTooltip="Load Test Component in Center Canvas">
+        <mat-icon>bug_report</mat-icon>
+        <span>Test</span>
+      </button>
+      
+      <button mat-icon-button [matMenuTriggerFor]="notificationsMenu" matTooltip="Notifications">
+        <mat-icon matBadge="3" matBadgeColor="warn">notifications</mat-icon>
+      </button>
+      <mat-menu #notificationsMenu="matMenu">
+        <button mat-menu-item>
+          <mat-icon>info</mat-icon>
+          <span>New notification 1</span>
+        </button>
+        <button mat-menu-item>
+          <mat-icon>warning</mat-icon>
+          <span>New notification 2</span>
+        </button>
+        <button mat-menu-item>
+          <mat-icon>check_circle</mat-icon>
+          <span>New notification 3</span>
+        </button>
+        <mat-divider></mat-divider>
+        <button mat-menu-item>
+          <span>View all notifications</span>
+        </button>
+      </mat-menu>
 
-            <input type="radio" name="type" id="changetype-establishment" />
-            <label for="changetype-establishment">Establishments</label>
+      <button mat-icon-button [matMenuTriggerFor]="settingsMenu" matTooltip="Settings">
+        <mat-icon>settings</mat-icon>
+      </button>
+      <mat-menu #settingsMenu="matMenu">
+        <button mat-menu-item>
+          <mat-icon>account_circle</mat-icon>
+          <span>Profile</span>
+        </button>
+        <button mat-menu-item>
+          <mat-icon>tune</mat-icon>
+          <span>Preferences</span>
+        </button>
+        <mat-divider></mat-divider>
+        <button mat-menu-item>
+          <mat-icon>help</mat-icon>
+          <span>Help & Support</span>
+        </button>
+        <button mat-menu-item>
+          <mat-icon>logout</mat-icon>
+          <span>Logout</span>
+        </button>
+      </mat-menu>
 
-            <input type="radio" name="type" id="changetype-address" />
-            <label for="changetype-address">Addresses</label>
-
-            <input type="radio" name="type" id="changetype-geocode" />
-            <label for="changetype-geocode">Geocodes</label>
+      <button mat-icon-button [matMenuTriggerFor]="profileMenu" class="profile-btn" matTooltip="Profile">
+        <mat-icon>account_circle</mat-icon>
+      </button>
+      <mat-menu #profileMenu="matMenu">
+        <div class="profile-menu-header">
+          <mat-icon class="profile-icon">account_circle</mat-icon>
+          <div class="profile-info">
+            <div class="profile-name">John Doe</div>
+            <div class="profile-email">john.doe&#64;example.com</div>
+          </div>
         </div>
-        <div id="strict-bounds-selector" class="pac-controls">
-            <input type="checkbox" id="use-strict-bounds" value="" />
-            <label for="use-strict-bounds">Strict Bounds</label>
-        </div>
+        <mat-divider></mat-divider>
+        <button mat-menu-item>
+          <mat-icon>person</mat-icon>
+          <span>My Profile</span>
+        </button>
+        <button mat-menu-item>
+          <mat-icon>settings</mat-icon>
+          <span>Account Settings</span>
+        </button>
+        <mat-divider></mat-divider>
+        <button mat-menu-item>
+          <mat-icon>logout</mat-icon>
+          <span>Sign Out</span>
+        </button>
+      </mat-menu>
     </div>
-    <div id="pac-container">
-        <input id="pac-input" type="text" placeholder="Enter a location" />
-    </div>
+  </mat-toolbar>
 </div>
-<div id="map"></div>
-<div id="infowindow-content">
-    <img src="" width="16" height="16" id="place-icon" />
-    <span id="place-name" class="title"></span><br />
-    <span id="place-address"></span>
-</div>
-<!-- map ends -->

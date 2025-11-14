@@ -26,21 +26,23 @@ Use this checklist to ensure a successful deployment.
 Go to your service → Variables tab and add:
 
 ### Required Variables
-- [ ] `POSTGRES_CONNECTION` (usually auto-set by Railway)
-- [ ] `Frontend__Url` = Your Vercel frontend URL (e.g., `https://your-app.vercel.app`)
-- [ ] `Authentication__LoginUrl` = `/login`
-- [ ] `Authentication__LogoutUrl` = `/logout`
-- [ ] `Authentication__ErrorUrl` = `/login`
+- [ ] `SDMS_AuthenticationWebApp_ConnectionString` = PostgreSQL connection string (or Railway auto-sets `POSTGRES_CONNECTION`)
+- [ ] `SDMS_AuthenticationWebApp_FrontendUrl` = Your Vercel frontend URL (e.g., `https://your-app.vercel.app`)
+- [ ] `SDMS_AuthenticationWebApp_LoginUrl` = `/login`
+- [ ] `SDMS_AuthenticationWebApp_LogoutUrl` = `/logout`
+- [ ] `SDMS_AuthenticationWebApp_ErrorUrl` = `/login`
+- [ ] `SDMS_AuthenticationWebApp_RedirectUris` = Comma-separated redirect URIs (e.g., `https://your-frontend.com/auth-callback,https://your-b2c.vercel.app/auth-callback`)
+- [ ] `SDMS_AuthenticationWebApp_PostLogoutRedirectUris` = Comma-separated post-logout redirect URIs (e.g., `https://your-frontend.com/,https://your-b2c.vercel.app/`)
 
 ### Optional Variables (if using external auth)
-- [ ] `ExternalAuth__Google__ClientId`
-- [ ] `ExternalAuth__Google__ClientSecret`
-- [ ] `ExternalAuth__Auth0__Domain`
-- [ ] `ExternalAuth__Auth0__ClientId`
-- [ ] `ExternalAuth__Auth0__ClientSecret`
-- [ ] `Webhook__Secret`
+- [ ] `SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId`
+- [ ] `SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret`
+- [ ] `SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain`
+- [ ] `SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId`
+- [ ] `SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret`
+- [ ] `SDMS_AuthenticationWebApp_WebhookSecret`
 
-**Note:** Use double underscore `__` for nested keys (e.g., `Frontend__Url`)
+**Note:** All variables use the `SDMS_AuthenticationWebApp_` prefix format
 
 ## Step 4: Build Configuration
 
@@ -118,7 +120,7 @@ If deployment fails:
 - **Solution:** Verify PORT environment variable (Railway sets this automatically)
 
 ### CORS Errors
-- **Solution:** Update `Frontend__Url` to actual frontend URL
+- **Solution:** Update `SDMS_AuthenticationWebApp_FrontendUrl` to actual frontend URL
 - **Solution:** Check CORS configuration in Program.cs
 
 ## Success Criteria

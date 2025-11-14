@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Reflection;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
@@ -6,6 +7,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
@@ -15,6 +17,38 @@ using SDMS.AuthenticationWebApp.Services;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace SDMS.AuthenticationWebApp.Controllers;
+
+// Wrapper class to read OpenIddict request parameters from HTTP request
+// Used when the request object isn't available in HttpContext.Items
+internal class OpenIddictRequestWrapper
+{
+    private readonly HttpRequest _request;
+    
+    public OpenIddictRequestWrapper(HttpRequest request)
+    {
+        _request = request;
+    }
+    
+    public string? ClientId => _request.Query["client_id"].ToString() ?? _request.Form["client_id"].ToString();
+    public string? ResponseType => _request.Query["response_type"].ToString() ?? _request.Form["response_type"].ToString();
+    public string? RedirectUri => _request.Query["redirect_uri"].ToString() ?? _request.Form["redirect_uri"].ToString();
+    public string? Scope => _request.Query["scope"].ToString() ?? _request.Form["scope"].ToString();
+    public string? State => _request.Query["state"].ToString() ?? _request.Form["state"].ToString();
+    
+    public IEnumerable<string> GetScopes()
+    {
+        var scope = Scope;
+        return string.IsNullOrEmpty(scope) 
+            ? Array.Empty<string>() 
+            : scope.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+    }
+    
+    public bool HasPrompt(string prompt)
+    {
+        var requestPrompt = _request.Query["prompt"].ToString() ?? _request.Form["prompt"].ToString();
+        return requestPrompt == prompt;
+    }
+}
 
 public class AuthorizationController : Controller
 {
@@ -46,31 +80,60 @@ public class AuthorizationController : Controller
     [IgnoreAntiforgeryToken]
     public async Task<IActionResult> Authorize()
     {
-        // When passthrough is enabled, OpenIddict processes the request through middleware
-        // The request should be available in HttpContext.Items or Features
-        // For now, we'll access it via reflection as a fallback
-        var request = GetOpenIddictRequest() ??
-            throw new InvalidOperationException("The OpenID Connect request cannot be retrieved.");
+        // Get the OpenIddict request from HttpContext.Items
+        // With passthrough enabled, OpenIddict stores the request in HttpContext.Items
+        object? requestObj = null;
         
-        OpenIddictRequest? GetOpenIddictRequest()
+        // Try all possible key names that OpenIddict might use
+        var possibleKeys = new[]
         {
-            // Try to get request from HttpContext.Items (OpenIddict might store it there)
-            if (HttpContext.Items.TryGetValue("openiddict-request", out var item) && item is OpenIddictRequest req)
-                return req;
-            
-            // Try extension method via reflection
-            var extensionType = Type.GetType("OpenIddict.Server.AspNetCore.OpenIddictServerAspNetCoreHelpers, OpenIddict.Server.AspNetCore");
-            if (extensionType != null)
+            "openiddict-server-request",
+            "openiddict_request",
+            "openiddict.server.request",
+            "openiddict.server.request.feature"
+        };
+        
+        foreach (var key in possibleKeys)
+        {
+            if (HttpContext.Items.TryGetValue(key, out var item) && item != null)
             {
-                var method = extensionType.GetMethod("GetOpenIddictServerRequest", 
-                    System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public,
-                    null, new[] { typeof(HttpContext) }, null);
-                if (method != null)
-                    return method.Invoke(null, new[] { HttpContext }) as OpenIddictRequest;
+                requestObj = item;
+                break;
             }
-            
-            return null;
         }
+        
+        // If still not found, try to find any item that has "OpenIddict" in its type name
+        if (requestObj == null)
+        {
+            foreach (var item in HttpContext.Items.Values)
+            {
+                if (item != null && item.GetType().FullName?.Contains("OpenIddict") == true)
+                {
+                    requestObj = item;
+                    break;
+                }
+            }
+        }
+        
+        // If still not found, create a wrapper that reads from the HTTP request directly
+        // This happens when passthrough is enabled but the request object isn't in Items
+        if (requestObj == null)
+        {
+            var wrapper = new OpenIddictRequestWrapper(Request);
+            if (!string.IsNullOrEmpty(wrapper.ClientId))
+            {
+                requestObj = wrapper;
+            }
+        }
+        
+        if (requestObj == null)
+        {
+            throw new InvalidOperationException("The OpenID Connect request cannot be retrieved.");
+        }
+        
+        // Cast to the OpenIddict request - the actual type is internal, so we use it via the interface
+        // The request object implements methods we need, so we'll access them directly
+        var request = requestObj;
 
         // Retrieve the user principal stored in the authentication cookie.
         var result = await HttpContext.AuthenticateAsync(IdentityConstants.ApplicationScheme);
@@ -87,8 +150,16 @@ public class AuthorizationController : Controller
             var returnUrl = Request.PathBase + Request.Path + QueryString.Create(
                 Request.HasFormContentType ? Request.Form.ToList() : Request.Query.ToList());
             
-            // Redirect to login page with return URL
-            return Redirect($"{loginUrl}?{returnUrlParameter}={Uri.EscapeDataString(returnUrl)}");
+            // Build the full redirect URL - ensure it's relative to the current request
+            var redirectUrl = $"{loginUrl}?{returnUrlParameter}={Uri.EscapeDataString(returnUrl)}";
+            
+            // Log the redirect for debugging
+            var logger = HttpContext.RequestServices.GetService<ILogger<AuthorizationController>>();
+            logger?.LogInformation("Redirecting unauthenticated user to login: {RedirectUrl}", redirectUrl);
+            
+            // Use LocalRedirect to ensure it's a relative URL within the same application
+            // This prevents open redirect vulnerabilities and ensures the Angular app handles it
+            return LocalRedirect(redirectUrl);
         }
 
         // Retrieve the profile of the logged-in user.
@@ -96,17 +167,38 @@ public class AuthorizationController : Controller
             throw new InvalidOperationException("The user details cannot be retrieved.");
 
         // Retrieve the application details from the database.
-        var application = await _applicationManager.FindByClientIdAsync(request.ClientId ?? string.Empty) ??
+        string clientId;
+        if (request is OpenIddictRequestWrapper wrapper1)
+        {
+            clientId = wrapper1.ClientId ?? string.Empty;
+        }
+        else
+        {
+            var clientIdProp = request.GetType().GetProperty("ClientId", BindingFlags.Public | BindingFlags.Instance);
+            clientId = clientIdProp?.GetValue(request)?.ToString() ?? string.Empty;
+        }
+        var application = await _applicationManager.FindByClientIdAsync(clientId) ??
             throw new InvalidOperationException("Details concerning the calling client application cannot be found.");
 
         // Retrieve the permanent authorizations associated with the user and the calling client application.
+        IEnumerable<string> scopes;
+        if (request is OpenIddictRequestWrapper wrapper2)
+        {
+            scopes = wrapper2.GetScopes();
+        }
+        else
+        {
+            var getScopesMethod = request.GetType().GetMethod("GetScopes", BindingFlags.Public | BindingFlags.Instance);
+            scopes = getScopesMethod != null ? (IEnumerable<string>)getScopesMethod.Invoke(request, null)! : Array.Empty<string>();
+        }
+        var scopesArray = scopes.ToImmutableArray();
         var authorizationsList = new List<object>();
         await foreach (var authorization in _authorizationManager.FindAsync(
             subject: await _userManager.GetUserIdAsync(user),
             client: await _applicationManager.GetIdAsync(application, CancellationToken.None) ?? string.Empty,
             status: Statuses.Valid,
             type: AuthorizationTypes.Permanent,
-            scopes: request.GetScopes()))
+            scopes: scopesArray))
         {
             authorizationsList.Add(authorization);
         }
@@ -130,7 +222,28 @@ public class AuthorizationController : Controller
             // return an authorization response without displaying the consent form.
             case ConsentTypes.Implicit:
             case ConsentTypes.External when authorizations.Any():
-            case ConsentTypes.Explicit when authorizations.Any() && !request.HasPrompt(Prompts.Consent):
+            case ConsentTypes.Explicit when authorizations.Any():
+                bool hasConsentPrompt;
+                if (request is OpenIddictRequestWrapper wrapper3)
+                {
+                    hasConsentPrompt = wrapper3.HasPrompt(Prompts.Consent);
+                }
+                else
+                {
+                    var hasPromptMethod = request.GetType().GetMethod("HasPrompt", BindingFlags.Public | BindingFlags.Instance);
+                    hasConsentPrompt = hasPromptMethod != null && (bool)hasPromptMethod.Invoke(request, new object[] { Prompts.Consent })!;
+                }
+                if (hasConsentPrompt)
+                {
+                    // Need to show consent form - this case should be handled elsewhere
+                    return Forbid(
+                        authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+                        properties: new AuthenticationProperties(new Dictionary<string, string?>
+                        {
+                            [OpenIddictServerAspNetCoreConstants.Properties.Error] = Errors.ConsentRequired,
+                            [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "User consent is required."
+                        }));
+                }
                 // Create the claims-based identity that will be used by OpenIddict to generate tokens.
                 var identity = new ClaimsIdentity(
                     authenticationType: TokenValidationParameters.DefaultAuthenticationType,
@@ -144,10 +257,36 @@ public class AuthorizationController : Controller
                         .SetClaims(Claims.Role, (await _userManager.GetRolesAsync(user)).ToImmutableArray());
 
                 // Set the list of scopes granted to the client application.
-                identity.SetScopes(request.GetScopes());
-                identity.SetResources(await GetResourcesAsync(request.GetScopes()));
+                IEnumerable<string> scopes2;
+                if (request is OpenIddictRequestWrapper wrapper4)
+                {
+                    scopes2 = wrapper4.GetScopes();
+                }
+                else
+                {
+                    var getScopesMethod2 = request.GetType().GetMethod("GetScopes", BindingFlags.Public | BindingFlags.Instance);
+                    scopes2 = getScopesMethod2 != null ? (IEnumerable<string>)getScopesMethod2.Invoke(request, null)! : Array.Empty<string>();
+                }
+                identity.SetScopes(scopes2);
+                identity.SetResources(await GetResourcesAsync(scopes2));
                 identity.SetDestinations(GetDestinations);
 
+                // Log the redirect_uri for debugging
+                string? redirectUri = null;
+                if (request is OpenIddictRequestWrapper wrapper5)
+                {
+                    redirectUri = wrapper5.RedirectUri;
+                }
+                else
+                {
+                    var redirectUriProp = request.GetType().GetProperty("RedirectUri", BindingFlags.Public | BindingFlags.Instance);
+                    redirectUri = redirectUriProp?.GetValue(request)?.ToString();
+                }
+                var logger = HttpContext.RequestServices.GetService<ILogger<AuthorizationController>>();
+                logger?.LogInformation("SignIn called - redirect_uri from request: {RedirectUri}", redirectUri);
+
+                // OpenIddict should automatically use the redirect_uri from the original authorization request
+                // stored in HttpContext.Items. The SignIn method will handle the redirect automatically.
                 return SignIn(new ClaimsPrincipal(identity), OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
 
             // At this point, no authorization was found in the database and an error must be returned

@@ -40,3 +40,7 @@ SDMS_AuthenticationWebApp_redirectUri = https://your-b2c-domain.vercel.app/auth-
 
 SDMS_AuthenticationWebApp_scope = openid profile email roles api
 
+SDMS_AuthenticationWebApp_RedirectUris = https://your-frontend-domain.com/auth-callback,https://your-b2c-domain.vercel.app/auth-callback
+
+SDMS_AuthenticationWebApp_PostLogoutRedirectUris = https://your-frontend-domain.com/,https://your-b2c-domain.vercel.app/
+

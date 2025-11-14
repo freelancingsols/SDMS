@@ -1,0 +1,10 @@
+<div class="center-canvas-container">
+  <ng-container [ngSwitch]="currentComponent">
+    <app-test *ngSwitchCase="'test'"></app-test>
+    <!-- Add more components here as needed -->
+    <div *ngSwitchDefault class="default-message">
+      <p>Component "{{ currentComponent }}" not found</p>
+    </div>
+  </ng-container>
+</div>
+

@@ -33,8 +33,14 @@ export class AuthService {
   }
 
   private configureOAuth() {
+    // Normalize issuer URL - ensure it ends with a slash to match discovery document
+    let issuerUrl = environment.authServer;
+    if (!issuerUrl.endsWith('/')) {
+      issuerUrl = issuerUrl + '/';
+    }
+
     this.oauthService.configure({
-      issuer: environment.authServer,
+      issuer: issuerUrl,
       redirectUri: window.location.origin + '/auth-callback',
       clientId: environment.clientId,
       responseType: 'code',
@@ -73,18 +79,21 @@ export class AuthService {
 
   async loginWithEmail(email: string, password: string): Promise<boolean> {
     try {
-      const response = await this.http.post<any>(`${this.apiUrl}/account/login`, {
-        email,
-        password
-      }).toPromise();
+      // Use withCredentials to ensure cookies are sent and received
+      const response = await this.http.post<any>(
+        `${this.apiUrl}/account/login`,
+        { email, password },
+        { withCredentials: true }
+      ).toPromise();
 
-      if (response) {
-        // After successful backend login, initiate OpenIddict OAuth flow to get tokens
-        // The backend has signed the user in, now we get the authorization code
-        await this.oauthService.loadDiscoveryDocument();
+      if (response && response.success) {
+        // Wait a bit to ensure cookie is set
+        await new Promise(resolve => setTimeout(resolve, 100));
         
-        // Initiate authorization code flow
-        this.oauthService.initCodeFlow();
+        // DO NOT initiate a new OAuth flow here!
+        // The login component will redirect back to the ReturnUrl (which is /connect/authorize with original OAuth params)
+        // OpenIddict will handle the authorization flow and redirect to the correct redirect_uri
+        // Calling initCodeFlow() here would create a NEW OAuth flow with the wrong redirect_uri
         return true;
       }
       return false;

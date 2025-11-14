@@ -63,9 +63,10 @@ Add the following secrets in your GitHub repository (Settings → Secrets and va
 ## Configuration Priority
 
 1. **Environment Variables** (from Railway, set by GitHub Actions) - Highest Priority
-2. **appsettings.Production.json** - Production defaults
-3. **appsettings.json** - Base defaults
-4. **Hardcoded defaults** - Fallback
+2. **appsettings.json** - Single file with local development values (localhost URLs, local database, etc.)
+3. **Hardcoded defaults** - Fallback
+
+**Note**: We use a single `appsettings.json` file with local development values. Production values are set via environment variables at runtime, which override the values in appsettings.json.
 
 ## Setting Up GitHub Secrets
 

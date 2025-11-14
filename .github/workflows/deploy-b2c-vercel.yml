@@ -114,10 +114,34 @@ jobs:
       - name: Install Vercel CLI
         run: npm install -g vercel@latest
 
+      - name: Update Vercel project root directory
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+        run: |
+          echo "Updating Vercel project root directory..."
+          ROOT_DIR="SDMSApps/SDMS.B2CWebApp"
+          
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X PATCH \
+            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"rootDirectory\": \"$ROOT_DIR\"}" 2>&1)
+          
+          HTTP_STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
+          if [ "$HTTP_STATUS" == "200" ] || [ "$HTTP_STATUS" == "201" ]; then
+            echo "✅ Root directory updated to: $ROOT_DIR"
+          else
+            echo "⚠️  Could not update root directory (HTTP $HTTP_STATUS), continuing..."
+          fi
+
       - name: Sync Vercel Environment Variables
         working-directory: SDMSApps/SDMS.B2CWebApp
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
         run: |
           echo "Syncing env vars…"
           # Add your syncing script here (omitted for brevity)
@@ -134,5 +158,18 @@ jobs:
         working-directory: SDMSApps/SDMS.B2CWebApp
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          CI: 'true'
         run: |
-          vercel deploy --prod --token "$VERCEL_TOKEN" --force
+          echo "Current directory: $(pwd)"
+          echo "Verifying vercel.json exists..."
+          if [ ! -f "vercel.json" ]; then
+            echo "❌ ERROR: vercel.json not found in $(pwd)"
+            ls -la
+            exit 1
+          fi
+          echo "✅ vercel.json found"
+          
+          echo "Deploying to Vercel..."
+          vercel --prod --force --token="$VERCEL_TOKEN" --scope="$VERCEL_ORG_ID" --yes

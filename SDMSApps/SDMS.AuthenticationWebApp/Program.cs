@@ -367,6 +367,7 @@ app.MapGet("/ping", () => Results.Ok(new {
 
 // Note: OpenIddict automatically exposes /.well-known/openid-configuration
 // No explicit mapping needed - OpenIddict middleware handles it
+// CORS is already configured above and will apply to all endpoints including well-known
 
 app.UseAuthentication();
 app.UseAuthorization();

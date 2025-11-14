@@ -40,7 +40,7 @@ jobs:
        github.ref != 'refs/heads/main' &&
        (github.ref == 'refs/heads/release' || github.ref == 'refs/heads/Release'))
     steps:
-      - name: 🚨 CRITICAL: Block Master/Main Branch Deployments
+      - name: CRITICAL: Block Master/Main Branch Deployments
         run: |
           echo "🚨 CRITICAL: Checking deployment branch..."
           

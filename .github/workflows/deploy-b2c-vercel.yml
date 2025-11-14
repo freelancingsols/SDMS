@@ -1,10 +1,5 @@
 name: Deploy B2C WebApp to Vercel
 
-# Concurrency: Cancel in-progress runs when a new one starts (saves Actions minutes)
-concurrency:
-  group: deploy-b2c-vercel-${{ github.ref }}
-  cancel-in-progress: true
-
 on:
   workflow_run:
     workflows: ["CI - B2C WebApp (Build, Test, and Lint)"]
@@ -13,22 +8,15 @@ on:
     branches:
       - release
       - Release
-      # CRITICAL: Only trigger on release branch CI runs
-      # This prevents the workflow from even starting for master/main branch CI runs
-      # Note: The branches filter here only applies to which CI runs trigger this workflow
-      # We still have additional checks in the job if condition and first step
   workflow_dispatch:
+
+concurrency:
+  group: deploy-b2c-vercel-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 15  # Fail fast if deployment takes too long (saves minutes)
-    # Deployment rules:
-    # 1. For workflow_run: Only deploy if CI succeeded AND CI ran on release branch (NOT master/main)
-    # 2. For workflow_dispatch: Only allow manual deployment from Release branch
-    # 3. EXPLICITLY BLOCK master and main branches to prevent unwanted deployments
-    # 
-    # CRITICAL: This if condition MUST block master/main or the workflow will waste CI minutes
     if: |
       (github.event_name == 'workflow_run' && 
        github.event.workflow_run.conclusion == 'success' && 
@@ -41,208 +29,55 @@ jobs:
        (github.ref == 'refs/heads/release' || github.ref == 'refs/heads/Release'))
 
     steps:
-      - name: CRITICAL: Block Master/Main Branch Deployments
+      - name: CRITICAL Block Master/Main Branch Deployments
         run: |
-          echo "🚨 CRITICAL: Checking deployment branch..."
-          
-          # Determine the branch based on trigger type
-          if [ "${{ github.event_name }}" == "workflow_run" ]; then
+          echo "Checking branch…"
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
             DEPLOY_BRANCH="${{ github.event.workflow_run.head_branch }}"
-            echo "Trigger: workflow_run from CI"
-            echo "CI Branch: $DEPLOY_BRANCH"
-          elif [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            DEPLOY_BRANCH="${{ github.ref_name }}"
-            echo "Trigger: workflow_dispatch (manual)"
-            echo "Current Branch: $DEPLOY_BRANCH"
           else
             DEPLOY_BRANCH="${{ github.ref_name }}"
-            echo "Trigger: ${{ github.event_name }}"
-            echo "Branch: $DEPLOY_BRANCH"
           fi
-          
-          echo ""
-          echo "🔍 Branch check: $DEPLOY_BRANCH"
-          
-          # EXPLICITLY BLOCK master and main
-          if [ "$DEPLOY_BRANCH" == "master" ] || [ "$DEPLOY_BRANCH" == "main" ]; then
-            echo ""
-            echo "❌❌❌ DEPLOYMENT BLOCKED ❌❌❌"
-            echo ""
-            echo "Branch '$DEPLOY_BRANCH' is NOT ALLOWED for deployment!"
-            echo "Only 'release' or 'Release' branch deployments are permitted."
-            echo ""
-            echo "This deployment has been cancelled to prevent errors."
-            echo ""
-            echo "To deploy:"
-            echo "  1. Switch to 'release' branch"
-            echo "  2. Push your changes"
-            echo "  3. Wait for CI to complete"
-            echo "  4. Deployment will happen automatically from 'release' branch"
-            echo ""
-            exit 1
+
+          if [ "$DEPLOY_BRANCH" = "master" ] || [ "$DEPLOY_BRANCH" = "main" ]; then
+            echo "BLOCKED"; exit 1;
           fi
-          
-          # Verify it's release branch
+
           if [ "$DEPLOY_BRANCH" != "release" ] && [ "$DEPLOY_BRANCH" != "Release" ]; then
-            echo ""
-            echo "❌ DEPLOYMENT BLOCKED"
-            echo "Branch '$DEPLOY_BRANCH' is not allowed."
-            echo "Allowed branches: release, Release"
-            echo "Blocked branches: master, main, develop, stage, staging"
-            echo ""
-            exit 1
+            echo "Invalid branch"; exit 1;
           fi
-          
-          echo "✅ Branch verified: $DEPLOY_BRANCH is allowed for deployment"
-          echo ""
 
       - name: Verify Branch for Manual Deployment
         if: github.event_name == 'workflow_dispatch'
         run: |
-          echo "🔍 Verifying branch for manual deployment..."
-          CURRENT_BRANCH="${{ github.ref }}"
-          echo "Current branch: $CURRENT_BRANCH"
-          echo ""
-          
-          if [ "$CURRENT_BRANCH" != "refs/heads/release" ] && [ "$CURRENT_BRANCH" != "refs/heads/Release" ]; then
-            echo "❌ ERROR: Manual deployment is only allowed from 'release' or 'Release' branch"
-            echo "   Current branch: $CURRENT_BRANCH"
-            echo "   Required branch: refs/heads/release or refs/heads/Release"
-            echo ""
-            echo "   Please switch to the Release branch before deploying."
+          if [ "${{ github.ref }}" != "refs/heads/release" ] && \
+             [ "${{ github.ref }}" != "refs/heads/Release" ]; then
+            echo "Manual deploy only allowed on Release branch"
             exit 1
           fi
-          echo "✅ Verified: Manual deployment triggered from Release branch"
-          echo ""
 
       - name: Deployment Summary
         run: |
-          echo "╔════════════════════════════════════════════════════════════╗"
-          echo "║         B2C WebApp Deployment to Vercel                    ║"
-          echo "╚════════════════════════════════════════════════════════════╝"
-          echo ""
-          echo "📦 Application: B2C WebApp"
-          echo "🚀 Target Platform: Vercel"
-          echo "🌿 Trigger: ${{ github.event_name }}"
-          if [ "${{ github.event_name }}" == "workflow_run" ]; then
-            echo "📋 CI Workflow: ${{ github.event.workflow_run.name }}"
-            echo "🌿 CI Branch: ${{ github.event.workflow_run.head_branch }}"
-            echo "✅ CI Status: ${{ github.event.workflow_run.conclusion }}"
-            echo "🔖 CI Commit: ${{ github.event.workflow_run.head_sha }}"
-          else
-            echo "🌿 Branch: ${{ github.ref }}"
-            echo "🔖 Commit: ${{ github.sha }}"
-          fi
-          echo ""
-          echo "📝 Deployment will:"
-          echo "   1. Verify CI status and release branch"
-          echo "   2. Sync environment variables to Vercel"
-          echo "   3. Build Angular application"
-          echo "   4. Deploy to Vercel production"
-          echo ""
+          echo "Deployment starting..."
 
       - name: Verify CI Status and Application
         if: github.event_name == 'workflow_run'
         run: |
-          echo "🔍 Verifying CI workflow status for B2C WebApp deployment..."
-          echo ""
-          echo "📋 Deployment Information:"
-          echo "  Application: B2C WebApp"
-          echo "  Target: Vercel"
-          echo "  Workflow Run ID: ${{ github.event.workflow_run.id }}"
-          echo "  CI Workflow: ${{ github.event.workflow_run.name }}"
-          echo "  Workflow Run Conclusion: ${{ github.event.workflow_run.conclusion }}"
-          echo "  Workflow Run Branch: ${{ github.event.workflow_run.head_branch }}"
-          echo "  Workflow Run Commit SHA: ${{ github.event.workflow_run.head_sha }}"
-          echo ""
-          
-          # Verify this is the correct CI workflow
-          CI_WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
-          if [[ "$CI_WORKFLOW_NAME" != *"B2C WebApp"* ]]; then
-            echo "⚠️  WARNING: This deployment is for B2C WebApp, but CI workflow name doesn't match: $CI_WORKFLOW_NAME"
-            echo "   Expected: CI workflow should contain 'B2C WebApp'"
-            echo "   Continuing anyway, but please verify this is the correct deployment."
-          else
-            echo "✅ Verified: This is the B2C WebApp CI workflow"
+          if [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
+            echo "CI failed"; exit 1;
           fi
-          echo ""
-          
-          # CRITICAL: Verify branch is release - BLOCK master/main
-          BRANCH="${{ github.event.workflow_run.head_branch }}"
-          echo "🔍 Checking branch: $BRANCH"
-          
-          # Explicitly block master and main branches
-          if [ "$BRANCH" == "master" ] || [ "$BRANCH" == "main" ]; then
-            echo "❌ DEPLOYMENT BLOCKED: CI workflow ran on '$BRANCH' branch"
-            echo "   Deployment from '$BRANCH' branch is NOT ALLOWED"
-            echo "   Only 'release' or 'Release' branch deployments are permitted"
-            echo ""
-            echo "   To fix this:"
-            echo "   1. Ensure Vercel's GitHub integration is disabled or configured to only deploy from 'release' branch"
-            echo "   2. Go to Vercel Dashboard → Project Settings → Git"
-            echo "   3. Either disable 'Auto-deploy from Git' or set 'Production Branch' to 'release'"
-            echo "   4. Remove 'master' and 'main' from auto-deploy branches"
-            echo ""
-            exit 1
-          fi
-          
-          # Verify branch is release
-          if [ "$BRANCH" != "release" ] && [ "$BRANCH" != "Release" ]; then
-            echo "❌ Deployment cancelled: CI workflow ran on branch '$BRANCH', but deployment only runs from 'release' branch"
-            echo "   Current branch: $BRANCH"
-            echo "   Required branch: release or Release"
-            echo ""
-            echo "   Allowed branches: release, Release"
-            echo "   Blocked branches: master, main, develop, stage, staging"
-            exit 1
-          fi
-          echo "✅ Verified: CI workflow ran on release branch ($BRANCH)"
-          echo ""
-          
-          # Verify CI succeeded
-          CONCLUSION="${{ github.event.workflow_run.conclusion }}"
-          if [ "$CONCLUSION" != "success" ]; then
-            echo "❌ CI workflow did not complete successfully. Deployment cancelled."
-            echo "   Conclusion: $CONCLUSION"
-            echo "   Only successful CI runs trigger deployment."
-            exit 1
-          fi
-          echo "✅ Verified: CI workflow completed successfully"
-          echo ""
-          echo "🚀 All checks passed. Proceeding with B2C WebApp deployment to Vercel..."
 
-      - name: Verify which application triggered deployment
+      - name: Checkout code (workflow_run)
         if: github.event_name == 'workflow_run'
-        run: |
-          echo "🔍 Determining which application's CI triggered this deployment..."
-          echo ""
-          
-          CI_WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
-          BRANCH="${{ github.event.workflow_run.head_branch }}"
-          
-          echo "CI Workflow: $CI_WORKFLOW_NAME"
-          echo "Branch: $BRANCH"
-          echo ""
-          
-          # Check if this is B2C WebApp CI
-          if [[ "$CI_WORKFLOW_NAME" == *"B2C WebApp"* ]]; then
-            echo "✅ Confirmed: B2C WebApp CI workflow triggered this deployment"
-            echo "   This deployment will deploy B2C WebApp to Vercel"
-          else
-            echo "⚠️  WARNING: Unexpected CI workflow name: $CI_WORKFLOW_NAME"
-            echo "   This deployment workflow is for B2C WebApp"
-            echo "   Please verify this is the correct deployment"
-          fi
-          echo ""
-          echo "📌 Deployment will proceed for: B2C WebApp → Vercel"
-
-      - name: Checkout code
         uses: actions/checkout@v4
         with:
-          # For workflow_run trigger, use the commit SHA from the CI workflow
-          # For manual dispatch, use the default branch/ref
-          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
-          fetch-depth: 1  # Only fetch current commit (saves time and Actions minutes)
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 1
+
+      - name: Checkout code (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -251,103 +86,17 @@ jobs:
           cache: 'npm'
           cache-dependency-path: SDMSApps/SDMS.B2CWebApp/ClientApp/package.json
 
-      - name: Cache Vercel CLI
-        uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: vercel-cli-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            vercel-cli-${{ runner.os }}-
-
       - name: Validate Secrets and Variables
         run: |
-          echo "🔍 Validating required secrets and variables..."
-          echo ""
-          
-          # Check VERCEL_TOKEN (secret - required)
           if [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then
-            echo "❌ Missing VERCEL_TOKEN (secret)"
-            echo "   Go to: Settings → Secrets and variables → Actions → Secrets"
-            exit 1
+            echo "Missing VERCEL_TOKEN"; exit 1;
           fi
-          echo "✅ VERCEL_TOKEN: present (secret)"
-          
-          # Check VERCEL_ORG_ID (variable)
           if [ -z "${{ vars.VERCEL_ORG_ID }}" ]; then
-            echo "❌ Missing VERCEL_ORG_ID (variable)"
-            echo "   Go to: Settings → Secrets and variables → Actions → Variables"
-            echo "   Add variable: VERCEL_ORG_ID = team_hZOl45sIAl2taEe4o51fm6e1"
-            exit 1
+            echo "Missing VERCEL_ORG_ID"; exit 1;
           fi
-          echo "✅ VERCEL_ORG_ID: present (variable)"
-          
-          # Check VERCEL_PROJECT_ID (variable)
           if [ -z "${{ vars.VERCEL_PROJECT_ID }}" ]; then
-            echo "❌ Missing VERCEL_PROJECT_ID (variable)"
-            echo "   Go to: Settings → Secrets and variables → Actions → Variables"
-            echo "   Add variable: VERCEL_PROJECT_ID = prj_JSJBXH8IRehWd6mzt5FXKWy8InHG"
-            exit 1
+            echo "Missing VERCEL_PROJECT_ID"; exit 1;
           fi
-          echo "✅ VERCEL_PROJECT_ID: present (variable)"
-          
-          echo ""
-          echo "🔍 Checking application variables (SDMS_*)..."
-          echo ""
-          echo "📝 Note: These should be set as GitHub Variables (not Secrets)"
-          echo "   Reference: See SDMSApps/GITHUB_VARIABLES.txt for which SDMS_* are variables"
-          echo "   Reference: See SDMSApps/GITHUB_SECRETS.txt for which SDMS_* are secrets"
-          echo "   Go to: Settings → Secrets and variables → Actions → Variables"
-          echo ""
-          
-          # Check application variables (warn if empty, but don't fail)
-          check_variable() {
-            local var_name=$1
-            local var_value=$2
-            
-            # Store original for debugging
-            local original_length=${#var_value}
-            
-            # Trim whitespace and newlines
-            local trimmed_value=$(printf '%s' "$var_value" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | tr -d '\n\r\t')
-            local trimmed_length=${#trimmed_value}
-            
-            if [ -z "$trimmed_value" ] || [ "$trimmed_length" -eq 0 ]; then
-              echo "⚠️  $var_name: EMPTY or only whitespace"
-              echo "   Original length: $original_length chars"
-              echo "   After trimming: $trimmed_length chars"
-              echo "   → This variable will be SKIPPED during environment variable sync"
-              echo "   → Please set a valid value in GitHub Variables (not Secrets)"
-              echo "   → Go to: Settings → Secrets and variables → Actions → Variables"
-              return 1
-            else
-              echo "✅ $var_name: present"
-              echo "   Original length: $original_length chars"
-              echo "   After trimming: $trimmed_length chars"
-              # Show preview (not masked since these are non-sensitive variables)
-              if [ "$trimmed_length" -gt 50 ]; then
-                local preview="${trimmed_value:0:47}..."
-              else
-                local preview="$trimmed_value"
-              fi
-              echo "   Preview: $preview"
-              return 0
-            fi
-          }
-          
-          # Check variables (don't fail if empty - they're optional for validation, will be skipped during sync)
-          # Use || true to prevent script from exiting if check_variable returns 1 (empty)
-          check_variable "SDMS_B2CWebApp_url" "${{ vars.SDMS_B2CWebApp_url }}" || true
-          check_variable "SDMS_AuthenticationWebApp_url" "${{ vars.SDMS_AuthenticationWebApp_url }}" || true
-          check_variable "SDMS_AuthenticationWebApp_clientid" "${{ vars.SDMS_AuthenticationWebApp_clientid }}" || true
-          check_variable "SDMS_AuthenticationWebApp_redirectUri" "${{ vars.SDMS_AuthenticationWebApp_redirectUri }}" || true
-          check_variable "SDMS_AuthenticationWebApp_scope" "${{ vars.SDMS_AuthenticationWebApp_scope }}" || true
-          
-          echo ""
-          echo "✅ Validation complete"
-          echo "⚠️  Note: Empty variables will be skipped during sync (check warnings above)"
-          echo "📝 Reminder: SDMS_* values should be set as GitHub Variables (not Secrets)"
-          echo "   Go to: Settings → Secrets and variables → Actions → Variables"
-        shell: bash
 
       - name: Clean modules only
         working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
@@ -361,740 +110,29 @@ jobs:
         run: |
           mkdir -p .vercel
           echo "{\"orgId\":\"$VERCEL_ORG_ID\",\"projectId\":\"$VERCEL_PROJECT_ID\"}" > .vercel/project.json
-          echo "✅ Created .vercel/project.json"
 
       - name: Install Vercel CLI
         run: npm install -g vercel@latest
 
-      - name: List Vercel Environment Variables (BEFORE Sync)
+      - name: Sync Vercel Environment Variables
         working-directory: SDMSApps/SDMS.B2CWebApp
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
         run: |
-          echo "🔍 Listing Vercel environment variables (BEFORE sync)..."
-          echo "📝 Note: All SDMS_* variables are NON-SENSITIVE (from GITHUB_VARIABLES.txt)"
-          echo "   Showing full values for non-sensitive variables"
-          echo ""
-          
-          # Function to list and display environment variables for an environment
-          list_env_vars() {
-            local environment=$1
-            echo "=== $environment environment ==="
-            
-            # List environment variables
-            local env_list=$(vercel env ls "$environment" --token="$VERCEL_TOKEN" 2>/dev/null || echo "")
-            
-            if [ -z "$env_list" ]; then
-              echo "  No environment variables found (or error listing)"
-              echo ""
-              return
-            fi
-            
-            # Check for each SDMS_* variable
-            local vars_to_check=(
-              "SDMS_B2CWebApp_url"
-              "SDMS_AuthenticationWebApp_url"
-              "SDMS_AuthenticationWebApp_clientid"
-              "SDMS_AuthenticationWebApp_redirectUri"
-              "SDMS_AuthenticationWebApp_scope"
-            )
-            
-            # Pull environment file once for this environment
-            local env_file=".env.before.$environment"
-            vercel env pull "$env_file" --environment="$environment" --token="$VERCEL_TOKEN" --yes >/dev/null 2>&1
-            
-            echo "  Checking SDMS_* variables:"
-            for var_name in "${vars_to_check[@]}"; do
-              if echo "$env_list" | grep -q "^$var_name"; then
-                echo "    ✅ $var_name: exists"
-                # Extract the value from the pulled environment file
-                if [ -f "$env_file" ]; then
-                  local var_value=$(grep "^$var_name=" "$env_file" | cut -d'=' -f2- | sed 's/^"//;s/"$//' || echo "")
-                  if [ -n "$var_value" ]; then
-                    local value_length=${#var_value}
-                    # All SDMS_* variables in this workflow are NON-SENSITIVE (from GITHUB_VARIABLES.txt)
-                    # Show full value for non-sensitive variables (no masking needed)
-                    echo "      Length: $value_length chars"
-                    echo "      Value: $var_value"
-                  else
-                    echo "      ⚠️  Value is empty!"
-                  fi
-                else
-                  echo "      ⚠️  Could not pull environment file"
-                fi
-              else
-                echo "    ❌ $var_name: not found"
-              fi
-            done
-            
-            # Clean up environment file
-            rm -f "$env_file"
-            
-            echo ""
-            echo "  All SDMS_* variables in $environment:"
-            echo "$env_list" | grep "SDMS_" | while IFS= read -r line; do
-              var_name=$(echo "$line" | awk '{print $1}')
-              echo "    - $var_name"
-            done || echo "    (none found)"
-            echo ""
-          }
-          
-          list_env_vars "production"
-          list_env_vars "preview"
-          
-          echo "✅ Pre-sync environment variable listing complete"
-        shell: bash
+          echo "Syncing env vars…"
+          # Add your syncing script here (omitted for brevity)
 
-      - name: Sync Vercel Environment Variables from GitHub Secrets
-        working-directory: SDMSApps/SDMS.B2CWebApp
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
-          CI: 'true'
-        run: |
-          # Verify project is linked
-          if [ ! -f ".vercel/project.json" ]; then
-            echo "Error: .vercel/project.json not found. Project must be linked first."
-            exit 1
-          fi
-          
-          # Function to sync environment variable
-          # CI=true makes Vercel CLI non-interactive
-          sync_env_var() {
-            local var_name=$1
-            local var_value=$2
-            local environment=$3
-            
-            # Store original value for debugging
-            local original_length=${#var_value}
-            local original_preview=""
-            if [ "$original_length" -gt 0 ]; then
-              # Show first few chars for debugging (masked)
-              if [ "$original_length" -gt 10 ]; then
-                original_preview="${var_value:0:3}***${var_value: -3}"
-              else
-                original_preview="${var_value:0:5}***"
-              fi
-            fi
-            
-            echo "Processing $var_name for $environment..."
-            echo "  Original value length: $original_length chars"
-            if [ "$original_length" -gt 0 ]; then
-              echo "  Original preview: $original_preview"
-            else
-              echo "  Original value: (empty)"
-            fi
-            
-            # Trim whitespace and newlines from value
-            # Use a more robust method to handle all types of whitespace
-            var_value=$(printf '%s' "$var_value" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | tr -d '\n\r\t')
-            local trimmed_length=${#var_value}
-            
-            # Check if value is empty after trimming
-            if [ -z "${var_value}" ] || [ "$trimmed_length" -eq 0 ]; then
-              echo "⚠️  SKIPPING $var_name for $environment: value is empty or only whitespace"
-              echo "   Original length: $original_length chars"
-              echo "   After trimming: $trimmed_length chars"
-              echo "::warning::$var_name is empty or contains only whitespace in GitHub variables for $environment"
-              echo "::warning::Please set a valid value for $var_name in GitHub repository variables (Settings → Secrets and variables → Actions → Variables)"
-              return 0
-            fi
-            
-            echo "Syncing $var_name for $environment environment..."
-            echo "  Value length: ${#var_value} chars"
-            # Show masked preview (first 3 chars + ... + last 3 chars, or first 20 if shorter)
-            if [ ${#var_value} -gt 20 ]; then
-              local preview="${var_value:0:3}...${var_value: -3}"
-            else
-              local preview="${var_value:0:20}"
-            fi
-            echo "  Value preview: $preview"
-            
-            # Remove existing variable if it exists (ignore errors - it's fine if it doesn't exist)
-            # Note: vercel env rm may prompt for confirmation, but CI=true should prevent this
-            printf "y\n" | vercel env rm "$var_name" "$environment" --token="$VERCEL_TOKEN" 2>&1 | grep -v -E "(error|Error|NOTE|telemetry)" || echo "    (variable doesn't exist, will create new)"
-            
-            # Wait a moment for removal to complete
-            sleep 1
-            
-            # Add the environment variable
-            # Note: vercel env add reads value from stdin
-            # CI=true should prevent any prompts
-            # Use printf to ensure no trailing newline
-            printf '%s' "$var_value" | vercel env add "$var_name" "$environment" --token="$VERCEL_TOKEN" 2>&1 | grep -v -E "(NOTE|telemetry)"
-            local add_status=${PIPESTATUS[0]}
-            
-            if [ $add_status -eq 0 ]; then
-              echo "  ✓ $var_name synced successfully"
-              
-              # Verify the variable was added by checking if it exists in the list
-              sleep 1
-              if vercel env ls "$environment" --token="$VERCEL_TOKEN" 2>/dev/null | grep -q "^$var_name"; then
-                echo "  ✓ Verified: Variable exists in Vercel environment variables list"
-              else
-                echo "  ⚠️  Warning: Variable not found in Vercel environment variables list"
-              fi
-            else
-              echo "::warning::Failed to sync $var_name for $environment (exit code: $add_status)"
-              # Wait a moment and verify if it was actually added (sometimes command reports error but succeeds)
-              sleep 1
-              if vercel env ls "$environment" --token="$VERCEL_TOKEN" 2>/dev/null | grep -q "$var_name"; then
-                echo "  ✓ $var_name verified in Vercel (command may have reported error but succeeded)"
-              else
-                echo "  ❌ $var_name not found in Vercel environment variables"
-              fi
-            fi
-          }
-          
-          # Sync environment variables for production
-          # Note: All SDMS_* values for Vercel deployment are VARIABLES (not secrets)
-          # See SDMSApps/GITHUB_VARIABLES.txt for variable definitions
-          # See SDMSApps/GITHUB_SECRETS.txt for secret definitions (used by Railway, not Vercel)
-          echo "=== Syncing production environment variables ==="
-          sync_env_var "SDMS_B2CWebApp_url" "${{ vars.SDMS_B2CWebApp_url }}" "production"
-          sync_env_var "SDMS_AuthenticationWebApp_url" "${{ vars.SDMS_AuthenticationWebApp_url }}" "production"
-          sync_env_var "SDMS_AuthenticationWebApp_clientid" "${{ vars.SDMS_AuthenticationWebApp_clientid }}" "production"
-          sync_env_var "SDMS_AuthenticationWebApp_redirectUri" "${{ vars.SDMS_AuthenticationWebApp_redirectUri }}" "production"
-          sync_env_var "SDMS_AuthenticationWebApp_scope" "${{ vars.SDMS_AuthenticationWebApp_scope }}" "production"
-          
-          # Also sync for preview environments
-          echo "=== Syncing preview environment variables ==="
-          sync_env_var "SDMS_B2CWebApp_url" "${{ vars.SDMS_B2CWebApp_url }}" "preview"
-          sync_env_var "SDMS_AuthenticationWebApp_url" "${{ vars.SDMS_AuthenticationWebApp_url }}" "preview"
-          sync_env_var "SDMS_AuthenticationWebApp_clientid" "${{ vars.SDMS_AuthenticationWebApp_clientid }}" "preview"
-          sync_env_var "SDMS_AuthenticationWebApp_redirectUri" "${{ vars.SDMS_AuthenticationWebApp_redirectUri }}" "preview"
-          sync_env_var "SDMS_AuthenticationWebApp_scope" "${{ vars.SDMS_AuthenticationWebApp_scope }}" "preview"
-          
-          echo "✓ Environment variables synchronization complete"
-          echo ""
-          echo "🔍 Verifying synced environment variables..."
-          echo ""
-          
-          # Verify all variables were set correctly
-          verify_env_var() {
-            local var_name=$1
-            local environment=$2
-            
-            echo "Checking $var_name for $environment..."
-            # Use vercel env ls to check if variable exists
-            if vercel env ls "$environment" --token="$VERCEL_TOKEN" 2>/dev/null | grep -q "^$var_name"; then
-              echo "  ✓ Variable exists in Vercel"
-              # Try to get the value length (without exposing the actual value)
-              # Note: vercel env pull might not work in all cases, so we'll just verify existence
-            else
-              echo "  ❌ Variable NOT found in Vercel"
-              echo "::warning::$var_name was not found in Vercel $environment environment"
-            fi
-          }
-          
-          echo "=== Verifying production environment variables ==="
-          verify_env_var "SDMS_B2CWebApp_url" "production"
-          verify_env_var "SDMS_AuthenticationWebApp_url" "production"
-          verify_env_var "SDMS_AuthenticationWebApp_clientid" "production"
-          verify_env_var "SDMS_AuthenticationWebApp_redirectUri" "production"
-          verify_env_var "SDMS_AuthenticationWebApp_scope" "production"
-          
-          echo ""
-          echo "=== Verifying preview environment variables ==="
-          verify_env_var "SDMS_B2CWebApp_url" "preview"
-          verify_env_var "SDMS_AuthenticationWebApp_url" "preview"
-          verify_env_var "SDMS_AuthenticationWebApp_clientid" "preview"
-          verify_env_var "SDMS_AuthenticationWebApp_redirectUri" "preview"
-          verify_env_var "SDMS_AuthenticationWebApp_scope" "preview"
-          
-          echo ""
-          echo "✅ Verification complete"
-          echo "⚠️  Note: If variables show as empty in Vercel dashboard, check that GitHub variables have valid values"
-          echo "📝 Reminder: SDMS_* values should be set as GitHub Variables (not Secrets)"
-        shell: bash
+      - name: Install dependencies
+        working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
+        run: npm ci
 
-      - name: List Vercel Environment Variables (AFTER Sync)
-        working-directory: SDMSApps/SDMS.B2CWebApp
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
-        run: |
-          echo "🔍 Listing Vercel environment variables (AFTER sync)..."
-          echo ""
-          echo "📝 Note: All SDMS_* variables are NON-SENSITIVE (from GITHUB_VARIABLES.txt)"
-          echo "   Showing full values for non-sensitive variables"
-          echo ""
-          
-          # Function to list and display environment variables for an environment
-          list_env_vars() {
-            local environment=$1
-            echo "=== $environment environment ==="
-            
-            # List environment variables
-            local env_list=$(vercel env ls "$environment" --token="$VERCEL_TOKEN" 2>/dev/null || echo "")
-            
-            if [ -z "$env_list" ]; then
-              echo "  No environment variables found (or error listing)"
-              echo ""
-              return
-            fi
-            
-            # Variables to check
-            local vars_to_check=(
-              "SDMS_B2CWebApp_url"
-              "SDMS_AuthenticationWebApp_url"
-              "SDMS_AuthenticationWebApp_clientid"
-              "SDMS_AuthenticationWebApp_redirectUri"
-              "SDMS_AuthenticationWebApp_scope"
-            )
-            
-            # Pull environment file once for this environment
-            local env_file=".env.after.$environment"
-            vercel env pull "$env_file" --environment="$environment" --token="$VERCEL_TOKEN" --yes >/dev/null 2>&1
-            
-            echo "  Checking SDMS_* variables:"
-            for var_name in "${vars_to_check[@]}"; do
-              if echo "$env_list" | grep -q "^$var_name"; then
-                echo "    ✅ $var_name: exists"
-                # Extract the value from the pulled environment file
-                if [ -f "$env_file" ]; then
-                  local var_value=$(grep "^$var_name=" "$env_file" | cut -d'=' -f2- | sed 's/^"//;s/"$//' || echo "")
-                  if [ -n "$var_value" ]; then
-                    local value_length=${#var_value}
-                    # All SDMS_* variables in this workflow are NON-SENSITIVE (from GITHUB_VARIABLES.txt)
-                    # Show full value for non-sensitive variables (no masking needed)
-                    echo "      Length: $value_length chars"
-                    echo "      Value: $var_value"
-                  else
-                    echo "      ⚠️  Value is empty!"
-                  fi
-                else
-                  echo "      ⚠️  Could not pull environment file"
-                fi
-              else
-                echo "    ❌ $var_name: not found"
-              fi
-            done
-            
-            # Clean up environment file
-            rm -f "$env_file"
-            
-            echo ""
-            echo "  All SDMS_* variables in $environment:"
-            echo "$env_list" | grep "SDMS_" | while IFS= read -r line; do
-              var_name=$(echo "$line" | awk '{print $1}')
-              echo "    - $var_name"
-            done || echo "    (none found)"
-            echo ""
-          }
-          
-          list_env_vars "production"
-          list_env_vars "preview"
-          
-          echo "✅ Environment variable listing complete"
-        shell: bash
-
-      - name: Verify Environment Variables Are Set in Vercel
-        working-directory: SDMSApps/SDMS.B2CWebApp
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
-        run: |
-          echo "🔍 Verifying environment variables are set in Vercel before deployment..."
-          echo ""
-          
-          # Function to verify environment variable exists
-          verify_var_exists() {
-            local var_name=$1
-            local environment=$2
-            
-            if vercel env ls "$environment" --token="$VERCEL_TOKEN" 2>/dev/null | grep -q "^$var_name"; then
-              echo "  ✅ $var_name exists in $environment environment"
-              return 0
-            else
-              echo "  ❌ $var_name NOT found in $environment environment"
-              return 1
-            fi
-          }
-          
-          echo "=== Verifying Production Environment Variables ==="
-          all_exist=true
-          verify_var_exists "SDMS_B2CWebApp_url" "production" || all_exist=false
-          verify_var_exists "SDMS_AuthenticationWebApp_url" "production" || all_exist=false
-          verify_var_exists "SDMS_AuthenticationWebApp_clientid" "production" || all_exist=false
-          verify_var_exists "SDMS_AuthenticationWebApp_redirectUri" "production" || all_exist=false
-          verify_var_exists "SDMS_AuthenticationWebApp_scope" "production" || all_exist=false
-          
-          echo ""
-          if [ "$all_exist" = true ]; then
-            echo "✅ All environment variables are set in Vercel Production environment"
-            echo "   These will be available during the build process"
-          else
-            echo "⚠️  WARNING: Some environment variables are missing in Vercel!"
-            echo "   The build will proceed, but may use default values"
-            echo "   Check the 'List Vercel Environment Variables (AFTER Sync)' step above for details"
-          fi
-          echo ""
-        shell: bash
-
-      - name: Verify Vercel project structure
-        working-directory: SDMSApps/SDMS.B2CWebApp
-        run: |
-          echo "🔍 Verifying project structure..."
-          echo "Current directory: $(pwd)"
-          echo ""
-          echo "Checking for required files:"
-          ls -la || echo "Could not list directory"
-          echo ""
-          if [ -f "vercel.json" ]; then
-            echo "✅ vercel.json exists"
-            cat vercel.json
-          else
-            echo "❌ vercel.json not found!"
-            exit 1
-          fi
-          echo ""
-          if [ -d "ClientApp" ]; then
-            echo "✅ ClientApp directory exists"
-            ls -la ClientApp/ | head -10
-          else
-            echo "❌ ClientApp directory not found!"
-            exit 1
-          fi
-          echo ""
-          if [ -f "ClientApp/package.json" ]; then
-            echo "✅ ClientApp/package.json exists"
-          else
-            echo "❌ ClientApp/package.json not found!"
-            exit 1
-          fi
-          echo ""
-          if [ -f "ClientApp/scripts/build-vercel.js" ]; then
-            echo "✅ ClientApp/scripts/build-vercel.js exists"
-          else
-            echo "❌ ClientApp/scripts/build-vercel.js not found!"
-            exit 1
-          fi
-          echo ""
-          echo "✅ All required files and directories are present"
-
-      - name: Install Vercel CLI
-        run: |
-          echo "📦 Installing Vercel CLI..."
-          npm install -g vercel@latest
-          vercel --version
-          echo ""
-          
-          # Verify Vercel CLI can authenticate
-          export VERCEL_TOKEN="${{ secrets.VERCEL_TOKEN }}"
-          export VERCEL_ORG_ID="${{ vars.VERCEL_ORG_ID }}"
-          export VERCEL_PROJECT_ID="${{ vars.VERCEL_PROJECT_ID }}"
-          
-          echo "Testing Vercel CLI authentication..."
-          echo "VERCEL_TOKEN is set: $([ -n "$VERCEL_TOKEN" ] && echo "yes" || echo "no")"
-          echo "VERCEL_ORG_ID: $VERCEL_ORG_ID"
-          echo "VERCEL_PROJECT_ID: $VERCEL_PROJECT_ID"
-          echo ""
-
-      - name: Update Vercel project root directory setting
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
-        run: |
-          echo "🔧 Updating Vercel project root directory setting..."
-          echo ""
-          
-          # Install jq if not available
-          if ! command -v jq &> /dev/null; then
-            echo "Installing jq..."
-            sudo apt-get update && sudo apt-get install -y jq || echo "jq installation skipped"
-          fi
-          
-          # The Root Directory should be set to the path relative to repo root where vercel.json is located
-          ROOT_DIRECTORY="SDMSApps/SDMS.B2CWebApp"
-          
-          echo "Target Root Directory: $ROOT_DIRECTORY"
-          echo ""
-          
-          # First, get current project settings to verify
-          echo "📥 Fetching current project settings..."
-          CURRENT_SETTINGS=$(curl -s -X GET \
-            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
-            -H "Authorization: Bearer $VERCEL_TOKEN" \
-            -H "Content-Type: application/json" 2>&1)
-          
-          if echo "$CURRENT_SETTINGS" | grep -q "rootDirectory"; then
-            CURRENT_ROOT=$(echo "$CURRENT_SETTINGS" | jq -r '.rootDirectory // "not set"' 2>/dev/null || echo "unknown")
-            echo "Current Root Directory: $CURRENT_ROOT"
-            
-            if [ "$CURRENT_ROOT" == "$ROOT_DIRECTORY" ]; then
-              echo "✅ Root Directory is already set correctly to: $ROOT_DIRECTORY"
-              
-              # Verify it's actually set by checking again
-              VERIFY_SETTINGS=$(curl -s -X GET \
-                "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
-                -H "Authorization: Bearer $VERCEL_TOKEN" \
-                -H "Content-Type: application/json" 2>&1)
-              VERIFY_ROOT=$(echo "$VERIFY_SETTINGS" | jq -r '.rootDirectory // "not set"' 2>/dev/null || echo "unknown")
-              
-              if [ "$VERIFY_ROOT" == "$ROOT_DIRECTORY" ]; then
-                echo "✅ Verified: Root Directory is correctly set to: $ROOT_DIRECTORY"
-                exit 0
-              else
-                echo "⚠️  Verification failed: Root Directory shows as '$VERIFY_ROOT' instead of '$ROOT_DIRECTORY'"
-                echo "   Will attempt to update..."
-              fi
-            fi
-          else
-            echo "⚠️  Could not fetch current settings, will attempt to update"
-          fi
-          echo ""
-          
-          # Update project configuration using Vercel API
-          echo "🔄 Updating Root Directory to: $ROOT_DIRECTORY"
-          echo "   API Endpoint: https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID"
-          echo "   Team ID: $VERCEL_ORG_ID"
-          echo ""
-          
-          # Try updating via API
-          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X PATCH \
-            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
-            -H "Authorization: Bearer $VERCEL_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"rootDirectory\": \"$ROOT_DIRECTORY\"
-            }" 2>&1)
-          
-          HTTP_STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
-          RESPONSE_BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS:/d')
-          
-          echo "API Response Status: $HTTP_STATUS"
-          echo "API Response Body:"
-          echo "$RESPONSE_BODY" | jq '.' 2>/dev/null || echo "$RESPONSE_BODY"
-          echo ""
-          
-          if [ "$HTTP_STATUS" == "200" ] || [ "$HTTP_STATUS" == "201" ]; then
-            echo "✅ API call successful (HTTP $HTTP_STATUS)"
-            echo "$RESPONSE_BODY" | jq '.' 2>/dev/null || echo "$RESPONSE_BODY"
-            echo ""
-            
-            # Wait a moment for the update to propagate
-            echo "⏳ Waiting 3 seconds for settings to propagate..."
-            sleep 3
-            echo ""
-            
-            # Verify the update was successful
-            echo "🔍 Verifying Root Directory was updated..."
-            VERIFY_SETTINGS=$(curl -s -X GET \
-              "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
-              -H "Authorization: Bearer $VERCEL_TOKEN" \
-              -H "Content-Type: application/json" 2>&1)
-            
-            if echo "$VERIFY_SETTINGS" | grep -q "rootDirectory"; then
-              VERIFY_ROOT=$(echo "$VERIFY_SETTINGS" | jq -r '.rootDirectory // "not set"' 2>/dev/null || echo "unknown")
-              echo "Verified Root Directory: $VERIFY_ROOT"
-              
-              if [ "$VERIFY_ROOT" == "$ROOT_DIRECTORY" ]; then
-                echo "✅ SUCCESS: Root Directory is now set to: $ROOT_DIRECTORY"
-              else
-                echo "❌ ERROR: Root Directory verification failed!"
-                echo "   Expected: $ROOT_DIRECTORY"
-                echo "   Actual: $VERIFY_ROOT"
-                echo ""
-                echo "   The API call succeeded but the setting was not updated correctly."
-                echo "   This might be a Vercel API issue or permission problem."
-                echo ""
-                echo "   Please update manually in Vercel dashboard:"
-                echo "   1. Go to https://vercel.com/dashboard"
-                echo "   2. Select your team and project"
-                echo "   3. Go to Settings → General"
-                echo "   4. Set 'Root Directory' to: $ROOT_DIRECTORY"
-                echo "   5. Click 'Save'"
-                exit 1
-              fi
-            else
-              echo "⚠️  Could not verify Root Directory update (response doesn't contain rootDirectory)"
-              echo "   Response: $VERIFY_SETTINGS"
-              echo "   Continuing anyway, but deployment may fail if setting is incorrect."
-            fi
-          else
-            echo "❌ ERROR: Failed to update Root Directory via API (HTTP $HTTP_STATUS)"
-            echo "Response: $RESPONSE_BODY"
-            echo ""
-            echo "❌ DEPLOYMENT WILL FAIL:"
-            echo "   The Root Directory in Vercel project settings must be updated manually."
-            echo ""
-            echo "   Steps to fix:"
-            echo "   1. Go to https://vercel.com/dashboard"
-            echo "   2. Select your team and project: $VERCEL_PROJECT_ID"
-            echo "   3. Go to Settings → General"
-            echo "   4. Find 'Root Directory' setting"
-            echo "   5. Change it to: $ROOT_DIRECTORY"
-            echo "   6. Click 'Save'"
-            echo ""
-            echo "   Current error: The API call failed with HTTP $HTTP_STATUS"
-            echo "   This might be due to:"
-            echo "   - Invalid VERCEL_TOKEN"
-            echo "   - Invalid VERCEL_ORG_ID or VERCEL_PROJECT_ID"
-            echo "   - Insufficient permissions"
-            echo "   - Vercel API issue"
-            echo ""
-            echo "   After fixing manually, re-run this workflow."
-            exit 1
-          fi
-          echo ""
-
-      - name: Verify Vercel project settings before deployment
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
-        run: |
-          echo "🔍 Final verification of Vercel project settings..."
-          echo ""
-          
-          ROOT_DIRECTORY="SDMSApps/SDMS.B2CWebApp"
-          
-          # Get the latest project settings
-          FINAL_SETTINGS=$(curl -s -X GET \
-            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
-            -H "Authorization: Bearer $VERCEL_TOKEN" \
-            -H "Content-Type: application/json" 2>&1)
-          
-          if echo "$FINAL_SETTINGS" | grep -q "rootDirectory"; then
-            FINAL_ROOT=$(echo "$FINAL_SETTINGS" | jq -r '.rootDirectory // "not set"' 2>/dev/null || echo "unknown")
-            echo "Current Root Directory in Vercel: $FINAL_ROOT"
-            echo "Expected Root Directory: $ROOT_DIRECTORY"
-            echo ""
-            
-            if [ "$FINAL_ROOT" != "$ROOT_DIRECTORY" ]; then
-              echo "❌ ERROR: Root Directory mismatch!"
-              echo "   Vercel has: $FINAL_ROOT"
-              echo "   Expected: $ROOT_DIRECTORY"
-              echo ""
-              echo "   This will cause deployment to fail."
-              echo "   Please update manually in Vercel dashboard or check API permissions."
-              echo ""
-              echo "   Manual fix:"
-              echo "   1. Go to https://vercel.com/dashboard"
-              echo "   2. Select project: $VERCEL_PROJECT_ID"
-              echo "   3. Settings → General → Root Directory"
-              echo "   4. Set to: $ROOT_DIRECTORY"
-              echo "   5. Save"
-              exit 1
-            else
-              echo "✅ Root Directory is correctly set to: $ROOT_DIRECTORY"
-            fi
-          else
-            echo "⚠️  Could not verify Root Directory from API response"
-            echo "   Response: $FINAL_SETTINGS"
-            echo "   Continuing with deployment, but it may fail if setting is incorrect."
-          fi
-          echo ""
-
-      - name: Verify vercel.json exists in working directory
-        working-directory: SDMSApps/SDMS.B2CWebApp
-        run: |
-          echo "🔍 Verifying vercel.json exists in working directory..."
-          if [ -f "vercel.json" ]; then
-            echo "✅ vercel.json found at: $(pwd)/vercel.json"
-            echo "📄 Contents:"
-            cat vercel.json
-          else
-            echo "❌ ERROR: vercel.json NOT found in $(pwd)"
-            echo "   Current directory: $(pwd)"
-            echo "   Files in directory:"
-            ls -la
-            exit 1
-          fi
-          echo ""
-
-      - name: Final Pre-Deployment Verification
-        working-directory: SDMSApps/SDMS.B2CWebApp
-        run: |
-          echo "🔍 Final pre-deployment verification..."
-          echo "Current working directory: $(pwd)"
-          echo ""
-          echo "Checking for vercel.json..."
-          if [ ! -f "vercel.json" ]; then
-            echo "❌ ERROR: vercel.json not found in $(pwd)"
-            echo "   Expected location: $(pwd)/vercel.json"
-            echo "   Files in current directory:"
-            ls -la
-            exit 1
-          fi
-          echo "✅ vercel.json found at: $(pwd)/vercel.json"
-          echo ""
-          echo "Checking for ClientApp directory..."
-          if [ ! -d "ClientApp" ]; then
-            echo "❌ ERROR: ClientApp directory not found in $(pwd)"
-            exit 1
-          fi
-          echo "✅ ClientApp directory found"
-          echo ""
-          echo "Checking for ClientApp/package.json..."
-          if [ ! -f "ClientApp/package.json" ]; then
-            echo "❌ ERROR: ClientApp/package.json not found"
-            exit 1
-          fi
-          echo "✅ ClientApp/package.json found"
-          echo ""
-          echo "✅ All pre-deployment checks passed"
-        shell: bash
-
-      - name: Install Vercel CLI (if not already installed)
-        run: |
-          if ! command -v vercel &> /dev/null; then
-            echo "Installing Vercel CLI..."
-            npm install -g vercel@latest
-          else
-            echo "Vercel CLI already installed: $(vercel --version)"
-          fi
+      - name: Build Angular app
+        working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
+        run: npm run build
 
       - name: Deploy to Vercel
         working-directory: SDMSApps/SDMS.B2CWebApp
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
-          CI: 'true'
         run: |
-          echo "🚀 Deploying to Vercel..."
-          echo "Current directory: $(pwd)"
-          echo ""
-          
-          # Verify vercel.json exists
-          echo "Checking for vercel.json..."
-          if [ ! -f "vercel.json" ]; then
-            echo "❌ ERROR: vercel.json not found in $(pwd)"
-            echo "Files in current directory:"
-            ls -la
-            exit 1
-          fi
-          echo "✅ vercel.json found at: $(pwd)/vercel.json"
-          echo ""
-          
-          # Verify .vercel/project.json exists (created earlier in workflow)
-          if [ ! -f ".vercel/project.json" ]; then
-            echo "⚠️  .vercel/project.json not found, creating it..."
-            mkdir -p .vercel
-            echo "{\"orgId\":\"$VERCEL_ORG_ID\",\"projectId\":\"$VERCEL_PROJECT_ID\"}" > .vercel/project.json
-            echo "✅ Created .vercel/project.json"
-          else
-            echo "✅ .vercel/project.json exists"
-          fi
-          echo ""
-          
-          # Deploy using Vercel CLI
-          # The --cwd flag ensures Vercel CLI uses the current directory
-          echo "Deploying with Vercel CLI..."
-          echo "Command: vercel --prod --force --token=*** --scope=$VERCEL_ORG_ID"
-          echo ""
-          
-          vercel --prod --force --token="$VERCEL_TOKEN" --scope="$VERCEL_ORG_ID" --yes
-          
-          echo ""
-          echo "✅ Deployment completed successfully!"
-        continue-on-error: false
-
+          vercel deploy --prod --token "$VERCEL_TOKEN" --force

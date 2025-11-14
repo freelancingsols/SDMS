@@ -1,9 +1,5 @@
 name: Deploy B2C WebApp to Vercel
 
-concurrency:
-  group: deploy-b2c-vercel-${{ github.ref }}
-  cancel-in-progress: true
-
 on:
   workflow_run:
     workflows: ["CI - B2C WebApp (Build, Test, and Lint)"]
@@ -14,24 +10,26 @@ on:
       - Release
   workflow_dispatch:
 
+concurrency:
+  group: deploy-b2c-vercel-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
     if: |
-      (github.event_name == 'workflow_run' &&
-       github.event.workflow_run.conclusion == 'success' &&
+      (github.event_name == 'workflow_run' && 
+       github.event.workflow_run.conclusion == 'success' && 
        github.event.workflow_run.head_branch != 'master' &&
        github.event.workflow_run.head_branch != 'main' &&
        (github.event.workflow_run.head_branch == 'release' || github.event.workflow_run.head_branch == 'Release')) ||
-      (github.event_name == 'workflow_dispatch' &&
+      (github.event_name == 'workflow_dispatch' && 
        github.ref != 'refs/heads/master' &&
        github.ref != 'refs/heads/main' &&
        (github.ref == 'refs/heads/release' || github.ref == 'refs/heads/Release'))
 
     steps:
-      - name: CRITICAL: Block Master/Main Branch Deployments
+      - name: CRITICAL Block Master/Main Branch Deployments
         run: |
           echo "Checking branch…"
           if [ "${{ github.event_name }}" = "workflow_run" ]; then

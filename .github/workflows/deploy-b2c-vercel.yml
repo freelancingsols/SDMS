@@ -1,5 +1,10 @@
 name: Deploy B2C WebApp to Vercel
 
+# Concurrency: Cancel in-progress runs when a new one starts (saves Actions minutes)
+concurrency:
+  group: deploy-b2c-vercel-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   workflow_run:
     workflows: ["CI - B2C WebApp (Build, Test, and Lint)"]
@@ -17,6 +22,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 15  # Fail fast if deployment takes too long (saves minutes)
     # Deployment rules:
     # 1. For workflow_run: Only deploy if CI succeeded AND CI ran on release branch (NOT master/main)
     # 2. For workflow_dispatch: Only allow manual deployment from Release branch
@@ -235,7 +241,7 @@ jobs:
           # For workflow_run trigger, use the commit SHA from the CI workflow
           # For manual dispatch, use the default branch/ref
           ref: ${{ github.event.workflow_run.head_sha || github.ref }}
-          fetch-depth: 0  # Fetch full history for better operations
+          fetch-depth: 1  # Only fetch current commit (saves time and Actions minutes)
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

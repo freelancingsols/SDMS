@@ -1,5 +1,10 @@
 name: CI - B2C WebApp (Build, Test, and Lint)
 
+# Concurrency: Cancel in-progress runs when a new one starts (saves Actions minutes)
+concurrency:
+  group: ci-b2c-webapp-${{ github.ref }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
 on:
   push:
     branches:
@@ -15,8 +20,11 @@ on:
       - Stage
       - staging
       - Staging
-    # Note: Paths filter removed for push events to ensure CI runs on release branch merges
-    # The paths filter on pull_request events prevents unnecessary CI runs on PRs
+    paths:
+      # Only run CI when relevant files change (saves Actions minutes)
+      - 'SDMSApps/SDMS.B2CWebApp/**'
+      - '.github/workflows/ci-b2c-webapp.yml'
+    # Note: Paths filter added back to prevent unnecessary CI runs
   pull_request:
     branches:
       - '**'  # Run on PRs targeting any branch
@@ -38,7 +46,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch all history for better git operations
+          fetch-depth: 1  # Only fetch current commit (saves time and Actions minutes)
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -79,7 +87,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch all history for better git operations
+          fetch-depth: 1  # Only fetch current commit (saves time and Actions minutes)
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -116,7 +124,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch all history for better git operations
+          fetch-depth: 1  # Only fetch current commit (saves time and Actions minutes)
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -159,7 +167,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch all history for better git operations
+          fetch-depth: 1  # Only fetch current commit (saves time and Actions minutes)
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

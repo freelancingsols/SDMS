@@ -2,7 +2,7 @@
   "version": 2,
   "buildCommand": "bash ClientApp/scripts/vercel-build.sh",
   "outputDirectory": "ClientApp/dist/sdms-b2c-webapp",
-  "installCommand": "cd ClientApp && rm -f package-lock.json && npm install --legacy-peer-deps",
+  "installCommand": "cd ClientApp && rm -f package-lock.json && npm install --legacy-peer-deps && npm install --save-dev @angular/cli@latest",
   "framework": null,
   "rewrites": [
     {

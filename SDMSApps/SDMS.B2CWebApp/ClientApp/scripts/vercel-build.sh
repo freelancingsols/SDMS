@@ -60,25 +60,47 @@ export NODE_OPTIONS="--max-old-space-size=4096"
 echo "NODE_OPTIONS=$NODE_OPTIONS"
 echo ""
 
+# Ensure Angular CLI is available
+echo "🔍 Checking for Angular CLI..."
+if [ ! -f "node_modules/.bin/ng" ]; then
+  echo "⚠️  Angular CLI not found in node_modules, installing..."
+  npm install --save-dev @angular/cli@latest --legacy-peer-deps
+  if [ $? -ne 0 ]; then
+    echo "❌ ERROR: Failed to install Angular CLI"
+    exit 1
+  fi
+  echo "✅ Angular CLI installed"
+else
+  echo "✅ Angular CLI found in node_modules"
+fi
+echo ""
+
+# Verify Angular CLI is executable
+if [ ! -x "node_modules/.bin/ng" ]; then
+  echo "⚠️  Angular CLI not executable, fixing permissions..."
+  chmod +x node_modules/.bin/ng
+fi
+
 # Use ng build directly instead of npm run build:prod to avoid cross-env issues
 # The build-vercel.js script already sets production: true in environment.ts
 echo "Running: ng build --configuration production"
+echo "Using local Angular CLI: node_modules/.bin/ng"
+echo ""
 
-# Check if ng is available locally (from node_modules)
-if [ -f "node_modules/.bin/ng" ]; then
-  echo "Using local Angular CLI: node_modules/.bin/ng"
-  ./node_modules/.bin/ng build --configuration production
-elif command -v ng &> /dev/null; then
-  echo "Using global Angular CLI: ng"
-  ng build --configuration production
-else
-  echo "Using npx to run Angular CLI"
-  npx --yes @angular/cli build --configuration production
-fi
+# Always use local Angular CLI (should be available after installCommand + our check)
+./node_modules/.bin/ng build --configuration production
 
 if [ $? -ne 0 ]; then
   echo "❌ ERROR: Angular build failed"
   echo "Build error details above"
+  echo ""
+  echo "Debugging information:"
+  echo "  Current directory: $(pwd)"
+  echo "  Node version: $(node --version)"
+  echo "  NPM version: $(npm --version)"
+  echo "  Angular CLI path: $(ls -la node_modules/.bin/ng 2>/dev/null || echo 'NOT FOUND')"
+  echo "  node_modules/.bin contents:"
+  ls -la node_modules/.bin/ | head -20 || echo "  (node_modules/.bin not found)"
   exit 1
 fi
 

@@ -183,16 +183,17 @@ jobs:
       - name: Install Vercel CLI
         run: npm install -g vercel@latest
 
-      - name: Update Vercel project root directory
+      - name: Clear Vercel project root directory
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
         run: |
-          echo "=== Updating Vercel Project Root Directory ==="
-          ROOT_DIR="SDMSApps/SDMS.B2CWebApp"
-          
-          echo "Target root directory: $ROOT_DIR"
+          echo "=== Clearing Vercel Project Root Directory ==="
+          echo ""
+          echo "CRITICAL: We deploy from SDMSApps/SDMS.B2CWebApp directory"
+          echo "If root directory is also set, Vercel duplicates the path"
+          echo "Solution: Clear root directory setting (set to null)"
           echo ""
           
           # First, get current settings
@@ -207,23 +208,24 @@ jobs:
             CURRENT_ROOT=$(echo "$CURRENT_SETTINGS" | grep -o '"rootDirectory":"[^"]*"' | cut -d'"' -f4 || echo "not set")
             echo "Current root directory: $CURRENT_ROOT"
             
-            if [ "$CURRENT_ROOT" == "$ROOT_DIR" ]; then
-              echo "✅ Root directory is already set correctly to: $ROOT_DIR"
+            if [ -z "$CURRENT_ROOT" ] || [ "$CURRENT_ROOT" == "null" ]; then
+              echo "✅ Root directory is already cleared"
               exit 0
             fi
           else
-            echo "Root directory not set in current settings"
+            echo "Root directory not set in current settings (already cleared)"
+            exit 0
           fi
           
           echo ""
-          echo "🔄 Updating root directory to: $ROOT_DIR"
+          echo "🔄 Clearing root directory (setting to null)..."
           
-          # Update root directory
+          # Clear root directory by setting it to null
           RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X PATCH \
             "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
             -H "Authorization: Bearer $VERCEL_TOKEN" \
             -H "Content-Type: application/json" \
-            -d "{\"rootDirectory\": \"$ROOT_DIR\"}" 2>&1)
+            -d '{"rootDirectory": null}' 2>&1)
           
           HTTP_STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
           RESPONSE_BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS:/d')
@@ -231,37 +233,36 @@ jobs:
           echo "API Response Status: $HTTP_STATUS"
           
           if [ "$HTTP_STATUS" == "200" ] || [ "$HTTP_STATUS" == "201" ]; then
-            echo "✅ API call successful"
+            echo "✅ API call successful - root directory cleared"
             
             # Wait for update to propagate
             echo "⏳ Waiting 3 seconds for settings to propagate..."
             sleep 3
             
             # Verify the update
-            echo "🔍 Verifying root directory was updated..."
+            echo "🔍 Verifying root directory was cleared..."
             VERIFY_SETTINGS=$(curl -s -X GET \
               "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
               -H "Authorization: Bearer $VERCEL_TOKEN" \
               -H "Content-Type: application/json" 2>&1)
             
-            VERIFY_ROOT=$(echo "$VERIFY_SETTINGS" | grep -o '"rootDirectory":"[^"]*"' | cut -d'"' -f4 || echo "not found")
-            
-            if [ "$VERIFY_ROOT" == "$ROOT_DIR" ]; then
-              echo "✅ Verified: Root directory is now set to: $ROOT_DIR"
+            if echo "$VERIFY_SETTINGS" | grep -q '"rootDirectory":null' || ! echo "$VERIFY_SETTINGS" | grep -q "rootDirectory"; then
+              echo "✅ Verified: Root directory is now cleared"
             else
+              VERIFY_ROOT=$(echo "$VERIFY_SETTINGS" | grep -o '"rootDirectory":"[^"]*"' | cut -d'"' -f4 || echo "not found")
               echo "⚠️  Warning: Verification shows root directory as: $VERIFY_ROOT"
-              echo "   Expected: $ROOT_DIR"
+              echo "   Expected: null (cleared)"
               echo "   The update may need a moment to propagate, or manual update may be required."
             fi
           else
-            echo "❌ Failed to update root directory (HTTP $HTTP_STATUS)"
+            echo "❌ Failed to clear root directory (HTTP $HTTP_STATUS)"
             echo "Response: $RESPONSE_BODY"
             echo ""
-            echo "⚠️  Continuing deployment, but it may fail if root directory is incorrect."
-            echo "   Please update manually in Vercel dashboard:"
+            echo "⚠️  Continuing deployment, but it may fail if root directory is set."
+            echo "   Please clear manually in Vercel dashboard:"
             echo "   1. Go to https://vercel.com/freelancingsols-projects/sdms/settings"
             echo "   2. Settings → General → Root Directory"
-            echo "   3. Set to: $ROOT_DIR"
+            echo "   3. Clear the field (set to empty)"
             echo "   4. Save"
           fi
 
@@ -348,7 +349,11 @@ jobs:
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
         run: |
           echo "=== Final Verification of Vercel Project Settings ==="
-          ROOT_DIR="SDMSApps/SDMS.B2CWebApp"
+          echo ""
+          echo "Expected: Root directory should be CLEARED (null/empty)"
+          echo "Reason: We deploy from SDMSApps/SDMS.B2CWebApp directory"
+          echo "If root directory is set, Vercel duplicates the path"
+          echo ""
           
           # Get current project settings
           SETTINGS=$(curl -s -X GET \
@@ -357,28 +362,25 @@ jobs:
             -H "Content-Type: application/json" 2>&1)
           
           if echo "$SETTINGS" | grep -q "rootDirectory"; then
-            CURRENT_ROOT=$(echo "$SETTINGS" | grep -o '"rootDirectory":"[^"]*"' | cut -d'"' -f4 || echo "not found")
-            echo "Current root directory in Vercel: $CURRENT_ROOT"
-            echo "Expected root directory: $ROOT_DIR"
-            
-            if [ "$CURRENT_ROOT" != "$ROOT_DIR" ]; then
+            # Check if it's null or empty
+            if echo "$SETTINGS" | grep -q '"rootDirectory":null'; then
+              echo "✅ Root directory is correctly cleared (null)"
+            else
+              CURRENT_ROOT=$(echo "$SETTINGS" | grep -o '"rootDirectory":"[^"]*"' | cut -d'"' -f4 || echo "not found")
+              echo "⚠️  WARNING: Root directory is set to: $CURRENT_ROOT"
+              echo "   Expected: null (cleared)"
               echo ""
-              echo "⚠️  WARNING: Root directory mismatch!"
-              echo "   Vercel has: $CURRENT_ROOT"
-              echo "   Expected: $ROOT_DIR"
-              echo ""
-              echo "   Deployment may fail. Please update manually:"
+              echo "   This will cause path duplication during deployment!"
+              echo "   Please clear it manually:"
               echo "   1. Go to https://vercel.com/freelancingsols-projects/sdms/settings"
               echo "   2. Settings → General → Root Directory"
-              echo "   3. Set to: $ROOT_DIR"
+              echo "   3. Clear the field (set to empty)"
               echo "   4. Save"
               echo ""
-              echo "   Continuing with deployment attempt..."
-            else
-              echo "✅ Root directory is correctly set"
+              echo "   Continuing with deployment attempt (may fail)..."
             fi
           else
-            echo "⚠️  Could not verify root directory from API"
+            echo "✅ Root directory is not set (correctly cleared)"
           fi
 
       - name: Deploy to Vercel
@@ -391,6 +393,10 @@ jobs:
         run: |
           echo "=== Deploying to Vercel ==="
           echo "Current directory: $(pwd)"
+          echo ""
+          echo "CRITICAL: Deploying from SDMSApps/SDMS.B2CWebApp directory"
+          echo "Root directory setting in Vercel should be CLEARED (null/empty)"
+          echo "to prevent path duplication"
           echo ""
           
           # Verify vercel.json exists
@@ -415,9 +421,8 @@ jobs:
           fi
           echo ""
           
-          # Deploy using Vercel CLI
-          # Note: The --scope flag ensures we use the correct team/org
-          # The working-directory ensures we're in the right place
+          # Deploy using Vercel CLI from current directory
+          # Since root directory is cleared, Vercel will use current directory
           echo "Deploying to Vercel production..."
           echo "Command: vercel --prod --force --token=*** --scope=$VERCEL_ORG_ID --yes"
           echo ""
@@ -431,10 +436,9 @@ jobs:
             echo ""
             echo "❌ Deployment failed"
             echo ""
-            echo "If you see a root directory path error, please:"
-            echo "1. Go to https://vercel.com/freelancingsols-projects/sdms/settings"
-            echo "2. Settings → General → Root Directory"
-            echo "3. Set to: SDMSApps/SDMS.B2CWebApp"
-            echo "4. Save and retry deployment"
+            echo "Troubleshooting:"
+            echo "1. Verify root directory in Vercel: https://vercel.com/freelancingsols-projects/sdms/settings"
+            echo "2. Root directory should be CLEARED (empty/null), not set to SDMSApps/SDMS.B2CWebApp"
+            echo "3. We deploy from the subdirectory, so root directory must be empty"
             exit 1
           fi

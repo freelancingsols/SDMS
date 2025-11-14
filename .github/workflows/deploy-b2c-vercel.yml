@@ -8,19 +8,27 @@ on:
     branches:
       - release
       - Release
+      # Explicitly exclude master and main to prevent deployments from these branches
+      # Note: This doesn't prevent Vercel's own GitHub integration from deploying
+      # You must disable Vercel's GitHub integration or configure it to only deploy from release branch
   workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     # Deployment rules:
-    # 1. For workflow_run: Only deploy if CI succeeded AND CI ran on release branch
+    # 1. For workflow_run: Only deploy if CI succeeded AND CI ran on release branch (NOT master/main)
     # 2. For workflow_dispatch: Only allow manual deployment from Release branch
+    # 3. EXPLICITLY BLOCK master and main branches to prevent unwanted deployments
     if: |
       (github.event_name == 'workflow_run' && 
        github.event.workflow_run.conclusion == 'success' && 
+       github.event.workflow_run.head_branch != 'master' &&
+       github.event.workflow_run.head_branch != 'main' &&
        (github.event.workflow_run.head_branch == 'release' || github.event.workflow_run.head_branch == 'Release')) ||
       (github.event_name == 'workflow_dispatch' && 
+       github.ref != 'refs/heads/master' &&
+       github.ref != 'refs/heads/main' &&
        (github.ref == 'refs/heads/release' || github.ref == 'refs/heads/Release'))
     steps:
       - name: Verify Branch for Manual Deployment
@@ -94,12 +102,33 @@ jobs:
           fi
           echo ""
           
-          # Verify branch is release
+          # CRITICAL: Verify branch is release - BLOCK master/main
           BRANCH="${{ github.event.workflow_run.head_branch }}"
+          echo "🔍 Checking branch: $BRANCH"
+          
+          # Explicitly block master and main branches
+          if [ "$BRANCH" == "master" ] || [ "$BRANCH" == "main" ]; then
+            echo "❌ DEPLOYMENT BLOCKED: CI workflow ran on '$BRANCH' branch"
+            echo "   Deployment from '$BRANCH' branch is NOT ALLOWED"
+            echo "   Only 'release' or 'Release' branch deployments are permitted"
+            echo ""
+            echo "   To fix this:"
+            echo "   1. Ensure Vercel's GitHub integration is disabled or configured to only deploy from 'release' branch"
+            echo "   2. Go to Vercel Dashboard → Project Settings → Git"
+            echo "   3. Either disable 'Auto-deploy from Git' or set 'Production Branch' to 'release'"
+            echo "   4. Remove 'master' and 'main' from auto-deploy branches"
+            echo ""
+            exit 1
+          fi
+          
+          # Verify branch is release
           if [ "$BRANCH" != "release" ] && [ "$BRANCH" != "Release" ]; then
             echo "❌ Deployment cancelled: CI workflow ran on branch '$BRANCH', but deployment only runs from 'release' branch"
             echo "   Current branch: $BRANCH"
             echo "   Required branch: release or Release"
+            echo ""
+            echo "   Allowed branches: release, Release"
+            echo "   Blocked branches: master, main, develop, stage, staging"
             exit 1
           fi
           echo "✅ Verified: CI workflow ran on release branch ($BRANCH)"
@@ -915,6 +944,39 @@ jobs:
             exit 1
           fi
           echo ""
+
+      - name: Final Pre-Deployment Verification
+        working-directory: SDMSApps/SDMS.B2CWebApp
+        run: |
+          echo "🔍 Final pre-deployment verification..."
+          echo "Current working directory: $(pwd)"
+          echo ""
+          echo "Checking for vercel.json..."
+          if [ ! -f "vercel.json" ]; then
+            echo "❌ ERROR: vercel.json not found in $(pwd)"
+            echo "   Expected location: $(pwd)/vercel.json"
+            echo "   Files in current directory:"
+            ls -la
+            exit 1
+          fi
+          echo "✅ vercel.json found at: $(pwd)/vercel.json"
+          echo ""
+          echo "Checking for ClientApp directory..."
+          if [ ! -d "ClientApp" ]; then
+            echo "❌ ERROR: ClientApp directory not found in $(pwd)"
+            exit 1
+          fi
+          echo "✅ ClientApp directory found"
+          echo ""
+          echo "Checking for ClientApp/package.json..."
+          if [ ! -f "ClientApp/package.json" ]; then
+            echo "❌ ERROR: ClientApp/package.json not found"
+            exit 1
+          fi
+          echo "✅ ClientApp/package.json found"
+          echo ""
+          echo "✅ All pre-deployment checks passed"
+        shell: bash
 
       - name: Deploy to Vercel
         uses: amondnet/vercel-action@v25

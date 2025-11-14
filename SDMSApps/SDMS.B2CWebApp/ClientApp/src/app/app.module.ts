@@ -12,7 +12,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { OAuthModule } from 'angular-oauth2-oidc';
 import { AuthModule } from './auth/auth.module';
 import { AuthorizeInterceptor } from './auth/authorize.interceptor';
-import { TestComponent } from './Components/test/test.component';
+import { TestComponent } from './components/test/test.component';
 
 // Angular Material imports
 import { MatToolbarModule } from '@angular/material/toolbar';

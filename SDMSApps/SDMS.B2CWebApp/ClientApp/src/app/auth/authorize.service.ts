@@ -97,13 +97,14 @@ export class AuthorizeService {
     }
 
     // Load discovery document and try to login automatically if token exists
-    this.oauthService.loadDiscoveryDocumentAndTryLogin().then(() => {
+    // Use a retry mechanism for better reliability
+    this.loadDiscoveryDocumentWithRetry(3).then(() => {
       if (this.oauthService.hasValidAccessToken()) {
         this.loadUserProfile().catch(err => console.error('Error loading user profile on init:', err));
       }
     }).catch(err => {
       // Log the full error for debugging
-      console.warn('Error loading discovery document:', err);
+      console.warn('Error loading discovery document after retries:', err);
       if (err instanceof Error) {
         console.warn('Error details:', err.message, err.stack);
       } else if (err && typeof err === 'object') {
@@ -116,6 +117,8 @@ export class AuthorizeService {
           console.warn('Error params:', (err as any).params);
         }
       }
+      // Try to manually set discovery document URL as fallback
+      this.tryManualDiscoveryDocument();
     });
 
     // Listen for token events
@@ -394,5 +397,68 @@ export class AuthorizeService {
       }
     }
     return of(null);
+  }
+
+  private async loadDiscoveryDocumentWithRetry(maxRetries: number = 3): Promise<void> {
+    let lastError: any = null;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        await this.oauthService.loadDiscoveryDocumentAndTryLogin();
+        return; // Success
+      } catch (error) {
+        lastError = error;
+        if (attempt < maxRetries) {
+          // Wait before retry (exponential backoff)
+          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+          console.warn(`Discovery document load attempt ${attempt} failed, retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+    throw lastError;
+  }
+
+  private tryManualDiscoveryDocument(): void {
+    try {
+      // Manually set discovery document URL if automatic discovery fails
+      const issuerUrl = AppSettings.SDMS_AuthenticationWebApp_url.endsWith('/') 
+        ? AppSettings.SDMS_AuthenticationWebApp_url 
+        : AppSettings.SDMS_AuthenticationWebApp_url + '/';
+      const discoveryUrl = `${issuerUrl}.well-known/openid-configuration`;
+      
+      console.log('Attempting to manually load discovery document from:', discoveryUrl);
+      
+      // Try to fetch discovery document manually with retry
+      let retryCount = 0;
+      const maxRetries = 2;
+      
+      const fetchDiscovery = () => {
+        this.http.get(discoveryUrl).subscribe({
+          next: () => {
+            console.log('Successfully fetched discovery document manually');
+            // Try to reload discovery document in OAuth service
+            // The OAuth service should handle the configuration
+            this.oauthService.loadDiscoveryDocument(discoveryUrl).then(() => {
+              console.log('OAuth service configured with manual discovery document');
+            }).catch(err => {
+              console.error('Error loading discovery document in OAuth service:', err);
+            });
+          },
+          error: (err) => {
+            retryCount++;
+            if (retryCount < maxRetries) {
+              console.warn(`Manual discovery fetch attempt ${retryCount} failed, retrying...`);
+              setTimeout(fetchDiscovery, 2000);
+            } else {
+              console.error('Failed to manually fetch discovery document after retries:', err);
+            }
+          }
+        });
+      };
+      
+      fetchDiscovery();
+    } catch (error) {
+      console.error('Error in tryManualDiscoveryDocument:', error);
+    }
   }
 }

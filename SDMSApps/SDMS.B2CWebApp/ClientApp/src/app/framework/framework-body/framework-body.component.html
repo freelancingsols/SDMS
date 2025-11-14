@@ -33,7 +33,8 @@
     </div>
     
     <div class="center-content" [class.left-collapsed]="leftSidebarCollapsed" [class.right-collapsed]="rightSidebarCollapsed">
-      <app-center-canvas [componentToLoad]="currentComponent"></app-center-canvas>
+      <router-outlet></router-outlet>
+      <app-center-canvas [componentToLoad]="currentComponent" *ngIf="currentComponent"></app-center-canvas>
     </div>
     
     <div class="right-sidebar-wrapper" [class.collapsed]="rightSidebarCollapsed">

@@ -1,7 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
-import { AuthorizeService, AuthenticationResultStatus } from '../../auth/authorize.service';
-import { take } from 'rxjs/operators';
+import { AuthorizeService } from '../../auth/authorize.service';
 
 @Component({
   selector: 'app-test',

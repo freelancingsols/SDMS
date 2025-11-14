@@ -276,10 +276,39 @@ builder.Services.AddCors(options =>
             origins.Add(b2cUrl);
         }
         
-        policy.WithOrigins(origins.ToArray())
-            .AllowAnyMethod()
-            .AllowAnyHeader()
-            .AllowCredentials();
+        // Use SetIsOriginAllowed to allow configured origins, Vercel preview deployments, and localhost
+        // This is needed because Vercel generates dynamic preview URLs (*.vercel.app)
+        policy.SetIsOriginAllowed(origin =>
+        {
+            // Allow configured origins
+            if (origins.Contains(origin))
+            {
+                return true;
+            }
+            
+            // Allow any Vercel preview deployment (*.vercel.app)
+            // This is needed because Vercel generates DYNAMIC preview URLs for each branch/PR:
+            // - Production: https://sdms-production.vercel.app (configured in env vars)
+            // - Preview: https://sdms-cc16mhpsa-freelancingsols-projects.vercel.app (dynamic, can't be pre-configured)
+            // - Branch: https://sdms-git-main-freelancingsols-projects.vercel.app (dynamic, can't be pre-configured)
+            // Without this wildcard, only the production URL would work, and all preview deployments would fail CORS
+            if (origin.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            
+            // Allow localhost for development (any port)
+            if (origin.StartsWith("http://localhost:", StringComparison.OrdinalIgnoreCase) ||
+                origin.StartsWith("https://localhost:", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            
+            return false;
+        })
+        .AllowAnyMethod()
+        .AllowAnyHeader()
+        .AllowCredentials();
     });
 });
 

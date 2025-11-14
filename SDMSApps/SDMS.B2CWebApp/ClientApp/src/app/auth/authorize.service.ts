@@ -376,20 +376,90 @@ export class AuthorizeService {
         return this.error('No access token received after login. Check browser console for details.');
       } catch (loginError) {
         console.error('Error in tryLoginCodeFlow:', loginError);
-        if (loginError && typeof loginError === 'object') {
+        
+        // Extract meaningful error message from various error formats
+        let errorMessage = 'Failed to process OAuth callback';
+        
+        if (loginError instanceof Error) {
+          errorMessage += ': ' + loginError.message;
+        } else if (loginError && typeof loginError === 'object') {
+          // Try to extract error message from common error object properties
+          const errorObj = loginError as any;
+          if (errorObj.message) {
+            errorMessage += ': ' + errorObj.message;
+          } else if (errorObj.error) {
+            errorMessage += ': ' + errorObj.error;
+            if (errorObj.error_description) {
+              errorMessage += ' - ' + errorObj.error_description;
+            }
+          } else if (errorObj.error_description) {
+            errorMessage += ': ' + errorObj.error_description;
+          } else {
+            // Fallback: try to stringify the error object
+            try {
+              const errorStr = JSON.stringify(loginError);
+              if (errorStr && errorStr !== '{}') {
+                errorMessage += ': ' + errorStr;
+              }
+            } catch (e) {
+              errorMessage += '. Check browser console for details.';
+            }
+          }
+          
+          // Log full error details for debugging
           console.error('Login error details:', JSON.stringify(loginError, null, 2));
+        } else if (loginError) {
+          errorMessage += ': ' + String(loginError);
+        } else {
+          errorMessage += '. Check browser console for details.';
         }
-        return this.error('Failed to process OAuth callback: ' + (loginError instanceof Error ? loginError.message : String(loginError)));
+        
+        return this.error(errorMessage);
       }
     } catch (error) {
       console.error('There was an error signing in: ', error);
-      // Log full error details
-      if (error && typeof error === 'object') {
+      
+      // Extract meaningful error message from various error formats
+      let errorMessage = 'There was an error signing in';
+      
+      if (error instanceof Error) {
+        errorMessage += ': ' + error.message;
+      } else if (error && typeof error === 'object') {
+        // Try to extract error message from common error object properties
+        const errorObj = error as any;
+        if (errorObj.message) {
+          errorMessage += ': ' + errorObj.message;
+        } else if (errorObj.error) {
+          errorMessage += ': ' + errorObj.error;
+          if (errorObj.error_description) {
+            errorMessage += ' - ' + errorObj.error_description;
+          }
+        } else if (errorObj.error_description) {
+          errorMessage += ': ' + errorObj.error_description;
+        } else {
+          // Fallback: try to stringify the error object
+          try {
+            const errorStr = JSON.stringify(error);
+            if (errorStr && errorStr !== '{}') {
+              errorMessage += ': ' + errorStr;
+            } else {
+              errorMessage += '. Check browser console for details.';
+            }
+          } catch (e) {
+            errorMessage += '. Check browser console for details.';
+          }
+        }
+        
+        // Log full error details for debugging
         console.error('Full error object:', JSON.stringify(error, null, 2));
+      } else if (error) {
+        errorMessage += ': ' + String(error);
+      } else {
+        errorMessage += '. Check browser console for details.';
       }
+      
       // Don't throw error to prevent redirect loops - just return error result
-      const errorMessage = error instanceof Error ? error.message : (error && typeof error === 'object' ? JSON.stringify(error) : String(error));
-      return this.error('There was an error signing in: ' + errorMessage);
+      return this.error(errorMessage);
     }
   }
 

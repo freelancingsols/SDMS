@@ -383,6 +383,7 @@ jobs:
           UPDATED_VARS=()
           UNCHANGED_VARS=()
           FAILED_VARS=()
+          SKIPPED_VARS=()
           CRITICAL_FAILED=0
           
           # Process each variable
@@ -391,7 +392,8 @@ jobs:
             
             # Skip if GitHub value is empty (optional variable)
             if [ -z "$GITHUB_VALUE" ]; then
-              echo "  ⏭️  Skipping $VAR_NAME (not set in GitHub)"
+              echo "  ⏭️  Skipping $VAR_NAME (not set in GitHub Variables)"
+              SKIPPED_VARS+=("$VAR_NAME")
               continue
             fi
             
@@ -431,8 +433,17 @@ jobs:
           echo "  ➕ Inserted: ${#INSERTED_VARS[@]} variable(s)"
           echo "  🔄 Updated: ${#UPDATED_VARS[@]} variable(s)"
           echo "  ✓ Unchanged: ${#UNCHANGED_VARS[@]} variable(s)"
+          echo "  ⏭️  Skipped: ${#SKIPPED_VARS[@]} variable(s) (not set in GitHub)"
           echo "  ❌ Failed: ${#FAILED_VARS[@]} variable(s)"
           echo ""
+          
+          if [ ${#SKIPPED_VARS[@]} -gt 0 ]; then
+            echo "Skipped variables (not set in GitHub Variables):"
+            for var in "${SKIPPED_VARS[@]}"; do
+              echo "   ⏭️  $var"
+            done
+            echo ""
+          fi
           
           if [ ${#INSERTED_VARS[@]} -gt 0 ]; then
             echo "Inserted variables:"

@@ -3,6 +3,11 @@ name: Error Handler - Authentication WebApp
 # This workflow runs when Authentication WebApp workflows fail
 # It captures errors and creates detailed reports for Cursor AI to fix
 
+# Concurrency: Cancel in-progress runs when a new one starts
+concurrency:
+  group: error-handler-auth-${{ github.event.workflow_run.id || github.run_id }}
+  cancel-in-progress: true
+
 on:
   workflow_run:
     workflows: 
@@ -28,6 +33,7 @@ on:
 jobs:
   analyze-and-report:
     runs-on: ubuntu-latest
+    timeout-minutes: 15  # Prevent long-running jobs
     permissions:
       contents: read
       issues: write
@@ -38,7 +44,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch all history for comparison
+          fetch-depth: 1  # Only fetch current commit (saves time, can fetch more if needed)
           # For workflow_run, checkout the commit from the triggering workflow
           ref: ${{ github.event.workflow_run.head_sha || github.ref }}
         continue-on-error: true
@@ -351,15 +357,50 @@ jobs:
           echo '```' >> "$ERROR_REPORT"
           echo "" >> "$ERROR_REPORT"
           
-          # Extract file paths and line numbers
-          echo "## 9. Files with Errors (File Paths and Line Numbers)" >> "$ERROR_REPORT"
+          # Extract file paths and line numbers with detailed error context
+          echo "## 9. Files with Errors (File Paths, Line Numbers, and Error Details)" >> "$ERROR_REPORT"
           echo "" >> "$ERROR_REPORT"
+          
+          # Extract errors with file paths and line numbers
           FILE_ERRORS=$(grep -E "SDMSApps/SDMS\.AuthenticationWebApp.*\.(cs|ts|tsx|js|json):[0-9]+" "$LOG_FILE" | sort -u | head -50 || echo "")
-          if [ -n "$FILE_ERRORS" ]; then
+          
+          # Also extract errors with line numbers in different formats
+          FILE_ERRORS_ALT=$(grep -E "\([0-9]+,[0-9]+\)|line [0-9]+|:[0-9]+:[0-9]+" "$LOG_FILE" | grep -i "SDMSApps/SDMS\.AuthenticationWebApp" | head -30 || echo "")
+          
+          if [ -n "$FILE_ERRORS" ] || [ -n "$FILE_ERRORS_ALT" ]; then
+            echo "### Error Locations:" >> "$ERROR_REPORT"
             echo '```' >> "$ERROR_REPORT"
-            echo "$FILE_ERRORS" >> "$ERROR_REPORT"
+            if [ -n "$FILE_ERRORS" ]; then
+              echo "$FILE_ERRORS" >> "$ERROR_REPORT"
+            fi
+            if [ -n "$FILE_ERRORS_ALT" ]; then
+              echo "" >> "$ERROR_REPORT"
+              echo "# Alternative format:" >> "$ERROR_REPORT"
+              echo "$FILE_ERRORS_ALT" >> "$ERROR_REPORT"
+            fi
             echo '```' >> "$ERROR_REPORT"
             echo "" >> "$ERROR_REPORT"
+            
+            # Extract detailed error context for each file
+            echo "### Detailed Error Context by File:" >> "$ERROR_REPORT"
+            echo "" >> "$ERROR_REPORT"
+            
+            # Get unique file paths
+            UNIQUE_FILES=$(echo -e "$FILE_ERRORS\n$FILE_ERRORS_ALT" | grep -oE "SDMSApps/SDMS\.AuthenticationWebApp[^:]+" | sort -u | head -20 || echo "")
+            
+            if [ -n "$UNIQUE_FILES" ]; then
+              echo "$UNIQUE_FILES" | while read -r file_path; do
+                if [ -n "$file_path" ]; then
+                  echo "#### File: \`$file_path\`" >> "$ERROR_REPORT"
+                  echo "" >> "$ERROR_REPORT"
+                  echo '```' >> "$ERROR_REPORT"
+                  # Get all errors for this file with context
+                  grep "$file_path" "$LOG_FILE" | grep -E "error|Error|ERROR|failed|Failed" | head -10 >> "$ERROR_REPORT" || echo "No specific errors found for this file" >> "$ERROR_REPORT"
+                  echo '```' >> "$ERROR_REPORT"
+                  echo "" >> "$ERROR_REPORT"
+                fi
+              done
+            fi
           else
             echo "No file-specific errors found." >> "$ERROR_REPORT"
             echo "" >> "$ERROR_REPORT"
@@ -385,11 +426,27 @@ jobs:
           
           echo "error_report_file=$ERROR_REPORT" >> $GITHUB_OUTPUT
           
-          # Count total errors
+          # Count total errors and extract error summary
           TOTAL_ERRORS=$(grep -cE "error CS|error TS|ERROR|Error:" "$LOG_FILE" 2>/dev/null || echo "0")
+          
+          # Extract error summary with line numbers and sources
+          echo "## 11. Error Summary (Quick Reference)" >> "$ERROR_REPORT"
+          echo "" >> "$ERROR_REPORT"
+          echo "**Total Errors Found:** $TOTAL_ERRORS" >> "$ERROR_REPORT"
+          echo "" >> "$ERROR_REPORT"
+          echo "### Top 10 Errors with Source and Line Numbers:" >> "$ERROR_REPORT"
+          echo "" >> "$ERROR_REPORT"
+          echo '```' >> "$ERROR_REPORT"
+          # Extract errors with file paths and line numbers
+          grep -E "error CS[0-9]+|error TS[0-9]+|ERROR|Error:" "$LOG_FILE" | grep -E "SDMSApps/SDMS\.AuthenticationWebApp.*:[0-9]+" | head -10 >> "$ERROR_REPORT" || \
+          grep -E "error CS[0-9]+|error TS[0-9]+|ERROR|Error:" "$LOG_FILE" | head -10 >> "$ERROR_REPORT" || \
+          echo "No detailed error information available" >> "$ERROR_REPORT"
+          echo '```' >> "$ERROR_REPORT"
+          echo "" >> "$ERROR_REPORT"
+          
           echo "total_errors=$TOTAL_ERRORS" >> $GITHUB_OUTPUT
           
-          echo "✅ Extracted $TOTAL_ERRORS errors"
+          echo "✅ Extracted $TOTAL_ERRORS errors with detailed context"
           echo "📄 Error report saved to: $ERROR_REPORT"
 
       - name: Generate actionable fix suggestions
@@ -645,7 +702,22 @@ jobs:
             fi
             echo "### 📊 Error Breakdown" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "See the GitHub issue created above for comprehensive error details including:" >> $GITHUB_STEP_SUMMARY
+            
+            # Extract top errors for summary
+            ERROR_REPORT_FILE="${{ steps.extract-errors.outputs.error_report_file }}"
+            if [ -f "$ERROR_REPORT_FILE" ]; then
+              echo "#### Top Errors with File Paths and Line Numbers:" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              # Extract first 5 errors with file paths
+              grep -E "SDMSApps/SDMS\.AuthenticationWebApp.*:[0-9]+" "$ERROR_REPORT_FILE" | head -5 >> $GITHUB_STEP_SUMMARY || \
+              grep -E "error CS[0-9]+|error TS[0-9]+" "$ERROR_REPORT_FILE" | head -5 >> $GITHUB_STEP_SUMMARY || \
+              echo "Error details available in GitHub issue" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+            fi
+            
+            echo "**Full error details available in GitHub issue above, including:**" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "- ✅ All C# compilation errors with file paths and line numbers" >> $GITHUB_STEP_SUMMARY
             echo "- ✅ All TypeScript/Angular errors with file paths and line numbers" >> $GITHUB_STEP_SUMMARY
@@ -681,6 +753,7 @@ jobs:
             fix-suggestions-auth.md
             workflow-logs.txt
             workflow-logs-*.txt
-          retention-days: 30
+          retention-days: 7  # Reduced from 30 to save storage
+          compression-level: 6
           if-no-files-found: warn
 

@@ -222,6 +222,21 @@ export class AuthorizeService {
 
   public async completeSignIn(_url: string, _callbackAction: string): Promise<IAuthenticationResult> {
     try {
+      // Check if this is a logout callback (has 'iss' but no 'code' or 'state')
+      // Logout callbacks should not be processed as login callbacks
+      const urlParams = new URLSearchParams(window.location.search);
+      const hasCode = urlParams.has('code');
+      const hasState = urlParams.has('state');
+      const hasIss = urlParams.has('iss');
+      
+      if (hasIss && !hasCode && !hasState) {
+        // This is a logout callback - don't process as login
+        console.log('Detected logout callback in completeSignIn, skipping login processing');
+        // Clear URL and return success (logout already handled)
+        window.history.replaceState({}, document.title, '/');
+        return this.success({ returnUrl: '/' });
+      }
+      
       // OAuth callback is handled by angular-oauth2-oidc automatically
       // Check if we already have a valid token (prevent multiple processing)
       if (this.oauthService.hasValidAccessToken()) {

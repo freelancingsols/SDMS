@@ -36,8 +36,10 @@ export class LoginComponent implements OnInit {
       
       // If it's a logout callback (has iss but no code/state), don't process as login
       if (hasIss && !hasCode && !hasState) {
-        // This is a logout callback - just redirect to login page
-        await this.router.navigate(['/login'], { replaceUrl: true });
+        // This is a logout callback - redirect to landing page and clear URL params
+        // Clear any OAuth-related query parameters from URL
+        window.history.replaceState({}, document.title, '/');
+        await this.router.navigate(['/'], { replaceUrl: true });
         return;
       }
       

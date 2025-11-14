@@ -63,13 +63,13 @@ export class TestComponent implements OnInit, OnDestroy {
       // Ensure username is cleared (in case subscription updates it)
       this.username = '';
       
-      // Navigate to login page
-      this.router.navigate(['/login'], { replaceUrl: true });
+      // Navigate to landing page after logout
+      this.router.navigate(['/'], { replaceUrl: true });
     } catch (error) {
       console.error('Error during logout:', error);
-      // Still clear username and navigate to login even if logout fails
+      // Still clear username and navigate to landing page even if logout fails
       this.username = '';
-      this.router.navigate(['/login'], { replaceUrl: true });
+      this.router.navigate(['/'], { replaceUrl: true });
     }
   }
 }

@@ -28,7 +28,6 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { LeftSidebarComponent } from './left-sidebar/left-sidebar.component';
 import { RightSidebarComponent } from './right-sidebar/right-sidebar.component';
 import { CenterCanvasComponent } from './center-canvas/center-canvas.component';
-import { TestComponent } from '../components/test/test.component';
 
 @NgModule({
   declarations: [
@@ -38,8 +37,7 @@ import { TestComponent } from '../components/test/test.component';
     ContentComponent,
     LeftSidebarComponent,
     RightSidebarComponent,
-    CenterCanvasComponent,
-    TestComponent
+    CenterCanvasComponent
   ],
   imports: [
     CommonModule,
@@ -62,8 +60,7 @@ import { TestComponent } from '../components/test/test.component';
   exports: [
     FrameworkBodyComponent,
     HeaderComponent,
-    FooterComponent,
-    TestComponent
+    FooterComponent
   ]
 })
 export class FrameworkModule { }

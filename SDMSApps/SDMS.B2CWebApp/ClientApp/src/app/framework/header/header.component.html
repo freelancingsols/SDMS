@@ -23,8 +23,9 @@
         <mat-icon>home</mat-icon>
       </button>
       
-      <button mat-icon-button (click)="onLoadComponent('test')" matTooltip="Test Component">
+      <button mat-raised-button color="accent" (click)="onLoadComponent('test')" matTooltip="Load Test Component in Center Canvas">
         <mat-icon>bug_report</mat-icon>
+        <span>Test</span>
       </button>
       
       <button mat-icon-button [matMenuTriggerFor]="notificationsMenu" matTooltip="Notifications">

@@ -1,15 +1,16 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Router } from '@angular/router';
-import { AuthorizeService, AuthenticationResultStatus } from '../../auth/authorize.service';
-import { take } from 'rxjs/operators';
+import { AuthorizeService } from '../../auth/authorize.service';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-test',
   templateUrl: './test.component.html',
   styleUrls: ['./test.component.css']
 })
-export class TestComponent implements OnInit {
+export class TestComponent implements OnInit, OnDestroy {
   public username: string = '';
+  private userSubscription?: Subscription;
 
   constructor(
     private router: Router,
@@ -17,49 +18,22 @@ export class TestComponent implements OnInit {
   ) { }
 
   async ngOnInit() {
-    // Check if this is the OAuth callback route
-    const currentUrl = this.router.url;
-    if (currentUrl.includes('/auth-callback')) {
-      // Let OAuthService handle the callback
-      try {
-        const result = await this.authorizeService.completeSignIn(window.location.href, 'redirect');
-        // After callback, check if authenticated and redirect
-        if (result.status === AuthenticationResultStatus.Success) {
-          // Wait a bit for token to be processed
-          await new Promise(resolve => setTimeout(resolve, 100));
-          const isAuthenticated = await this.authorizeService.isAuthenticated().pipe(take(1)).toPromise();
-          if (isAuthenticated) {
-            this.router.navigate(['/test'], { replaceUrl: true });
-          } else {
-            this.router.navigate(['/login'], { replaceUrl: true });
-          }
-        } else {
-          const errorMessage = 'message' in result ? result.message : 'Authentication failed';
-          console.error('Authentication failed:', errorMessage);
-          this.router.navigate(['/login'], { replaceUrl: true });
-        }
-      } catch (error) {
-        console.error('Error handling OAuth callback:', error);
-        this.router.navigate(['/login'], { replaceUrl: true });
-      }
-      return;
-    }
-
-    // For regular routes, check authentication (optional - can be removed if not needed)
-    // const isAuthenticated = await this.authorizeService.isAuthenticated().pipe(take(1)).toPromise();
-    // if (!isAuthenticated) {
-    //   this.router.navigate(['/login'], {
-    //     queryParams: { returnUrl: this.router.url }
-    //   });
-    //   return;
-    // }
-
     // Load user if authenticated
-    this.authorizeService.getUser().subscribe(user => {
+    this.userSubscription = this.authorizeService.getUser().subscribe(user => {
       if (user && user.name) {
         this.username = user.name;
+      } else {
+        // Clear username if user is null
+        this.username = '';
       }
     });
+  }
+
+  ngOnDestroy() {
+    // Unsubscribe to prevent memory leaks
+    if (this.userSubscription) {
+      this.userSubscription.unsubscribe();
+    }
   }
 
   public loadTest() {
@@ -83,16 +57,19 @@ export class TestComponent implements OnInit {
       // Call signOut - it will clear OAuth tokens and user state
       await this.authorizeService.signOut({ returnUrl: '/' });
       
-      // Wait a bit for OAuth service to process logout
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Wait a bit for OAuth service to process logout and clear storage
+      await new Promise(resolve => setTimeout(resolve, 300));
       
-      // Navigate to login page
-      this.router.navigate(['/login'], { replaceUrl: true });
+      // Ensure username is cleared (in case subscription updates it)
+      this.username = '';
+      
+      // Navigate to landing page after logout
+      this.router.navigate(['/'], { replaceUrl: true });
     } catch (error) {
       console.error('Error during logout:', error);
-      // Still navigate to login even if logout fails
+      // Still clear username and navigate to landing page even if logout fails
       this.username = '';
-      this.router.navigate(['/login'], { replaceUrl: true });
+      this.router.navigate(['/'], { replaceUrl: true });
     }
   }
 }

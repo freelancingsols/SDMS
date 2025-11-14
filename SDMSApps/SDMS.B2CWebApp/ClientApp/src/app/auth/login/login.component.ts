@@ -24,6 +24,34 @@ export class LoginComponent implements OnInit {
   async ngOnInit() {
     const action = this.activatedRoute.snapshot.url[0];
     const actionPath = action?.path || LoginActions.Login;
+    const currentUrl = this.router.url;
+    
+    // Handle OAuth callback - check if URL contains auth-callback or login-callback
+    if (currentUrl.includes('auth-callback') || currentUrl.includes('login-callback')) {
+      // Check if this is a logout callback (has 'iss' but no 'code' or 'state')
+      const urlParams = new URLSearchParams(window.location.search);
+      const hasCode = urlParams.has('code');
+      const hasState = urlParams.has('state');
+      const hasIss = urlParams.has('iss');
+      
+      // If it's a logout callback (has iss but no code/state), don't process as login
+      if (hasIss && !hasCode && !hasState) {
+        // This is a logout callback - redirect to landing page and clear URL params
+        // Clear any OAuth-related query parameters from URL
+        window.history.replaceState({}, document.title, '/');
+        await this.router.navigate(['/'], { replaceUrl: true });
+        return;
+      }
+      
+      // Determine callback action from URL or default to redirect
+      let callbackAction = CallbackActions.Redirect;
+      if (currentUrl.includes('popup') || actionPath.includes(CallbackActions.PopUp)) {
+        callbackAction = CallbackActions.PopUp;
+      }
+      await this.processLoginCallback(callbackAction);
+      return;
+    }
+    
     switch (actionPath) {
       case LoginActions.Login:
         await this.login(this.getReturnUrl());

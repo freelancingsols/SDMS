@@ -271,6 +271,22 @@ public class AuthorizationController : Controller
                 identity.SetResources(await GetResourcesAsync(scopes2));
                 identity.SetDestinations(GetDestinations);
 
+                // Log the redirect_uri for debugging
+                string? redirectUri = null;
+                if (request is OpenIddictRequestWrapper wrapper5)
+                {
+                    redirectUri = wrapper5.RedirectUri;
+                }
+                else
+                {
+                    var redirectUriProp = request.GetType().GetProperty("RedirectUri", BindingFlags.Public | BindingFlags.Instance);
+                    redirectUri = redirectUriProp?.GetValue(request)?.ToString();
+                }
+                var logger = HttpContext.RequestServices.GetService<ILogger<AuthorizationController>>();
+                logger?.LogInformation("SignIn called - redirect_uri from request: {RedirectUri}", redirectUri);
+
+                // OpenIddict should automatically use the redirect_uri from the original authorization request
+                // stored in HttpContext.Items. The SignIn method will handle the redirect automatically.
                 return SignIn(new ClaimsPrincipal(identity), OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
 
             // At this point, no authorization was found in the database and an error must be returned

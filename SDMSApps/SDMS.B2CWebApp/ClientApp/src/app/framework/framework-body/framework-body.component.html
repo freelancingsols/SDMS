@@ -33,7 +33,10 @@
     </div>
     
     <div class="center-content" [class.left-collapsed]="leftSidebarCollapsed" [class.right-collapsed]="rightSidebarCollapsed">
-      <app-center-canvas [componentToLoad]="currentComponent"></app-center-canvas>
+      <!-- Show router-outlet when no dynamic component is loaded -->
+      <router-outlet *ngIf="!currentComponent"></router-outlet>
+      <!-- Show center-canvas when dynamic component is loaded via onLoadComponent -->
+      <app-center-canvas [componentToLoad]="currentComponent" *ngIf="currentComponent"></app-center-canvas>
     </div>
     
     <div class="right-sidebar-wrapper" [class.collapsed]="rightSidebarCollapsed">

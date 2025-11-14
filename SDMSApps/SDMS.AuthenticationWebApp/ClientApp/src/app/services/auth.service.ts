@@ -90,13 +90,10 @@ export class AuthService {
         // Wait a bit to ensure cookie is set
         await new Promise(resolve => setTimeout(resolve, 100));
         
-        // After successful backend login, initiate OpenIddict OAuth flow to get tokens
-        // The backend has signed the user in, now we get the authorization code
-        await this.oauthService.loadDiscoveryDocument();
-        
-        // Initiate authorization code flow - this will redirect to /connect/authorize
-        // The cookie set by SignInManager should be sent with this request
-        this.oauthService.initCodeFlow();
+        // DO NOT initiate a new OAuth flow here!
+        // The login component will redirect back to the ReturnUrl (which is /connect/authorize with original OAuth params)
+        // OpenIddict will handle the authorization flow and redirect to the correct redirect_uri
+        // Calling initCodeFlow() here would create a NEW OAuth flow with the wrong redirect_uri
         return true;
       }
       return false;

@@ -8,9 +8,10 @@ on:
     branches:
       - release
       - Release
-      # Explicitly exclude master and main to prevent deployments from these branches
-      # Note: This doesn't prevent Vercel's own GitHub integration from deploying
-      # You must disable Vercel's GitHub integration or configure it to only deploy from release branch
+      # CRITICAL: Only trigger on release branch CI runs
+      # This prevents the workflow from even starting for master/main branch CI runs
+      # Note: The branches filter here only applies to which CI runs trigger this workflow
+      # We still have additional checks in the job if condition and first step
   workflow_dispatch:
 
 jobs:
@@ -20,6 +21,8 @@ jobs:
     # 1. For workflow_run: Only deploy if CI succeeded AND CI ran on release branch (NOT master/main)
     # 2. For workflow_dispatch: Only allow manual deployment from Release branch
     # 3. EXPLICITLY BLOCK master and main branches to prevent unwanted deployments
+    # 
+    # CRITICAL: This if condition MUST block master/main or the workflow will waste CI minutes
     if: |
       (github.event_name == 'workflow_run' && 
        github.event.workflow_run.conclusion == 'success' && 

@@ -24,6 +24,19 @@ export class LoginComponent implements OnInit {
   async ngOnInit() {
     const action = this.activatedRoute.snapshot.url[0];
     const actionPath = action?.path || LoginActions.Login;
+    const currentUrl = this.router.url;
+    
+    // Handle OAuth callback - check if URL contains auth-callback or login-callback
+    if (currentUrl.includes('auth-callback') || currentUrl.includes('login-callback')) {
+      // Determine callback action from URL or default to redirect
+      let callbackAction = CallbackActions.Redirect;
+      if (currentUrl.includes('popup') || actionPath.includes(CallbackActions.PopUp)) {
+        callbackAction = CallbackActions.PopUp;
+      }
+      await this.processLoginCallback(callbackAction);
+      return;
+    }
+    
     switch (actionPath) {
       case LoginActions.Login:
         await this.login(this.getReturnUrl());

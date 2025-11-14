@@ -15,13 +15,33 @@ jobs:
     runs-on: ubuntu-latest
     # Deployment rules:
     # 1. For workflow_run: Only deploy if CI succeeded AND CI ran on release branch
-    # 2. For workflow_dispatch: Allow manual deployment from any branch
+    # 2. For workflow_dispatch: Only allow manual deployment from Release branch
     if: |
       (github.event_name == 'workflow_run' && 
        github.event.workflow_run.conclusion == 'success' && 
        (github.event.workflow_run.head_branch == 'release' || github.event.workflow_run.head_branch == 'Release')) ||
-      github.event_name == 'workflow_dispatch'
+      (github.event_name == 'workflow_dispatch' && 
+       (github.ref == 'refs/heads/release' || github.ref == 'refs/heads/Release'))
     steps:
+      - name: Verify Branch for Manual Deployment
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "🔍 Verifying branch for manual deployment..."
+          CURRENT_BRANCH="${{ github.ref }}"
+          echo "Current branch: $CURRENT_BRANCH"
+          echo ""
+          
+          if [ "$CURRENT_BRANCH" != "refs/heads/release" ] && [ "$CURRENT_BRANCH" != "refs/heads/Release" ]; then
+            echo "❌ ERROR: Manual deployment is only allowed from 'release' or 'Release' branch"
+            echo "   Current branch: $CURRENT_BRANCH"
+            echo "   Required branch: refs/heads/release or refs/heads/Release"
+            echo ""
+            echo "   Please switch to the Release branch before deploying."
+            exit 1
+          fi
+          echo "✅ Verified: Manual deployment triggered from Release branch"
+          echo ""
+
       - name: Deployment Summary
         run: |
           echo "╔════════════════════════════════════════════════════════════╗"
@@ -876,6 +896,23 @@ jobs:
             echo "⚠️  Could not verify Root Directory from API response"
             echo "   Response: $FINAL_SETTINGS"
             echo "   Continuing with deployment, but it may fail if setting is incorrect."
+          fi
+          echo ""
+
+      - name: Verify vercel.json exists in working directory
+        working-directory: SDMSApps/SDMS.B2CWebApp
+        run: |
+          echo "🔍 Verifying vercel.json exists in working directory..."
+          if [ -f "vercel.json" ]; then
+            echo "✅ vercel.json found at: $(pwd)/vercel.json"
+            echo "📄 Contents:"
+            cat vercel.json
+          else
+            echo "❌ ERROR: vercel.json NOT found in $(pwd)"
+            echo "   Current directory: $(pwd)"
+            echo "   Files in directory:"
+            ls -la
+            exit 1
           fi
           echo ""
 

@@ -29,6 +29,9 @@ import { LeftSidebarComponent } from './left-sidebar/left-sidebar.component';
 import { RightSidebarComponent } from './right-sidebar/right-sidebar.component';
 import { CenterCanvasComponent } from './center-canvas/center-canvas.component';
 
+// Import test component (used by center-canvas)
+import { TestComponent } from '../components/test/test.component';
+
 @NgModule({
   declarations: [
     FrameworkBodyComponent,
@@ -37,7 +40,8 @@ import { CenterCanvasComponent } from './center-canvas/center-canvas.component';
     ContentComponent,
     LeftSidebarComponent,
     RightSidebarComponent,
-    CenterCanvasComponent
+    CenterCanvasComponent,
+    TestComponent
   ],
   imports: [
     CommonModule,
@@ -60,7 +64,8 @@ import { CenterCanvasComponent } from './center-canvas/center-canvas.component';
   exports: [
     FrameworkBodyComponent,
     HeaderComponent,
-    FooterComponent
+    FooterComponent,
+    TestComponent  // Export TestComponent so it can be used in routing
   ]
 })
 export class FrameworkModule { }

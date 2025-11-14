@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
-import { AuthorizeService, AuthenticationResultStatus } from 'src/app/auth/authorize.service';
+import { AuthorizeService, AuthenticationResultStatus } from '../../auth/authorize.service';
 import { take } from 'rxjs/operators';
 
 @Component({
@@ -65,6 +65,13 @@ export class TestComponent implements OnInit {
   public loadTest() {
     this.router.navigateByUrl('/login', {
       replaceUrl: true
+    });
+  }
+
+  public loadTestComponent() {
+    // Reload the test component by navigating to the test route
+    this.router.navigateByUrl('/test', {
+      replaceUrl: false
     });
   }
 

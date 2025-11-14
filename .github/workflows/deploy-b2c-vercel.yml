@@ -88,14 +88,83 @@ jobs:
 
       - name: Validate Secrets and Variables
         run: |
+          echo "=== Validating Required Secrets and Variables ==="
+          echo ""
+          
+          # Validate Vercel deployment secrets/variables
+          MISSING=0
+          
           if [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then
-            echo "Missing VERCEL_TOKEN"; exit 1;
+            echo "❌ Missing VERCEL_TOKEN (secret)"
+            MISSING=1
+          else
+            echo "✅ VERCEL_TOKEN: present (secret)"
           fi
+          
           if [ -z "${{ vars.VERCEL_ORG_ID }}" ]; then
-            echo "Missing VERCEL_ORG_ID"; exit 1;
+            echo "❌ Missing VERCEL_ORG_ID (variable)"
+            MISSING=1
+          else
+            echo "✅ VERCEL_ORG_ID: present (variable)"
           fi
+          
           if [ -z "${{ vars.VERCEL_PROJECT_ID }}" ]; then
-            echo "Missing VERCEL_PROJECT_ID"; exit 1;
+            echo "❌ Missing VERCEL_PROJECT_ID (variable)"
+            MISSING=1
+          else
+            echo "✅ VERCEL_PROJECT_ID: present (variable)"
+          fi
+          
+          echo ""
+          echo "=== Validating Application Variables ==="
+          echo ""
+          
+          # Validate application variables (required for B2C WebApp)
+          if [ -z "${{ vars.SDMS_B2CWebApp_url }}" ]; then
+            echo "❌ Missing SDMS_B2CWebApp_url (variable)"
+            MISSING=1
+          else
+            echo "✅ SDMS_B2CWebApp_url: present (variable)"
+          fi
+          
+          if [ -z "${{ vars.SDMS_AuthenticationWebApp_url }}" ]; then
+            echo "❌ Missing SDMS_AuthenticationWebApp_url (variable)"
+            MISSING=1
+          else
+            echo "✅ SDMS_AuthenticationWebApp_url: present (variable)"
+          fi
+          
+          if [ -z "${{ vars.SDMS_AuthenticationWebApp_clientid }}" ]; then
+            echo "❌ Missing SDMS_AuthenticationWebApp_clientid (variable)"
+            MISSING=1
+          else
+            echo "✅ SDMS_AuthenticationWebApp_clientid: present (variable)"
+          fi
+          
+          if [ -z "${{ vars.SDMS_AuthenticationWebApp_redirectUri }}" ]; then
+            echo "❌ Missing SDMS_AuthenticationWebApp_redirectUri (variable)"
+            MISSING=1
+          else
+            echo "✅ SDMS_AuthenticationWebApp_redirectUri: present (variable)"
+          fi
+          
+          if [ -z "${{ vars.SDMS_AuthenticationWebApp_scope }}" ]; then
+            echo "❌ Missing SDMS_AuthenticationWebApp_scope (variable)"
+            MISSING=1
+          else
+            echo "✅ SDMS_AuthenticationWebApp_scope: present (variable)"
+          fi
+          
+          echo ""
+          if [ $MISSING -eq 1 ]; then
+            echo "❌ Validation failed: Missing required secrets/variables"
+            echo ""
+            echo "Please add missing items to:"
+            echo "  - Secrets: Settings → Secrets and variables → Actions → Secrets"
+            echo "  - Variables: Settings → Secrets and variables → Actions → Variables"
+            exit 1
+          else
+            echo "✅ All required secrets and variables are present"
           fi
 
       - name: Clean modules only
@@ -114,13 +183,156 @@ jobs:
       - name: Install Vercel CLI
         run: npm install -g vercel@latest
 
+      - name: Clear Vercel project root directory
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+        run: |
+          echo "=== Clearing Vercel Project Root Directory ==="
+          echo ""
+          echo "CRITICAL: We deploy from SDMSApps/SDMS.B2CWebApp directory"
+          echo "If root directory is also set, Vercel duplicates the path"
+          echo "Solution: Clear root directory setting (set to null)"
+          echo ""
+          
+          # First, get current settings
+          echo "📥 Fetching current project settings..."
+          CURRENT_SETTINGS=$(curl -s -X GET \
+            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            -H "Content-Type: application/json" 2>&1)
+          
+          # Check if rootDirectory exists and what it's set to
+          if echo "$CURRENT_SETTINGS" | grep -q "rootDirectory"; then
+            CURRENT_ROOT=$(echo "$CURRENT_SETTINGS" | grep -o '"rootDirectory":"[^"]*"' | cut -d'"' -f4 || echo "not set")
+            echo "Current root directory: $CURRENT_ROOT"
+            
+            if [ -z "$CURRENT_ROOT" ] || [ "$CURRENT_ROOT" == "null" ]; then
+              echo "✅ Root directory is already cleared"
+              exit 0
+            fi
+          else
+            echo "Root directory not set in current settings (already cleared)"
+            exit 0
+          fi
+          
+          echo ""
+          echo "🔄 Clearing root directory (setting to null)..."
+          
+          # Clear root directory by setting it to null
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X PATCH \
+            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"rootDirectory": null}' 2>&1)
+          
+          HTTP_STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
+          RESPONSE_BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS:/d')
+          
+          echo "API Response Status: $HTTP_STATUS"
+          
+          if [ "$HTTP_STATUS" == "200" ] || [ "$HTTP_STATUS" == "201" ]; then
+            echo "✅ API call successful - root directory cleared"
+            
+            # Wait for update to propagate
+            echo "⏳ Waiting 3 seconds for settings to propagate..."
+            sleep 3
+            
+            # Verify the update
+            echo "🔍 Verifying root directory was cleared..."
+            VERIFY_SETTINGS=$(curl -s -X GET \
+              "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
+              -H "Authorization: Bearer $VERCEL_TOKEN" \
+              -H "Content-Type: application/json" 2>&1)
+            
+            if echo "$VERIFY_SETTINGS" | grep -q '"rootDirectory":null' || ! echo "$VERIFY_SETTINGS" | grep -q "rootDirectory"; then
+              echo "✅ Verified: Root directory is now cleared"
+            else
+              VERIFY_ROOT=$(echo "$VERIFY_SETTINGS" | grep -o '"rootDirectory":"[^"]*"' | cut -d'"' -f4 || echo "not found")
+              echo "⚠️  Warning: Verification shows root directory as: $VERIFY_ROOT"
+              echo "   Expected: null (cleared)"
+              echo "   The update may need a moment to propagate, or manual update may be required."
+            fi
+          else
+            echo "❌ Failed to clear root directory (HTTP $HTTP_STATUS)"
+            echo "Response: $RESPONSE_BODY"
+            echo ""
+            echo "⚠️  Continuing deployment, but it may fail if root directory is set."
+            echo "   Please clear manually in Vercel dashboard:"
+            echo "   1. Go to https://vercel.com/freelancingsols-projects/sdms/settings"
+            echo "   2. Settings → General → Root Directory"
+            echo "   3. Clear the field (set to empty)"
+            echo "   4. Save"
+          fi
+
       - name: Sync Vercel Environment Variables
         working-directory: SDMSApps/SDMS.B2CWebApp
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          SDMS_B2CWebApp_url: ${{ vars.SDMS_B2CWebApp_url }}
+          SDMS_AuthenticationWebApp_url: ${{ vars.SDMS_AuthenticationWebApp_url }}
+          SDMS_AuthenticationWebApp_clientid: ${{ vars.SDMS_AuthenticationWebApp_clientid }}
+          SDMS_AuthenticationWebApp_redirectUri: ${{ vars.SDMS_AuthenticationWebApp_redirectUri }}
+          SDMS_AuthenticationWebApp_scope: ${{ vars.SDMS_AuthenticationWebApp_scope }}
+          CI: 'true'
         run: |
-          echo "Syncing env vars…"
-          # Add your syncing script here (omitted for brevity)
+          echo "=== Syncing Vercel Environment Variables ==="
+          
+          # Function to sync environment variable
+          sync_env_var() {
+            local var_name=$1
+            local var_value=$2
+            local environment=$3
+            
+            # Trim whitespace
+            var_value=$(printf '%s' "$var_value" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | tr -d '\n\r\t')
+            
+            # Skip if empty
+            if [ -z "${var_value}" ] || [ ${#var_value} -eq 0 ]; then
+              echo "⚠️  Skipping $var_name for $environment (empty value)"
+              return 0
+            fi
+            
+            echo "Syncing $var_name for $environment..."
+            
+            # Remove existing variable
+            printf "y\n" | vercel env rm "$var_name" "$environment" --token="$VERCEL_TOKEN" 2>&1 | grep -v -E "(error|Error|NOTE|telemetry)" || true
+            sleep 1
+            
+            # Add the environment variable
+            printf '%s' "$var_value" | vercel env add "$var_name" "$environment" --token="$VERCEL_TOKEN" 2>&1 | grep -v -E "(NOTE|telemetry)" || true
+            sleep 1
+            
+            # Verify
+            if vercel env ls "$environment" --token="$VERCEL_TOKEN" 2>/dev/null | grep -q "^$var_name"; then
+              echo "  ✅ $var_name synced successfully"
+            else
+              echo "  ⚠️  $var_name sync may have failed"
+            fi
+          }
+          
+          # Sync for production
+          echo "=== Production Environment ==="
+          sync_env_var "SDMS_B2CWebApp_url" "$SDMS_B2CWebApp_url" "production"
+          sync_env_var "SDMS_AuthenticationWebApp_url" "$SDMS_AuthenticationWebApp_url" "production"
+          sync_env_var "SDMS_AuthenticationWebApp_clientid" "$SDMS_AuthenticationWebApp_clientid" "production"
+          sync_env_var "SDMS_AuthenticationWebApp_redirectUri" "$SDMS_AuthenticationWebApp_redirectUri" "production"
+          sync_env_var "SDMS_AuthenticationWebApp_scope" "$SDMS_AuthenticationWebApp_scope" "production"
+          
+          # Sync for preview
+          echo ""
+          echo "=== Preview Environment ==="
+          sync_env_var "SDMS_B2CWebApp_url" "$SDMS_B2CWebApp_url" "preview"
+          sync_env_var "SDMS_AuthenticationWebApp_url" "$SDMS_AuthenticationWebApp_url" "preview"
+          sync_env_var "SDMS_AuthenticationWebApp_clientid" "$SDMS_AuthenticationWebApp_clientid" "preview"
+          sync_env_var "SDMS_AuthenticationWebApp_redirectUri" "$SDMS_AuthenticationWebApp_redirectUri" "preview"
+          sync_env_var "SDMS_AuthenticationWebApp_scope" "$SDMS_AuthenticationWebApp_scope" "preview"
+          
+          echo ""
+          echo "✅ Environment variable sync complete"
 
       - name: Install dependencies
         working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
@@ -130,9 +342,103 @@ jobs:
         working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
         run: npm run build
 
+      - name: Verify Vercel project settings before deployment
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+        run: |
+          echo "=== Final Verification of Vercel Project Settings ==="
+          echo ""
+          echo "Expected: Root directory should be CLEARED (null/empty)"
+          echo "Reason: We deploy from SDMSApps/SDMS.B2CWebApp directory"
+          echo "If root directory is set, Vercel duplicates the path"
+          echo ""
+          
+          # Get current project settings
+          SETTINGS=$(curl -s -X GET \
+            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            -H "Content-Type: application/json" 2>&1)
+          
+          if echo "$SETTINGS" | grep -q "rootDirectory"; then
+            # Check if it's null or empty
+            if echo "$SETTINGS" | grep -q '"rootDirectory":null'; then
+              echo "✅ Root directory is correctly cleared (null)"
+            else
+              CURRENT_ROOT=$(echo "$SETTINGS" | grep -o '"rootDirectory":"[^"]*"' | cut -d'"' -f4 || echo "not found")
+              echo "⚠️  WARNING: Root directory is set to: $CURRENT_ROOT"
+              echo "   Expected: null (cleared)"
+              echo ""
+              echo "   This will cause path duplication during deployment!"
+              echo "   Please clear it manually:"
+              echo "   1. Go to https://vercel.com/freelancingsols-projects/sdms/settings"
+              echo "   2. Settings → General → Root Directory"
+              echo "   3. Clear the field (set to empty)"
+              echo "   4. Save"
+              echo ""
+              echo "   Continuing with deployment attempt (may fail)..."
+            fi
+          else
+            echo "✅ Root directory is not set (correctly cleared)"
+          fi
+
       - name: Deploy to Vercel
         working-directory: SDMSApps/SDMS.B2CWebApp
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          CI: 'true'
         run: |
-          vercel deploy --prod --token "$VERCEL_TOKEN" --force
+          echo "=== Deploying to Vercel ==="
+          echo "Current directory: $(pwd)"
+          echo ""
+          echo "CRITICAL: Deploying from SDMSApps/SDMS.B2CWebApp directory"
+          echo "Root directory setting in Vercel should be CLEARED (null/empty)"
+          echo "to prevent path duplication"
+          echo ""
+          
+          # Verify vercel.json exists
+          echo "Verifying vercel.json exists..."
+          if [ ! -f "vercel.json" ]; then
+            echo "❌ ERROR: vercel.json not found in $(pwd)"
+            echo "Files in current directory:"
+            ls -la
+            exit 1
+          fi
+          echo "✅ vercel.json found at: $(pwd)/vercel.json"
+          echo ""
+          
+          # Verify .vercel/project.json exists
+          if [ ! -f ".vercel/project.json" ]; then
+            echo "⚠️  .vercel/project.json not found, creating it..."
+            mkdir -p .vercel
+            echo "{\"orgId\":\"$VERCEL_ORG_ID\",\"projectId\":\"$VERCEL_PROJECT_ID\"}" > .vercel/project.json
+            echo "✅ Created .vercel/project.json"
+          else
+            echo "✅ .vercel/project.json exists"
+          fi
+          echo ""
+          
+          # Deploy using Vercel CLI from current directory
+          # Since root directory is cleared, Vercel will use current directory
+          echo "Deploying to Vercel production..."
+          echo "Command: vercel --prod --force --token=*** --scope=$VERCEL_ORG_ID --yes"
+          echo ""
+          
+          vercel --prod --force --token="$VERCEL_TOKEN" --scope="$VERCEL_ORG_ID" --yes
+          
+          if [ $? -eq 0 ]; then
+            echo ""
+            echo "✅ Deployment completed successfully!"
+          else
+            echo ""
+            echo "❌ Deployment failed"
+            echo ""
+            echo "Troubleshooting:"
+            echo "1. Verify root directory in Vercel: https://vercel.com/freelancingsols-projects/sdms/settings"
+            echo "2. Root directory should be CLEARED (empty/null), not set to SDMSApps/SDMS.B2CWebApp"
+            echo "3. We deploy from the subdirectory, so root directory must be empty"
+            exit 1
+          fi

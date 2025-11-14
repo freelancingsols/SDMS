@@ -31,6 +31,61 @@ jobs:
        github.ref != 'refs/heads/main' &&
        (github.ref == 'refs/heads/release' || github.ref == 'refs/heads/Release'))
     steps:
+      - name: 🚨 CRITICAL: Block Master/Main Branch Deployments
+        run: |
+          echo "🚨 CRITICAL: Checking deployment branch..."
+          
+          # Determine the branch based on trigger type
+          if [ "${{ github.event_name }}" == "workflow_run" ]; then
+            DEPLOY_BRANCH="${{ github.event.workflow_run.head_branch }}"
+            echo "Trigger: workflow_run from CI"
+            echo "CI Branch: $DEPLOY_BRANCH"
+          elif [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            DEPLOY_BRANCH="${{ github.ref_name }}"
+            echo "Trigger: workflow_dispatch (manual)"
+            echo "Current Branch: $DEPLOY_BRANCH"
+          else
+            DEPLOY_BRANCH="${{ github.ref_name }}"
+            echo "Trigger: ${{ github.event_name }}"
+            echo "Branch: $DEPLOY_BRANCH"
+          fi
+          
+          echo ""
+          echo "🔍 Branch check: $DEPLOY_BRANCH"
+          
+          # EXPLICITLY BLOCK master and main
+          if [ "$DEPLOY_BRANCH" == "master" ] || [ "$DEPLOY_BRANCH" == "main" ]; then
+            echo ""
+            echo "❌❌❌ DEPLOYMENT BLOCKED ❌❌❌"
+            echo ""
+            echo "Branch '$DEPLOY_BRANCH' is NOT ALLOWED for deployment!"
+            echo "Only 'release' or 'Release' branch deployments are permitted."
+            echo ""
+            echo "This deployment has been cancelled to prevent errors."
+            echo ""
+            echo "To deploy:"
+            echo "  1. Switch to 'release' branch"
+            echo "  2. Push your changes"
+            echo "  3. Wait for CI to complete"
+            echo "  4. Deployment will happen automatically from 'release' branch"
+            echo ""
+            exit 1
+          fi
+          
+          # Verify it's release branch
+          if [ "$DEPLOY_BRANCH" != "release" ] && [ "$DEPLOY_BRANCH" != "Release" ]; then
+            echo ""
+            echo "❌ DEPLOYMENT BLOCKED"
+            echo "Branch '$DEPLOY_BRANCH' is not allowed."
+            echo "Allowed branches: release, Release"
+            echo "Blocked branches: master, main, develop, stage, staging"
+            echo ""
+            exit 1
+          fi
+          
+          echo "✅ Branch verified: $DEPLOY_BRANCH is allowed for deployment"
+          echo ""
+
       - name: Verify Branch for Manual Deployment
         if: github.event_name == 'workflow_dispatch'
         run: |
@@ -978,16 +1033,58 @@ jobs:
           echo "✅ All pre-deployment checks passed"
         shell: bash
 
+      - name: Install Vercel CLI (if not already installed)
+        run: |
+          if ! command -v vercel &> /dev/null; then
+            echo "Installing Vercel CLI..."
+            npm install -g vercel@latest
+          else
+            echo "Vercel CLI already installed: $(vercel --version)"
+          fi
+
       - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v25
+        working-directory: SDMSApps/SDMS.B2CWebApp
         env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
           CI: 'true'
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ vars.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ vars.VERCEL_PROJECT_ID }}
-          vercel-args: '--prod --force'
-          working-directory: SDMSApps/SDMS.B2CWebApp
-          scope: ${{ vars.VERCEL_ORG_ID }}
+        run: |
+          echo "🚀 Deploying to Vercel..."
+          echo "Current directory: $(pwd)"
+          echo ""
+          
+          # Verify vercel.json exists
+          echo "Checking for vercel.json..."
+          if [ ! -f "vercel.json" ]; then
+            echo "❌ ERROR: vercel.json not found in $(pwd)"
+            echo "Files in current directory:"
+            ls -la
+            exit 1
+          fi
+          echo "✅ vercel.json found at: $(pwd)/vercel.json"
+          echo ""
+          
+          # Verify .vercel/project.json exists (created earlier in workflow)
+          if [ ! -f ".vercel/project.json" ]; then
+            echo "⚠️  .vercel/project.json not found, creating it..."
+            mkdir -p .vercel
+            echo "{\"orgId\":\"$VERCEL_ORG_ID\",\"projectId\":\"$VERCEL_PROJECT_ID\"}" > .vercel/project.json
+            echo "✅ Created .vercel/project.json"
+          else
+            echo "✅ .vercel/project.json exists"
+          fi
+          echo ""
+          
+          # Deploy using Vercel CLI
+          # The --cwd flag ensures Vercel CLI uses the current directory
+          echo "Deploying with Vercel CLI..."
+          echo "Command: vercel --prod --force --token=*** --scope=$VERCEL_ORG_ID"
+          echo ""
+          
+          vercel --prod --force --token="$VERCEL_TOKEN" --scope="$VERCEL_ORG_ID" --yes
+          
+          echo ""
+          echo "✅ Deployment completed successfully!"
         continue-on-error: false
 

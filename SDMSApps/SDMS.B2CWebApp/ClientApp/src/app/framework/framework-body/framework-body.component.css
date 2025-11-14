@@ -175,9 +175,9 @@
 }
 
 .footer-wrapper.collapsed {
-  min-height: 0;
-  height: 0;
-  overflow: hidden;
+  min-height: 64px; /* Keep enough height for the collapse button (48px + 16px padding) */
+  height: 64px;
+  overflow: visible; /* Allow button to be visible */
 }
 
 /* Floating Collapse Button Styles */
@@ -212,13 +212,14 @@
   top: 8px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 102;
+  z-index: 1002; /* Higher z-index to ensure it's always visible */
   width: 48px;
   height: 48px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
   color: white !important;
   box-shadow: 0 4px 12px rgba(0,0,0,0.4);
   transition: all 0.3s ease;
+  pointer-events: auto; /* Ensure button is clickable */
 }
 
 .footer-collapse-btn.floating-btn:hover {
@@ -229,6 +230,7 @@
 .footer-wrapper.collapsed .footer-collapse-btn.floating-btn {
   top: auto;
   bottom: 8px;
+  /* Button should always be visible even when footer is collapsed */
 }
 
 /* Left Sidebar Floating Collapse Button */

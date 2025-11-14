@@ -1,7 +1,7 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { Router, RouterLink, ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 
 @Component({
@@ -19,7 +19,8 @@ export class LoginComponent {
 
   constructor(
     private authService: AuthService,
-    private router: Router
+    private router: Router,
+    private route: ActivatedRoute
   ) {}
 
   async onEmailLogin() {
@@ -34,7 +35,12 @@ export class LoginComponent {
     try {
       const success = await this.authService.loginWithEmail(this.email, this.password);
       if (success) {
-        this.router.navigate(['/profile']);
+        // Get the ReturnUrl from query parameters (used in OAuth flow)
+        const returnUrl = this.route.snapshot.queryParams['ReturnUrl'] || '/profile';
+        // Use window.location.href for full page redirect to preserve OAuth flow state
+        // This will typically be /connect/authorize?... which will complete the OAuth flow
+        // Full page redirect is necessary to ensure OpenIddict can properly handle the authorization request
+        window.location.href = decodeURIComponent(returnUrl);
       } else {
         this.errorMessage = 'Invalid email or password';
       }

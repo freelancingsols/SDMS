@@ -25,7 +25,13 @@ Use this checklist to ensure a successful deployment.
 
 Go to your service → Variables tab and add:
 
-### Required Variables
+### Required Variables (CRITICAL - Must be set BEFORE build)
+**⚠️ IMPORTANT:** These variables are used during the Angular build process. They must be set in Railway BEFORE deploying, otherwise the build will use localhost URLs and fail in production.
+
+- [ ] `SDMS_AuthenticationWebApp_url` = Your Railway service URL (e.g., `https://your-app.railway.app`)
+  - **CRITICAL:** This is used by the Angular ClientApp during build. Set this to your Railway URL.
+- [ ] `SDMS_AuthenticationWebApp_clientid` = `sdms_frontend`
+  - **CRITICAL:** This is used by the Angular ClientApp during build.
 - [ ] `SDMS_AuthenticationWebApp_ConnectionString` = PostgreSQL connection string (or Railway auto-sets `POSTGRES_CONNECTION`)
 - [ ] `SDMS_B2CWebApp_url` = Your Vercel frontend URL (e.g., `https://your-app.vercel.app`)
 - [ ] `SDMS_AuthenticationWebApp_LoginUrl` = `/login`

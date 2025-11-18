@@ -51,28 +51,35 @@ This guide will walk you through deploying SDMS.AuthenticationWebApp to Railway.
 2. Go to **"Variables"** tab
 3. Add the following environment variables:
 
-### Required Variables
+### Required Variables (CRITICAL - Must be set BEFORE first build)
 
-| Variable Name | Description | Example Value |
-|--------------|-------------|---------------|
-| `POSTGRES_CONNECTION` | Database connection (if not auto-set) | Check Railway PostgreSQL service for connection string |
-| `Authentication__LoginUrl` | Login page URL | `/login` |
-| `Authentication__LogoutUrl` | Logout page URL | `/logout` |
-| `Authentication__ErrorUrl` | Error page URL | `/login` |
-| `Frontend__Url` | Frontend URL (for CORS) | `https://your-frontend.vercel.app` |
+**⚠️ IMPORTANT:** `SDMS_AuthenticationWebApp_url` and `SDMS_AuthenticationWebApp_clientid` are used during the Angular build process. They must be set BEFORE deploying, otherwise the build will use localhost URLs and fail in production.
+
+| Variable Name | Description | Example Value | Critical |
+|--------------|-------------|---------------|---------|
+| `SDMS_AuthenticationWebApp_url` | **Your Railway service URL** (used during Angular build) | `https://your-app.railway.app` | ✅ **CRITICAL** |
+| `SDMS_AuthenticationWebApp_clientid` | OAuth client ID (used during Angular build) | `sdms_frontend` | ✅ **CRITICAL** |
+| `SDMS_AuthenticationWebApp_ConnectionString` | PostgreSQL connection string | Check Railway PostgreSQL service | - |
+| `SDMS_B2CWebApp_url` | B2C WebApp URL (for CORS and redirect URIs) | `https://your-b2c.vercel.app` | - |
+| `SDMS_AuthenticationWebApp_LoginUrl` | Login page URL | `/login` | - |
+| `SDMS_AuthenticationWebApp_LogoutUrl` | Logout page URL | `/logout` | - |
+| `SDMS_AuthenticationWebApp_ErrorUrl` | Error page URL | `/login` | - |
+| `SDMS_AuthenticationWebApp_RedirectUris` | Comma-separated redirect URIs | `https://your-b2c.vercel.app/auth-callback` | - |
+| `SDMS_AuthenticationWebApp_PostLogoutRedirectUris` | Comma-separated post-logout redirect URIs | `https://your-b2c.vercel.app/` | - |
 
 ### Optional Variables (External Auth)
 
 | Variable Name | Description |
 |--------------|-------------|
-| `ExternalAuth__Google__ClientId` | Google OAuth Client ID |
-| `ExternalAuth__Google__ClientSecret` | Google OAuth Client Secret |
-| `ExternalAuth__Auth0__Domain` | Auth0 domain |
-| `ExternalAuth__Auth0__ClientId` | Auth0 Client ID |
-| `ExternalAuth__Auth0__ClientSecret` | Auth0 Client Secret |
-| `Webhook__Secret` | Webhook secret for external user sync |
+| `SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId` | Google OAuth Client ID |
+| `SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientSecret` | Google OAuth Client Secret |
+| `SDMS_AuthenticationWebApp_ExternalAuth_Auth0_Domain` | Auth0 domain |
+| `SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientId` | Auth0 Client ID |
+| `SDMS_AuthenticationWebApp_ExternalAuth_Auth0_ClientSecret` | Auth0 Client Secret |
+| `SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri` | External auth redirect URI |
+| `SDMS_AuthenticationWebApp_WebhookSecret` | Webhook secret for external user sync |
 
-**Important:** Use double underscore `__` for nested configuration keys (e.g., `Authentication__LoginUrl`)
+**Note:** All configuration keys use `SDMS_AuthenticationWebApp_` prefix for consistency.
 
 ## Step 5: Configure Deployment Method
 

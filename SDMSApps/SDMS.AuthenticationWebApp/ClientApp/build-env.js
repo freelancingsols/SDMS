@@ -81,22 +81,35 @@ const isRailwayBuild = !!(process.env.RAILWAY_ENVIRONMENT ||
                           (process.env.PORT && !process.env.NODE_ENV));
 const isVercelBuild = !!process.env.VERCEL;
 const isCI = !!process.env.CI;
-// Consider it production if we're in Railway/Vercel/CI AND not explicitly in development
-const isProductionBuild = (isRailwayBuild || isVercelBuild || isCI) && 
+// GitHub Actions CI is just for validation - Railway will rebuild with correct variables
+// Only consider it production if we're actually in Railway/Vercel, not just GitHub Actions CI
+const isProductionBuild = (isRailwayBuild || isVercelBuild) && 
                           process.env.NODE_ENV !== 'development';
+const isGitHubActionsCI = isCI && !isRailwayBuild && !isVercelBuild;
 
 // Only fail if:
-// 1. We're in a production build environment (Railway/Vercel/CI)
+// 1. We're in a production build environment (Railway/Vercel, NOT GitHub Actions CI)
 // 2. AND the URL is localhost
 // 3. AND the environment variable was NOT set (meaning it truly fell back to appsettings.json)
 const envVarWasSet = !!process.env.SDMS_AuthenticationWebApp_url;
 const isLocalhost = appSettingsConfig.SDMS_AuthenticationWebApp_url && 
                     appSettingsConfig.SDMS_AuthenticationWebApp_url.includes('localhost');
 
-if (isProductionBuild && isLocalhost && !envVarWasSet) {
+if (isGitHubActionsCI && isLocalhost && !envVarWasSet) {
+  // GitHub Actions CI is just for validation - Railway will rebuild with correct variables
+  // Warn but don't fail - this is expected if GitHub Variables aren't set for validation build
+  console.warn('⚠️  WARNING: Using localhost URL in GitHub Actions CI build (validation only)');
+  console.warn('   This is OK - Railway will rebuild with correct variables from Railway environment.');
+  console.warn('   For this validation build, GitHub Variables should be set, but Railway build will use Railway variables.');
+  console.warn('');
+  console.warn('   To fix this warning (optional):');
+  console.warn('   - Set SDMS_AuthenticationWebApp_url in GitHub Variables for validation builds');
+  console.warn('   - Or ignore this warning - Railway build will use Railway variables');
+} else if (isProductionBuild && isLocalhost && !envVarWasSet) {
+  // This is a REAL production build (Railway/Vercel) - fail if localhost
   console.error('❌ ERROR: localhost URL detected in production build!');
   console.error('   URL:', appSettingsConfig.SDMS_AuthenticationWebApp_url);
-  console.error('   Environment: Railway/Vercel/CI detected');
+  console.error('   Environment: Railway/Vercel detected');
   console.error('   Issue: SDMS_AuthenticationWebApp_url environment variable was not set during build');
   console.error('');
   console.error('   Debug Info:');

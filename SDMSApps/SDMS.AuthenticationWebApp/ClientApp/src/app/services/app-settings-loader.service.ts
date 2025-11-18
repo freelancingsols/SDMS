@@ -4,11 +4,8 @@ import { firstValueFrom } from 'rxjs';
 import { AppSettings } from '../config/app-settings';
 
 export interface AppSettingsConfig {
-  SDMS_B2CWebApp_url?: string;
   SDMS_AuthenticationWebApp_url?: string;
   SDMS_AuthenticationWebApp_clientid?: string;
-  SDMS_AuthenticationWebApp_redirectUri?: string;
-  SDMS_AuthenticationWebApp_scope?: string;
 }
 
 /**
@@ -49,11 +46,8 @@ export class AppSettingsLoaderService {
           if (rootConfig) {
             console.log('✓ AppSettings loaded from /appsettings.json');
             const appConfig: AppSettingsConfig = {
-              SDMS_B2CWebApp_url: rootConfig.SDMS_B2CWebApp_url,
               SDMS_AuthenticationWebApp_url: rootConfig.SDMS_AuthenticationWebApp_url,
-              SDMS_AuthenticationWebApp_clientid: rootConfig.SDMS_AuthenticationWebApp_clientid,
-              SDMS_AuthenticationWebApp_redirectUri: rootConfig.SDMS_AuthenticationWebApp_redirectUri,
-              SDMS_AuthenticationWebApp_scope: rootConfig.SDMS_AuthenticationWebApp_scope
+              SDMS_AuthenticationWebApp_clientid: rootConfig.SDMS_AuthenticationWebApp_clientid
             };
             AppSettings.initialize(appConfig);
             return;
@@ -82,7 +76,7 @@ export class AppSettingsLoaderService {
  * 2. appsettings.json file - Fallback for local development
  * 3. Error if missing - No hardcoded defaults
  * 
- * Note: appsettings.json is updated at build time by CI/CD/Vercel
+ * Note: appsettings.json is updated at build time by CI/CD
  * which reads environment variables and updates the file before Angular build.
  * 
  * BREAKING CHANGE: No hardcoded defaults. Configuration must be provided.

@@ -172,10 +172,15 @@ builder.Services.AddOpenIddict()
 // Authentication - configure login interaction similar to IdentityServer4 UserInteraction
 // Note: AddIdentity already registers Identity.Application and Identity.External schemes
 // We only need to configure authentication defaults and add external authentication providers
-var loginUrl = builder.Configuration[ConfigurationKeys.LoginUrl] ?? "/login";
-var logoutUrl = builder.Configuration[ConfigurationKeys.LogoutUrl] ?? "/logout";
-var errorUrl = builder.Configuration[ConfigurationKeys.ErrorUrl] ?? "/login";
-var returnUrlParameter = builder.Configuration[ConfigurationKeys.ReturnUrlParameter] ?? "ReturnUrl";
+// BREAKING CHANGE: No hardcoded defaults. Configuration must be provided.
+var loginUrl = builder.Configuration[ConfigurationKeys.LoginUrl] 
+    ?? throw new InvalidOperationException($"Missing required configuration: {ConfigurationKeys.LoginUrl}. Set in appsettings.json or environment variable.");
+var logoutUrl = builder.Configuration[ConfigurationKeys.LogoutUrl] 
+    ?? throw new InvalidOperationException($"Missing required configuration: {ConfigurationKeys.LogoutUrl}. Set in appsettings.json or environment variable.");
+var errorUrl = builder.Configuration[ConfigurationKeys.ErrorUrl] 
+    ?? throw new InvalidOperationException($"Missing required configuration: {ConfigurationKeys.ErrorUrl}. Set in appsettings.json or environment variable.");
+var returnUrlParameter = builder.Configuration[ConfigurationKeys.ReturnUrlParameter] 
+    ?? throw new InvalidOperationException($"Missing required configuration: {ConfigurationKeys.ReturnUrlParameter}. Set in appsettings.json or environment variable.");
 
 // Configure authentication defaults
 // AddIdentity already registers Identity.Application and Identity.External schemes
@@ -252,8 +257,11 @@ builder.Services.AddScoped<TokenService>();
 builder.Services.AddHttpClient();
 
 // CORS
-var frontendUrl = builder.Configuration[ConfigurationKeys.FrontendUrl] ?? "http://localhost:4200";
-var b2cUrl = builder.Configuration["SDMS_B2CWebApp_url"] ?? "http://localhost:4200";
+// BREAKING CHANGE: No hardcoded defaults. Configuration must be provided.
+var frontendUrl = builder.Configuration[ConfigurationKeys.FrontendUrl] 
+    ?? throw new InvalidOperationException($"Missing required configuration: {ConfigurationKeys.FrontendUrl}. Set in appsettings.json or environment variable.");
+var b2cUrl = builder.Configuration["SDMS_B2CWebApp_url"] 
+    ?? throw new InvalidOperationException("Missing required configuration: SDMS_B2CWebApp_url. Set in appsettings.json or environment variable.");
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -427,8 +435,10 @@ using (var scope = app.Services.CreateScope())
     
     await context.Database.EnsureCreatedAsync();
 
-    // Get B2C URL from configuration or use default
-    var b2cUrlForClient = builder.Configuration["SDMS_B2CWebApp_url"] ?? "https://sdms-pi.vercel.app";
+    // Get B2C URL from configuration
+    // BREAKING CHANGE: No hardcoded defaults. Configuration must be provided.
+    var b2cUrlForClient = builder.Configuration["SDMS_B2CWebApp_url"] 
+        ?? throw new InvalidOperationException("Missing required configuration: SDMS_B2CWebApp_url. Set in appsettings.json or environment variable.");
     
     // Helper function to parse comma-separated URIs from configuration
     static HashSet<Uri> ParseUrisFromConfig(string? configValue, HashSet<Uri> defaultUris)
@@ -461,33 +471,17 @@ using (var scope = app.Services.CreateScope())
         return uris;
     }
     
-    // Default redirect URIs (fallback if not configured)
-    var defaultRedirectUris = new HashSet<Uri>
-    {
-        new Uri("http://localhost:4200/auth-callback"),
-        new Uri("https://localhost:4200/auth-callback"),
-        new Uri("http://localhost:7001/auth-callback"),
-        new Uri("https://localhost:7001/auth-callback"),
-        new Uri("http://localhost:5000/auth-callback"),
-        new Uri("https://localhost:5000/auth-callback"),
-        new Uri($"{b2cUrlForClient}/auth-callback"),
-    };
+    // BREAKING CHANGE: No hardcoded default redirect URIs. Configuration must be provided.
+    // Build redirect URIs from configuration
+    var defaultRedirectUris = new HashSet<Uri>();
+    var defaultPostLogoutRedirectUris = new HashSet<Uri>();
     
-    // Default post-logout redirect URIs (fallback if not configured)
-    var defaultPostLogoutRedirectUris = new HashSet<Uri>
+    // Add B2C URL redirect URIs (required)
+    if (!string.IsNullOrEmpty(b2cUrlForClient))
     {
-        new Uri("http://localhost:4200/"),
-        new Uri("https://localhost:4200/"),
-        new Uri("http://localhost:7001/"),
-        new Uri("https://localhost:7001/"),
-        new Uri("http://localhost:7001/auth-callback"),
-        new Uri("https://localhost:7001/auth-callback"),
-        new Uri("http://localhost:5000/"),
-        new Uri("https://localhost:5000/"),
-        new Uri("http://localhost:5000/auth-callback"),
-        new Uri("https://localhost:5000/auth-callback"),
-        new Uri($"{b2cUrlForClient}/"),
-    };
+        defaultRedirectUris.Add(new Uri($"{b2cUrlForClient}/auth-callback"));
+        defaultPostLogoutRedirectUris.Add(new Uri($"{b2cUrlForClient}/"));
+    }
     
     // Get redirect URIs from configuration
     var redirectUrisConfig = builder.Configuration[ConfigurationKeys.RedirectUris];
@@ -496,6 +490,21 @@ using (var scope = app.Services.CreateScope())
     // Get post-logout redirect URIs from configuration
     var postLogoutRedirectUrisConfig = builder.Configuration[ConfigurationKeys.PostLogoutRedirectUris];
     var postLogoutRedirectUris = ParseUrisFromConfig(postLogoutRedirectUrisConfig, defaultPostLogoutRedirectUris);
+    
+    // Validate that we have at least one redirect URI
+    if (redirectUris.Count == 0)
+    {
+        throw new InvalidOperationException(
+            $"No redirect URIs configured. Set {ConfigurationKeys.RedirectUris} in appsettings.json or environment variable, " +
+            "or ensure SDMS_B2CWebApp_url is set to generate default redirect URI.");
+    }
+    
+    if (postLogoutRedirectUris.Count == 0)
+    {
+        throw new InvalidOperationException(
+            $"No post-logout redirect URIs configured. Set {ConfigurationKeys.PostLogoutRedirectUris} in appsettings.json or environment variable, " +
+            "or ensure SDMS_B2CWebApp_url is set to generate default post-logout redirect URI.");
+    }
     
     // Create or update OpenIddict client
     var clientDescriptor = new OpenIddictApplicationDescriptor

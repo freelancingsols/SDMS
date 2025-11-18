@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve",
-    "build": "ng build",
-    "watch": "ng build --watch --configuration development",
+    "start": "node build-env.js && ng serve",
+    "build": "node build-env.js && ng build",
+    "build:prod": "node build-env.js && ng build --configuration production",
+    "watch": "node build-env.js && ng build --watch --configuration development",
     "test": "ng test",
     "test:ci": "ng test --watch=false --browsers=ChromeHeadless --code-coverage",
     "lint": "ng lint",

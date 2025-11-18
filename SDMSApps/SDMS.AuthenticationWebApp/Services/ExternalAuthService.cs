@@ -284,7 +284,19 @@ public class ExternalAuthService : IExternalAuthService
     {
         try
         {
-            var redirectUri = _configuration["ExternalAuth:RedirectUri"] ?? "http://localhost:4200/auth-callback";
+            // BREAKING CHANGE: No hardcoded defaults. Configuration must be provided.
+            var redirectUri = _configuration["ExternalAuth:RedirectUri"];
+            if (string.IsNullOrEmpty(redirectUri))
+            {
+                var b2cUrl = _configuration["SDMS_B2CWebApp_url"];
+                if (string.IsNullOrEmpty(b2cUrl))
+                {
+                    throw new InvalidOperationException(
+                        "Missing required configuration: ExternalAuth:RedirectUri or SDMS_B2CWebApp_url. " +
+                        "Set in appsettings.json or environment variable.");
+                }
+                redirectUri = $"{b2cUrl}/auth-callback";
+            }
             var content = new FormUrlEncodedContent(new[]
             {
                 new KeyValuePair<string, string>("grant_type", "authorization_code"),

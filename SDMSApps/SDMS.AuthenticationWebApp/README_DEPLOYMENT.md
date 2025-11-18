@@ -24,7 +24,7 @@ Add the following secrets in your GitHub repository (Settings → Secrets and va
   - Note: If not set, the application will fall back to `POSTGRES_CONNECTION` (Railway automatic env var)
 
 #### Frontend Configuration
-- `SDMS_AuthenticationWebApp_FrontendUrl` - Frontend application URL (for CORS)
+- `SDMS_B2CWebApp_url` - B2C WebApp URL (used for CORS and redirect URIs)
 
 #### Authentication URLs
 - `SDMS_AuthenticationWebApp_LoginUrl` - Login page URL (default: `/login`)

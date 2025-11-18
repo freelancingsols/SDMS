@@ -47,7 +47,7 @@ builder.Configuration.AddEnvironmentVariables();
   - `appsettings.json` (always loaded - contains local development values)
 - `AddEnvironmentVariables()` adds environment variables with **highest priority**
 - Environment variables override values from appsettings.json
-- Environment variables use the same key names as in appsettings.json (e.g., `SDMS_AuthenticationWebApp_FrontendUrl`)
+- Environment variables use the same key names as in appsettings.json (e.g., `SDMS_B2CWebApp_url`)
 - **Single file approach**: Only `appsettings.json` is used, no environment-specific files
 
 ### 2. Configuration Access
@@ -66,8 +66,8 @@ public class ExternalAuthService
     
     public void SomeMethod()
     {
-        var frontendUrl = _configuration["Frontend:Url"];
-        var googleClientId = _configuration["ExternalAuth:Google:ClientId"];
+        var b2cUrl = _configuration["SDMS_B2CWebApp_url"];
+        var googleClientId = _configuration["SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId"];
     }
 }
 ```
@@ -78,14 +78,14 @@ public class ExternalAuthService
 // Constants/ConfigurationKeys.cs
 public static class ConfigurationKeys
 {
-    public const string FrontendUrl = "Frontend:Url";
-    public const string ExternalAuthGoogleClientId = "ExternalAuth:Google:ClientId";
+    public const string LoginUrl = "SDMS_AuthenticationWebApp_LoginUrl";
+    public const string ExternalAuthGoogleClientId = "SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId";
     // ...
 }
 
 // Usage in Program.cs
-var frontendUrl = builder.Configuration[ConfigurationKeys.FrontendUrl];
-var loginUrl = builder.Configuration[ConfigurationKeys.AuthenticationLoginUrl] ?? "/login";
+var b2cUrl = builder.Configuration["SDMS_B2CWebApp_url"];
+var loginUrl = builder.Configuration[ConfigurationKeys.LoginUrl] ?? "/login";
 ```
 
 ### 3. Configuration Priority Example
@@ -106,7 +106,7 @@ All configuration keys use the `SDMS_AuthenticationWebApp_` prefix for consisten
 ```json
 {
   "SDMS_AuthenticationWebApp_ConnectionString": "Host=localhost;Database=sdms_auth;...",
-  "SDMS_AuthenticationWebApp_FrontendUrl": "http://localhost:4200",
+  "SDMS_B2CWebApp_url": "http://localhost:4200",
   "SDMS_AuthenticationWebApp_LoginUrl": "/login",
   "SDMS_AuthenticationWebApp_LogoutUrl": "/logout",
   "SDMS_AuthenticationWebApp_ErrorUrl": "/login",
@@ -134,7 +134,7 @@ Environment variables use the same key names as in `appsettings.json` (with `SDM
 |---------------------|---------|----------|
 | `SDMS_AuthenticationWebApp_ConnectionString` | `appsettings.json → SDMS_AuthenticationWebApp_ConnectionString` | Highest (preferred) |
 | `POSTGRES_CONNECTION` | Railway automatic env var | Fallback (if `SDMS_AuthenticationWebApp_ConnectionString` not set) |
-| `SDMS_AuthenticationWebApp_FrontendUrl` | `appsettings.json → SDMS_AuthenticationWebApp_FrontendUrl` | - |
+| `SDMS_B2CWebApp_url` | `appsettings.json → SDMS_B2CWebApp_url` | - |
 | `SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId` | `appsettings.json → SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId` | - |
 
 ### Setting Environment Variables
@@ -146,11 +146,11 @@ Environment variables use the same key names as in `appsettings.json` (with `SDM
 #### Local Development
 ```bash
 # Windows PowerShell
-$env:SDMS_AuthenticationWebApp_FrontendUrl = "http://localhost:4200"
+$env:SDMS_B2CWebApp_url = "http://localhost:4200"
 $env:SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId = "your-client-id"
 
 # Linux/Mac
-export SDMS_AuthenticationWebApp_FrontendUrl="http://localhost:4200"
+export SDMS_B2CWebApp_url="http://localhost:4200"
 export SDMS_AuthenticationWebApp_ExternalAuth_Google_ClientId="your-client-id"
 ```
 
@@ -182,7 +182,7 @@ public class AuthorizationController : Controller
     
     public IActionResult SomeAction()
     {
-        var frontendUrl = _configuration[ConfigurationKeys.FrontendUrl];
+        var b2cUrl = _configuration["SDMS_B2CWebApp_url"];
         // ...
     }
 }
@@ -218,14 +218,15 @@ using SDMS.AuthenticationWebApp.Constants;
 
 // Read configuration
 var loginUrl = builder.Configuration[ConfigurationKeys.LoginUrl] ?? "/login";
-var frontendUrl = builder.Configuration[ConfigurationKeys.FrontendUrl] ?? "http://localhost:4200";
+var b2cUrl = builder.Configuration["SDMS_B2CWebApp_url"] 
+    ?? throw new InvalidOperationException("Missing required configuration: SDMS_B2CWebApp_url");
 
 // Use configuration
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins(frontendUrl)
+        policy.SetIsOriginAllowed(origin => origin == b2cUrl || origin.EndsWith(".vercel.app"))
             .AllowAnyMethod()
             .AllowAnyHeader()
             .AllowCredentials();

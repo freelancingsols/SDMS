@@ -12,9 +12,6 @@ public static class ConfigurationKeys
     public const string ConnectionString = "SDMS_AuthenticationWebApp_ConnectionString";
     public const string PostgresConnection = "POSTGRES_CONNECTION"; // Railway automatic env var (fallback)
     
-    // Frontend Configuration
-    public const string FrontendUrl = "SDMS_AuthenticationWebApp_FrontendUrl";
-    
     // Authentication URLs
     public const string LoginUrl = "SDMS_AuthenticationWebApp_LoginUrl";
     public const string LogoutUrl = "SDMS_AuthenticationWebApp_LogoutUrl";

@@ -3,7 +3,7 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { OAuthService } from 'angular-oauth2-oidc';
 import { BehaviorSubject, Observable } from 'rxjs';
-import { environment } from '../../environments/environment';
+import { AppSettings } from '../config/app-settings';
 
 export interface UserInfo {
   userId: string;
@@ -21,7 +21,7 @@ export interface UserInfo {
 export class AuthService {
   private userInfoSubject = new BehaviorSubject<UserInfo | null>(null);
   public userInfo$ = this.userInfoSubject.asObservable();
-  private apiUrl = environment.apiUrl;
+  private apiUrl = AppSettings.SDMS_AuthenticationWebApp_url;
 
   constructor(
     private oauthService: OAuthService,
@@ -34,7 +34,7 @@ export class AuthService {
 
   private configureOAuth() {
     // Normalize issuer URL - ensure it ends with a slash to match discovery document
-    let issuerUrl = environment.authServer;
+    let issuerUrl = AppSettings.SDMS_AuthenticationWebApp_url;
     if (!issuerUrl.endsWith('/')) {
       issuerUrl = issuerUrl + '/';
     }
@@ -42,7 +42,7 @@ export class AuthService {
     this.oauthService.configure({
       issuer: issuerUrl,
       redirectUri: window.location.origin + '/auth-callback',
-      clientId: environment.clientId,
+      clientId: AppSettings.SDMS_AuthenticationWebApp_clientid,
       responseType: 'code',
       scope: 'openid profile email roles',
       requireHttps: false, // Set to true in production
@@ -67,8 +67,8 @@ export class AuthService {
 
   async loginWithExternalProviderDirect(provider: 'auth0' | 'google'): Promise<void> {
     // Alternative: Direct redirect to authorization endpoint
-    const authUrl = `${environment.authServer}/connect/authorize?` +
-      `client_id=${environment.clientId}&` +
+    const authUrl = `${AppSettings.SDMS_AuthenticationWebApp_url}/connect/authorize?` +
+      `client_id=${AppSettings.SDMS_AuthenticationWebApp_clientid}&` +
       `response_type=code&` +
       `scope=openid profile email roles&` +
       `redirect_uri=${encodeURIComponent(window.location.origin + '/auth-callback')}&` +

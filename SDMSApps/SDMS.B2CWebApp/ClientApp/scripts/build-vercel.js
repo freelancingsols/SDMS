@@ -19,27 +19,15 @@ const appSettingsPath = path.join(__dirname, '..', 'src', 'assets', 'appsettings
 const appSettingsDir = path.dirname(appSettingsPath);
 const environmentPath = path.join(__dirname, '..', 'src', 'environments', 'environment.ts');
 
-// Environment variables to check (with fallback defaults)
+// Environment variables to check
+// BREAKING CHANGE: No hardcoded defaults. Environment variables must be set.
+// Note: redirectUri is optional - will be generated from B2CWebApp_url in code if not set
 const envVars = {
   SDMS_B2CWebApp_url: process.env.SDMS_B2CWebApp_url,
   SDMS_AuthenticationWebApp_url: process.env.SDMS_AuthenticationWebApp_url,
   SDMS_AuthenticationWebApp_clientid: process.env.SDMS_AuthenticationWebApp_clientid,
-  SDMS_AuthenticationWebApp_redirectUri: process.env.SDMS_AuthenticationWebApp_redirectUri,
+  SDMS_AuthenticationWebApp_redirectUri: process.env.SDMS_AuthenticationWebApp_redirectUri, // Optional - generated in code if not set
   SDMS_AuthenticationWebApp_scope: process.env.SDMS_AuthenticationWebApp_scope
-};
-
-// Default values (fallback)
-// Note: These defaults are used if environment variables are not set
-// For production, environment variables should be set in Vercel
-// For local development, these defaults allow localhost usage
-// VERCEL_ENV is set by Vercel: 'production', 'preview', or 'development'
-const isVercelProduction = process.env.VERCEL_ENV === 'production';
-const defaults = {
-  SDMS_B2CWebApp_url: isVercelProduction ? 'https://sdms-pi.vercel.app' : 'http://localhost:4200',
-  SDMS_AuthenticationWebApp_url: isVercelProduction ? 'https://sdms-production.up.railway.app' : 'https://localhost:7001',
-  SDMS_AuthenticationWebApp_clientid: 'sdms_frontend',
-  SDMS_AuthenticationWebApp_redirectUri: isVercelProduction ? 'https://sdms-pi.vercel.app/auth-callback' : 'http://localhost:4200/auth-callback',
-  SDMS_AuthenticationWebApp_scope: 'openid profile email roles api'
 };
 
 console.log('📋 Environment Variables Status:');
@@ -50,8 +38,8 @@ console.log('   VERCEL: ', process.env.VERCEL || 'not set');
 console.log('');
 
 // Check which environment variables are available
-let hasEnvVars = false;
 const appSettings = {};
+const missing = [];
 
 for (const [key, value] of Object.entries(envVars)) {
   // Check raw value from process.env
@@ -70,29 +58,40 @@ for (const [key, value] of Object.entries(envVars)) {
       : value.substring(0, Math.min(20, value.length));
     console.log(`     Preview: ${preview}`);
     appSettings[key] = value.trim();
-    hasEnvVars = true;
   } else {
-    console.log(`  ⚠️  ${key}: not set or empty, using default: ${defaults[key]}`);
-    appSettings[key] = defaults[key];
+    // redirectUri is optional - will be generated from B2CWebApp_url in code
+    if (key === 'SDMS_AuthenticationWebApp_redirectUri') {
+      console.log(`  ⚠️  ${key}: not set (will be generated from SDMS_B2CWebApp_url in code)`);
+    } else {
+      console.log(`  ❌ ${key}: not set or empty`);
+      missing.push(key);
+    }
   }
 }
 
 console.log('');
-if (hasEnvVars) {
-  console.log('✅ Found environment variables from Vercel');
-  console.log('   These values will be used in the build');
-} else {
-  console.log('⚠️  WARNING: No environment variables found, using defaults!');
-  console.log('   This means the application will use localhost URLs.');
+if (missing.length > 0) {
+  console.log('❌ ERROR: Missing required environment variables!');
+  console.log('');
+  console.log('   Missing variables:');
+  missing.forEach(key => {
+    console.log(`      - ${key}`);
+  });
   console.log('');
   console.log('   To fix this:');
   console.log('   1. Go to Vercel Dashboard → Your Project → Settings → Environment Variables');
-  console.log('   2. Make sure these variables are set for "Production" environment:');
+  console.log('   2. Set these variables for the appropriate environment:');
   Object.keys(envVars).forEach(key => {
     console.log(`      - ${key}`);
   });
   console.log('   3. The GitHub Actions workflow should sync these, but verify they exist in Vercel');
   console.log('   4. Redeploy after setting the variables');
+  console.log('');
+  console.log('   BREAKING CHANGE: No hardcoded defaults. Configuration is required.');
+  process.exit(1);
+} else {
+  console.log('✅ All required environment variables found');
+  console.log('   These values will be used in the build');
 }
 
 console.log('');

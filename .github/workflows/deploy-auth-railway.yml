@@ -210,6 +210,26 @@ jobs:
           SDMS_AuthenticationWebApp_PostLogoutRedirectUris: ${{ vars.SDMS_AuthenticationWebApp_PostLogoutRedirectUris }}
         working-directory: SDMSApps/SDMS.AuthenticationWebApp
         run: |
+          echo "=== Debug: Environment Variables from GitHub ==="
+          echo "Checking critical variables..."
+          if [ -z "$SDMS_AuthenticationWebApp_url" ]; then
+            echo "  SDMS_AuthenticationWebApp_url: ❌ EMPTY or NOT SET"
+          else
+            echo "  SDMS_AuthenticationWebApp_url: ✅ SET (length: ${#SDMS_AuthenticationWebApp_url})"
+            echo "    Preview: ${SDMS_AuthenticationWebApp_url:0:50}..."
+          fi
+          if [ -z "$SDMS_AuthenticationWebApp_clientid" ]; then
+            echo "  SDMS_AuthenticationWebApp_clientid: ❌ EMPTY or NOT SET"
+          else
+            echo "  SDMS_AuthenticationWebApp_clientid: ✅ SET (length: ${#SDMS_AuthenticationWebApp_clientid})"
+            echo "    Value: $SDMS_AuthenticationWebApp_clientid"
+          fi
+          if [ -z "$SDMS_B2CWebApp_url" ]; then
+            echo "  SDMS_B2CWebApp_url: ❌ EMPTY or NOT SET"
+          else
+            echo "  SDMS_B2CWebApp_url: ✅ SET (length: ${#SDMS_B2CWebApp_url})"
+          fi
+          echo ""
           echo "=== Syncing Railway Environment Variables ==="
           echo "Service ID: $SERVICE_ID"
           echo "Project ID: $PROJECT_ID"
@@ -365,6 +385,7 @@ jobs:
           # CRITICAL: SDMS_AuthenticationWebApp_url and clientid are used during Angular build
           declare -A VARS_TO_SYNC
           VARS_TO_SYNC["SDMS_AuthenticationWebApp_ConnectionString"]="$SDMS_AuthenticationWebApp_ConnectionString"
+          # CRITICAL VARIABLES - Must be set for Railway build to work
           VARS_TO_SYNC["SDMS_AuthenticationWebApp_url"]="$SDMS_AuthenticationWebApp_url"
           VARS_TO_SYNC["SDMS_AuthenticationWebApp_clientid"]="$SDMS_AuthenticationWebApp_clientid"
           VARS_TO_SYNC["SDMS_B2CWebApp_url"]="$SDMS_B2CWebApp_url"
@@ -405,6 +426,26 @@ jobs:
           CRITICAL_FAILED=0
           
           # Process each variable
+          echo "Processing ${#VARS_TO_SYNC[@]} variable(s) to sync..."
+          echo ""
+          echo "Variables in sync list:"
+          for VAR_NAME in "${!VARS_TO_SYNC[@]}"; do
+            GITHUB_VALUE="${VARS_TO_SYNC[$VAR_NAME]}"
+            if [ -z "$GITHUB_VALUE" ]; then
+              echo "  - $VAR_NAME: ❌ NOT SET in GitHub Variables"
+            else
+              # Show first 30 chars for security
+              PREVIEW="${GITHUB_VALUE:0:30}"
+              if [ ${#GITHUB_VALUE} -gt 30 ]; then
+                PREVIEW="${PREVIEW}..."
+              fi
+              echo "  - $VAR_NAME: ✅ SET ($PREVIEW)"
+            fi
+          done
+          echo ""
+          echo "Starting sync process..."
+          echo ""
+          
           for VAR_NAME in "${!VARS_TO_SYNC[@]}"; do
             GITHUB_VALUE="${VARS_TO_SYNC[$VAR_NAME]}"
             
@@ -427,20 +468,26 @@ jobs:
             
             if [ -z "$RAILWAY_VALUE" ]; then
               # Variable doesn't exist - INSERT
+              echo -n "  Processing $VAR_NAME... "
               if set_railway_env "$VAR_NAME" "$GITHUB_VALUE" "insert"; then
                 INSERTED_VARS+=("$VAR_NAME")
+                echo "✅ INSERTED"
               else
                 FAILED_VARS+=("$VAR_NAME")
+                echo "❌ FAILED"
                 if [ "$VAR_NAME" = "SDMS_AuthenticationWebApp_ConnectionString" ]; then
                   CRITICAL_FAILED=1
                 fi
               fi
             elif [ "$RAILWAY_VALUE" != "$GITHUB_VALUE" ]; then
               # Variable exists but value is different - UPDATE
+              echo -n "  Processing $VAR_NAME... "
               if set_railway_env "$VAR_NAME" "$GITHUB_VALUE" "update"; then
                 UPDATED_VARS+=("$VAR_NAME")
+                echo "✅ UPDATED"
               else
                 FAILED_VARS+=("$VAR_NAME")
+                echo "❌ FAILED"
                 if [ "$VAR_NAME" = "SDMS_AuthenticationWebApp_ConnectionString" ]; then
                   CRITICAL_FAILED=1
                 fi

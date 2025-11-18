@@ -6,6 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>SDMS.AuthenticationWebApp</AssemblyName>
     <RootNamespace>SDMS.AuthenticationWebApp</RootNamespace>
+    <!-- Exclude dist folder from automatic Content inclusion to avoid duplicates -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);ClientApp\dist\**\*</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>

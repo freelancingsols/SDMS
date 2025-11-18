@@ -73,19 +73,51 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
-// Final validation: Check if using localhost in production-like environment
-const isProductionLike = process.env.NODE_ENV === 'production' || 
-                         process.env.RAILWAY_ENVIRONMENT || 
-                         process.env.VERCEL || 
-                         !process.env.NODE_ENV;
-                         
-if (isProductionLike && appSettingsConfig.SDMS_AuthenticationWebApp_url && 
-    appSettingsConfig.SDMS_AuthenticationWebApp_url.includes('localhost')) {
+// Final validation: Check if using localhost in production environment
+// Railway/Vercel builds: Only fail if we're CERTAIN it's a deployment build AND using localhost
+// Railway sets RAILWAY_ENVIRONMENT, RAILWAY_PROJECT_ID, or PORT during builds
+const isRailwayBuild = !!(process.env.RAILWAY_ENVIRONMENT || 
+                          process.env.RAILWAY_PROJECT_ID || 
+                          (process.env.PORT && !process.env.NODE_ENV));
+const isVercelBuild = !!process.env.VERCEL;
+const isCI = !!process.env.CI;
+// Consider it production if we're in Railway/Vercel/CI AND not explicitly in development
+const isProductionBuild = (isRailwayBuild || isVercelBuild || isCI) && 
+                          process.env.NODE_ENV !== 'development';
+
+// Only fail if:
+// 1. We're in a production build environment (Railway/Vercel/CI)
+// 2. AND the URL is localhost
+// 3. AND the environment variable was NOT set (meaning it truly fell back to appsettings.json)
+const envVarWasSet = !!process.env.SDMS_AuthenticationWebApp_url;
+const isLocalhost = appSettingsConfig.SDMS_AuthenticationWebApp_url && 
+                    appSettingsConfig.SDMS_AuthenticationWebApp_url.includes('localhost');
+
+if (isProductionBuild && isLocalhost && !envVarWasSet) {
   console.error('❌ ERROR: localhost URL detected in production build!');
   console.error('   URL:', appSettingsConfig.SDMS_AuthenticationWebApp_url);
-  console.error('   This should not happen in production.');
-  console.error('   Ensure SDMS_AuthenticationWebApp_url environment variable is set to production URL.');
-  console.error('   For Railway: Set in Railway dashboard → Variables tab');
+  console.error('   Environment: Railway/Vercel/CI detected');
+  console.error('   Issue: SDMS_AuthenticationWebApp_url environment variable was not set during build');
+  console.error('');
+  console.error('   Debug Info:');
+  console.error('     RAILWAY_ENVIRONMENT:', process.env.RAILWAY_ENVIRONMENT || 'not set');
+  console.error('     RAILWAY_PROJECT_ID:', process.env.RAILWAY_PROJECT_ID || 'not set');
+  console.error('     PORT:', process.env.PORT || 'not set');
+  console.error('     NODE_ENV:', process.env.NODE_ENV || 'not set');
+  console.error('     CI:', process.env.CI || 'not set');
+  console.error('');
+  console.error('   Solution:');
+  console.error('   1. For Railway: Set SDMS_AuthenticationWebApp_url in Railway dashboard → Variables tab');
+  console.error('   2. For CI/CD: Ensure GitHub Variables are set and synced to Railway before build');
+  console.error('   3. The deployment workflow should sync variables, but verify they exist in Railway');
+  console.error('   4. Variables must be set in Railway BEFORE the build starts');
+  process.exit(1);
+} else if (isProductionBuild && isLocalhost && envVarWasSet) {
+  // Environment variable was set but still contains localhost - this is a configuration error
+  console.error('❌ ERROR: SDMS_AuthenticationWebApp_url environment variable is set to localhost!');
+  console.error('   URL:', appSettingsConfig.SDMS_AuthenticationWebApp_url);
+  console.error('   This should be set to your production Railway URL (e.g., https://your-app.railway.app)');
+  console.error('   Update the environment variable in Railway dashboard → Variables tab');
   process.exit(1);
 }
 

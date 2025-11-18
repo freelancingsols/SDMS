@@ -12,7 +12,10 @@ cmds = [
 
 [phases.build]
 cmds = [
-  "cd ClientApp && npm run build -- --configuration production && cd ..",
+  "echo '🔧 Building Angular ClientApp with environment variables...'",
+  "echo 'SDMS_AuthenticationWebApp_url='${SDMS_AuthenticationWebApp_url:-NOT_SET}",
+  "echo 'SDMS_AuthenticationWebApp_clientid='${SDMS_AuthenticationWebApp_clientid:-NOT_SET}",
+  "cd ClientApp && npm run build:prod && cd ..",
   "dotnet build -c Release",
   "dotnet publish -c Release -o ./publish",
   "echo 'Copying Angular dist files...'",

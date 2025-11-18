@@ -339,6 +339,14 @@ jobs:
 
       - name: Build Angular app
         working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
+        env:
+          # CRITICAL: These are used during build to generate appsettings.json
+          # They are synced to Vercel above, and also passed here for local build validation
+          SDMS_B2CWebApp_url: ${{ vars.SDMS_B2CWebApp_url }}
+          SDMS_AuthenticationWebApp_url: ${{ vars.SDMS_AuthenticationWebApp_url }}
+          SDMS_AuthenticationWebApp_clientid: ${{ vars.SDMS_AuthenticationWebApp_clientid }}
+          SDMS_AuthenticationWebApp_redirectUri: ${{ vars.SDMS_AuthenticationWebApp_redirectUri }}
+          SDMS_AuthenticationWebApp_scope: ${{ vars.SDMS_AuthenticationWebApp_scope }}
         run: npm run build
 
       - name: Verify Vercel project settings before deployment

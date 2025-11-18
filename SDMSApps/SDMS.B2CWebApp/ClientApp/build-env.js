@@ -21,12 +21,35 @@ if (fs.existsSync(rootAppSettingsPath)) {
   try {
     const rootAppSettings = JSON.parse(fs.readFileSync(rootAppSettingsPath, 'utf8'));
     
+    // Log environment variable status
+    console.log('📋 Environment Variables Status:');
+    const envUrl = process.env.SDMS_AuthenticationWebApp_url;
+    const envB2CUrl = process.env.SDMS_B2CWebApp_url;
+    const envClientId = process.env.SDMS_AuthenticationWebApp_clientid;
+    
+    console.log(`  SDMS_AuthenticationWebApp_url: ${envUrl ? '✅ Environment Variable' : '⚠️  Fallback to appsettings.json'}`);
+    console.log(`  SDMS_B2CWebApp_url: ${envB2CUrl ? '✅ Environment Variable' : '⚠️  Fallback to appsettings.json'}`);
+    console.log(`  SDMS_AuthenticationWebApp_clientid: ${envClientId ? '✅ Environment Variable' : '⚠️  Fallback to appsettings.json'}`);
+    console.log('');
+    
     // Use values from environment variables if provided (Vercel deployment), otherwise use appsettings.json values
     appSettingsConfig.SDMS_B2CWebApp_url = process.env.SDMS_B2CWebApp_url || rootAppSettings.SDMS_B2CWebApp_url;
     appSettingsConfig.SDMS_AuthenticationWebApp_url = process.env.SDMS_AuthenticationWebApp_url || rootAppSettings.SDMS_AuthenticationWebApp_url;
     appSettingsConfig.SDMS_AuthenticationWebApp_clientid = process.env.SDMS_AuthenticationWebApp_clientid || rootAppSettings.SDMS_AuthenticationWebApp_clientid;
     appSettingsConfig.SDMS_AuthenticationWebApp_redirectUri = process.env.SDMS_AuthenticationWebApp_redirectUri || rootAppSettings.SDMS_AuthenticationWebApp_redirectUri;
     appSettingsConfig.SDMS_AuthenticationWebApp_scope = process.env.SDMS_AuthenticationWebApp_scope || rootAppSettings.SDMS_AuthenticationWebApp_scope;
+    
+    // Warn if using localhost in production-like environment
+    if (appSettingsConfig.SDMS_AuthenticationWebApp_url && appSettingsConfig.SDMS_AuthenticationWebApp_url.includes('localhost')) {
+      const isVercel = !!process.env.VERCEL;
+      const isCI = !!process.env.CI;
+      if (isVercel || (isCI && !process.env.NODE_ENV)) {
+        console.warn('⚠️  WARNING: Using localhost URL in build!');
+        console.warn('   URL:', appSettingsConfig.SDMS_AuthenticationWebApp_url);
+        console.warn('   This should not happen in production.');
+        console.warn('   Ensure SDMS_AuthenticationWebApp_url environment variable is set in Vercel.');
+      }
+    }
     
     console.log('Loaded appsettings from root appsettings.json (with environment variable overrides)');
   } catch (error) {

@@ -1,5 +1,10 @@
 name: Deploy Authentication WebApp to Railway
 
+# Concurrency: Cancel in-progress runs when a new one starts (saves Actions minutes)
+concurrency:
+  group: deploy-auth-railway-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   workflow_run:
     workflows: ["CI - Authentication WebApp (Build, Test, and Lint)"]
@@ -13,6 +18,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 30  # Prevent long-running jobs
     # Deployment rules:
     # 1. For workflow_run: Only deploy if CI succeeded AND CI ran on release branch
     # 2. For workflow_dispatch: Allow manual deployment from any branch
@@ -129,12 +135,13 @@ jobs:
           # For workflow_run trigger, use the commit SHA from the CI workflow
           # For manual dispatch, use the default branch/ref
           ref: ${{ github.event.workflow_run.head_sha || github.ref }}
-          fetch-depth: 0  # Fetch full history for better operations
+          fetch-depth: 1  # Only fetch current commit (saves time and Actions minutes)
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+          cache-dotnet: true  # Cache .NET dependencies (saves Actions minutes)
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -143,15 +150,11 @@ jobs:
           cache: 'npm'
           cache-dependency-path: SDMSApps/SDMS.AuthenticationWebApp/ClientApp/package.json
 
-      - name: Clean old node_modules
-        working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
-        run: |
-          rm -f package-lock.json
-          rm -rf node_modules || true
-
       - name: Install Angular dependencies
         working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
-        run: npm install --legacy-peer-deps
+        run: |
+          # Use npm ci for faster, reliable installs (cache handles node_modules)
+          npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
       - name: Build Angular app
         working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp

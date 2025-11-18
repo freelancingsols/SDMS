@@ -1,5 +1,10 @@
 name: Create PR from Stage to Release
 
+# Concurrency: Cancel in-progress runs when a new one starts
+concurrency:
+  group: create-pr-stage-to-release
+  cancel-in-progress: true
+
 # This workflow ONLY runs on manual dispatch - it will NEVER auto-trigger
 on:
   workflow_dispatch:
@@ -16,6 +21,7 @@ on:
 jobs:
   create-pr:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Prevent long-running jobs
     permissions:
       contents: write  # Needed to create PRs
       pull-requests: write  # Needed to create/update PRs
@@ -39,7 +45,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: stage
-          fetch-depth: 0
+          fetch-depth: 1  # Only fetch current commit (saves time and Actions minutes)
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Git
@@ -50,7 +56,12 @@ jobs:
       - name: Verify branches exist
         run: |
           echo "🔍 Verifying branches exist..."
-          git fetch origin stage release || true
+          # Fetch both branches explicitly
+          git fetch origin stage:refs/remotes/origin/stage 2>&1 || echo "Warning: Could not fetch stage branch"
+          git fetch origin release:refs/remotes/origin/release 2>&1 || echo "Warning: Could not fetch release branch"
+          
+          # Also try standard fetch
+          git fetch origin stage release 2>&1 || true
           
           if ! git show-ref --verify --quiet refs/remotes/origin/stage; then
             echo "❌ Error: stage branch does not exist"
@@ -126,11 +137,12 @@ jobs:
           
           # Check B2C WebApp CI status for the current stage HEAD
           echo "📋 Checking B2C WebApp CI for stage branch..."
+          # Use workflow name instead of filename for better matching
           B2C_CI=$(gh run list \
             --branch stage \
-            --workflow "ci-b2c-webapp.yml" \
+            --workflow "CI - B2C WebApp (Build, Test, and Lint)" \
             --limit 5 \
-            --json conclusion,headSha,status,createdAt \
+            --json conclusion,headSha,status,createdAt,workflowName \
             --jq '.[] | select(.headSha == "'"$STAGE_SHA"'") | .' 2>&1 | head -1) || B2C_CI=""
           
           # If no exact match, get the latest run (might be for a different commit)
@@ -138,9 +150,9 @@ jobs:
             echo "  ℹ️  No CI run found for exact commit, checking latest run..."
             B2C_CI=$(gh run list \
               --branch stage \
-              --workflow "ci-b2c-webapp.yml" \
+              --workflow "CI - B2C WebApp (Build, Test, and Lint)" \
               --limit 1 \
-              --json conclusion,headSha,status \
+              --json conclusion,headSha,status,workflowName \
               --jq '.[0]' 2>&1) || B2C_CI=""
           fi
           
@@ -167,11 +179,12 @@ jobs:
           
           # Check Authentication WebApp CI status for the current stage HEAD
           echo "📋 Checking Authentication WebApp CI for stage branch..."
+          # Use workflow name instead of filename for better matching
           AUTH_CI=$(gh run list \
             --branch stage \
-            --workflow "ci-authentication-webapp.yml" \
+            --workflow "CI - Authentication WebApp (Build, Test, and Lint)" \
             --limit 5 \
-            --json conclusion,headSha,status,createdAt \
+            --json conclusion,headSha,status,createdAt,workflowName \
             --jq '.[] | select(.headSha == "'"$STAGE_SHA"'") | .' 2>&1 | head -1) || AUTH_CI=""
           
           # If no exact match, get the latest run (might be for a different commit)
@@ -179,9 +192,9 @@ jobs:
             echo "  ℹ️  No CI run found for exact commit, checking latest run..."
             AUTH_CI=$(gh run list \
               --branch stage \
-              --workflow "ci-authentication-webapp.yml" \
+              --workflow "CI - Authentication WebApp (Build, Test, and Lint)" \
               --limit 1 \
-              --json conclusion,headSha,status \
+              --json conclusion,headSha,status,workflowName \
               --jq '.[0]' 2>&1) || AUTH_CI=""
           fi
           

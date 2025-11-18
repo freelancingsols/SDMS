@@ -17,6 +17,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 20  # Prevent long-running jobs
     if: |
       (github.event_name == 'workflow_run' && 
        github.event.workflow_run.conclusion == 'success' && 
@@ -166,10 +167,6 @@ jobs:
           else
             echo "✅ All required secrets and variables are present"
           fi
-
-      - name: Clean modules only
-        working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
-        run: rm -rf node_modules || true
 
       - name: Create Vercel project configuration
         working-directory: SDMSApps/SDMS.B2CWebApp
@@ -336,7 +333,9 @@ jobs:
 
       - name: Install dependencies
         working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
-        run: npm ci
+        run: |
+          # Use npm ci for faster, reliable installs (cache handles node_modules)
+          npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
       - name: Build Angular app
         working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp

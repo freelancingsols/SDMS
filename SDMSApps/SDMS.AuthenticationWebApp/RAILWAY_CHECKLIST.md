@@ -27,7 +27,7 @@ Go to your service → Variables tab and add:
 
 ### Required Variables
 - [ ] `SDMS_AuthenticationWebApp_ConnectionString` = PostgreSQL connection string (or Railway auto-sets `POSTGRES_CONNECTION`)
-- [ ] `SDMS_AuthenticationWebApp_FrontendUrl` = Your Vercel frontend URL (e.g., `https://your-app.vercel.app`)
+- [ ] `SDMS_B2CWebApp_url` = Your Vercel frontend URL (e.g., `https://your-app.vercel.app`)
 - [ ] `SDMS_AuthenticationWebApp_LoginUrl` = `/login`
 - [ ] `SDMS_AuthenticationWebApp_LogoutUrl` = `/logout`
 - [ ] `SDMS_AuthenticationWebApp_ErrorUrl` = `/login`
@@ -120,7 +120,7 @@ If deployment fails:
 - **Solution:** Verify PORT environment variable (Railway sets this automatically)
 
 ### CORS Errors
-- **Solution:** Update `SDMS_AuthenticationWebApp_FrontendUrl` to actual frontend URL
+- **Solution:** Update `SDMS_B2CWebApp_url` to actual frontend URL
 - **Solution:** Check CORS configuration in Program.cs
 
 ## Success Criteria

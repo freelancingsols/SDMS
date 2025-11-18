@@ -62,8 +62,13 @@ export class AppSettings {
   }
 
   static get SDMS_AuthenticationWebApp_redirectUri(): string {
+    // Generate from B2CWebApp_url if not explicitly set
     if (!this._sdmsAuthenticationWebAppRedirectUri) {
-      throw new Error('SDMS_AuthenticationWebApp_redirectUri is not configured. Ensure appsettings.json exists or environment variables are set.');
+      if (!this._sdmsB2CWebAppUrl) {
+        throw new Error('SDMS_B2CWebApp_url is not configured. Cannot generate redirectUri. Ensure appsettings.json exists or environment variables are set.');
+      }
+      // Generate redirectUri from B2CWebApp_url
+      return `${this._sdmsB2CWebAppUrl}/auth-callback`;
     }
     return this._sdmsAuthenticationWebAppRedirectUri;
   }
@@ -127,9 +132,8 @@ export class AppSettings {
       this._sdmsAuthenticationWebAppClientId = config.SDMS_AuthenticationWebApp_clientid;
     }
     
-    if (!config.SDMS_AuthenticationWebApp_redirectUri) {
-      missing.push('SDMS_AuthenticationWebApp_redirectUri');
-    } else {
+    // redirectUri is optional - will be generated from B2CWebApp_url if not provided
+    if (config.SDMS_AuthenticationWebApp_redirectUri) {
       this._sdmsAuthenticationWebAppRedirectUri = config.SDMS_AuthenticationWebApp_redirectUri;
     }
     

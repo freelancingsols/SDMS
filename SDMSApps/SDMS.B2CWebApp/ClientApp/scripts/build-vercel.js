@@ -21,11 +21,12 @@ const environmentPath = path.join(__dirname, '..', 'src', 'environments', 'envir
 
 // Environment variables to check
 // BREAKING CHANGE: No hardcoded defaults. Environment variables must be set.
+// Note: redirectUri is optional - will be generated from B2CWebApp_url in code if not set
 const envVars = {
   SDMS_B2CWebApp_url: process.env.SDMS_B2CWebApp_url,
   SDMS_AuthenticationWebApp_url: process.env.SDMS_AuthenticationWebApp_url,
   SDMS_AuthenticationWebApp_clientid: process.env.SDMS_AuthenticationWebApp_clientid,
-  SDMS_AuthenticationWebApp_redirectUri: process.env.SDMS_AuthenticationWebApp_redirectUri,
+  SDMS_AuthenticationWebApp_redirectUri: process.env.SDMS_AuthenticationWebApp_redirectUri, // Optional - generated in code if not set
   SDMS_AuthenticationWebApp_scope: process.env.SDMS_AuthenticationWebApp_scope
 };
 
@@ -58,8 +59,13 @@ for (const [key, value] of Object.entries(envVars)) {
     console.log(`     Preview: ${preview}`);
     appSettings[key] = value.trim();
   } else {
-    console.log(`  ❌ ${key}: not set or empty`);
-    missing.push(key);
+    // redirectUri is optional - will be generated from B2CWebApp_url in code
+    if (key === 'SDMS_AuthenticationWebApp_redirectUri') {
+      console.log(`  ⚠️  ${key}: not set (will be generated from SDMS_B2CWebApp_url in code)`);
+    } else {
+      console.log(`  ❌ ${key}: not set or empty`);
+      missing.push(key);
+    }
   }
 }
 

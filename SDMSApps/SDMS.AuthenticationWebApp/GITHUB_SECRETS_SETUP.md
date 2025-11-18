@@ -15,7 +15,7 @@ Add the following secrets in your GitHub repository (Settings → Secrets and va
   - Priority: `SDMS_AuthenticationWebApp_ConnectionString` > `POSTGRES_CONNECTION` > Default
 
 ### Frontend Configuration
-- `SDMS_AuthenticationWebApp_FrontendUrl` - Frontend application URL (for CORS)
+- `SDMS_B2CWebApp_url` - B2C WebApp URL (used for CORS and redirect URIs)
   - Example: `https://your-frontend-domain.com`
 
 ### Authentication URLs
@@ -86,7 +86,7 @@ The GitHub Actions workflow automatically sets these environment variables in Ra
 SDMS_AuthenticationWebApp_ConnectionString
 
 # Frontend Configuration
-SDMS_AuthenticationWebApp_FrontendUrl
+SDMS_B2CWebApp_url
 
 # Authentication URLs
 SDMS_AuthenticationWebApp_LoginUrl

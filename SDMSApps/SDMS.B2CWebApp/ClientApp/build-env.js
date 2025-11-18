@@ -49,11 +49,12 @@ if (fs.existsSync(rootAppSettingsPath)) {
 }
 
 // Validate required configuration
+// Note: redirectUri is optional - will be generated from B2CWebApp_url in code if not set
 const missing = [];
 if (!appSettingsConfig.SDMS_B2CWebApp_url) missing.push('SDMS_B2CWebApp_url');
 if (!appSettingsConfig.SDMS_AuthenticationWebApp_url) missing.push('SDMS_AuthenticationWebApp_url');
 if (!appSettingsConfig.SDMS_AuthenticationWebApp_clientid) missing.push('SDMS_AuthenticationWebApp_clientid');
-if (!appSettingsConfig.SDMS_AuthenticationWebApp_redirectUri) missing.push('SDMS_AuthenticationWebApp_redirectUri');
+// redirectUri is optional - generated from B2CWebApp_url in AppSettings if not provided
 if (!appSettingsConfig.SDMS_AuthenticationWebApp_scope) missing.push('SDMS_AuthenticationWebApp_scope');
 
 if (missing.length > 0) {

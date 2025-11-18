@@ -2,8 +2,6 @@ RAILWAY_PROJECT_ID = your-railway-project-id-here
 
 RAILWAY_SERVICE_ID = your-railway-service-id-here
 
-SDMS_AuthenticationWebApp_FrontendUrl = https://your-frontend-domain.com
-
 SDMS_AuthenticationWebApp_ServerUrls = https://your-auth-domain.com;http://your-auth-domain.com
 
 SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri = https://your-frontend-domain.com/auth-callback
@@ -37,6 +35,7 @@ SDMS_AuthenticationWebApp_url = https://your-auth-domain.railway.app
 SDMS_AuthenticationWebApp_clientid = sdms_frontend
 
 SDMS_AuthenticationWebApp_redirectUri = https://your-b2c-domain.vercel.app/auth-callback
+# Note: redirectUri is optional - will be generated from SDMS_B2CWebApp_url + "/auth-callback" in code if not set
 
 SDMS_AuthenticationWebApp_scope = openid profile email roles api
 

@@ -258,8 +258,7 @@ builder.Services.AddHttpClient();
 
 // CORS
 // BREAKING CHANGE: No hardcoded defaults. Configuration must be provided.
-var frontendUrl = builder.Configuration[ConfigurationKeys.FrontendUrl] 
-    ?? throw new InvalidOperationException($"Missing required configuration: {ConfigurationKeys.FrontendUrl}. Set in appsettings.json or environment variable.");
+// Use consistent naming: SDMS_B2CWebApp_url (no ambiguous FrontendUrl)
 var b2cUrl = builder.Configuration["SDMS_B2CWebApp_url"] 
     ?? throw new InvalidOperationException("Missing required configuration: SDMS_B2CWebApp_url. Set in appsettings.json or environment variable.");
 builder.Services.AddCors(options =>
@@ -271,12 +270,6 @@ builder.Services.AddCors(options =>
             "http://localhost:4200",
             "https://localhost:4200"
         };
-        
-        // Add frontend URL if not already in list
-        if (!string.IsNullOrEmpty(frontendUrl) && !origins.Contains(frontendUrl))
-        {
-            origins.Add(frontendUrl);
-        }
         
         // Add B2C URL if not already in list
         if (!string.IsNullOrEmpty(b2cUrl) && !origins.Contains(b2cUrl))

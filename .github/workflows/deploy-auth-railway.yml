@@ -389,6 +389,13 @@ jobs:
           echo "🔄 Comparing and syncing variables..."
           echo ""
           
+          # Log GitHub Variable status for critical variables
+          echo "📋 GitHub Variables Status:"
+          echo "  SDMS_AuthenticationWebApp_url: ${SDMS_AuthenticationWebApp_url:-❌ NOT SET}"
+          echo "  SDMS_AuthenticationWebApp_clientid: ${SDMS_AuthenticationWebApp_clientid:-❌ NOT SET}"
+          echo "  SDMS_B2CWebApp_url: ${SDMS_B2CWebApp_url:-❌ NOT SET}"
+          echo ""
+          
           # Track results
           INSERTED_VARS=()
           UPDATED_VARS=()
@@ -403,7 +410,14 @@ jobs:
             
             # Skip if GitHub value is empty (optional variable)
             if [ -z "$GITHUB_VALUE" ]; then
-              echo "  ⏭️  Skipping $VAR_NAME (not set in GitHub Variables)"
+              # Check if this is a critical variable
+              if [ "$VAR_NAME" = "SDMS_AuthenticationWebApp_url" ] || [ "$VAR_NAME" = "SDMS_AuthenticationWebApp_clientid" ]; then
+                echo "  ⚠️  WARNING: Skipping CRITICAL variable $VAR_NAME (not set in GitHub Variables)"
+                echo "     This variable is required for Railway build to work correctly!"
+                echo "     Please set it in GitHub → Settings → Secrets and variables → Actions → Variables"
+              else
+                echo "  ⏭️  Skipping $VAR_NAME (not set in GitHub Variables - optional)"
+              fi
               SKIPPED_VARS+=("$VAR_NAME")
               continue
             fi

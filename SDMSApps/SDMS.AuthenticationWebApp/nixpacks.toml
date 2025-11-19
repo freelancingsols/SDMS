@@ -2,12 +2,22 @@
 # This file configures the build process
 
 [phases.setup]
-nixPkgs = ["dotnet-sdk_8", "nodejs-20_x"]
+nixPkgs = ["dotnet-sdk_8"]
 
 [phases.install]
 cmds = [
+  "echo 'Installing Node.js 20...'",
+  "NODE_VERSION=20.18.0",
+  "curl -fsSL https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz -o node.tar.xz",
+  "tar -xJf node.tar.xz",
+  "mkdir -p $HOME/nodejs",
+  "mv node-v${NODE_VERSION}-linux-x64 $HOME/nodejs/node",
+  "export PATH=\"$HOME/nodejs/node/bin:$PATH\"",
+  "echo 'Node.js installed to:' $HOME/nodejs/node",
+  "node --version",
+  "npm --version",
   "cd ClientApp && npm install --legacy-peer-deps",
-  "dotnet restore"
+  "cd .. && dotnet restore"
 ]
 
 [phases.build]
@@ -26,6 +36,11 @@ cmds = [
   "[ -z \"${SDMS_AuthenticationWebApp_url}\" ] && echo '❌ ERROR: SDMS_AuthenticationWebApp_url environment variable is not set!' && echo '   Please set this variable in Railway Dashboard → Variables tab' && echo '   Variable name: SDMS_AuthenticationWebApp_url' && echo '   Value should be: https://sdms-production.up.railway.app (or your Railway URL)' && exit 1 || true",
   "[ -z \"${SDMS_AuthenticationWebApp_clientid}\" ] && echo '❌ ERROR: SDMS_AuthenticationWebApp_clientid environment variable is not set!' && echo '   Please set this variable in Railway Dashboard → Variables tab' && echo '   Variable name: SDMS_AuthenticationWebApp_clientid' && echo '   Value should be: sdms_frontend' && exit 1 || true",
   "echo '✅ Environment variables are set'",
+  "echo ''",
+  "echo '=== Verifying Node.js version ==='",
+  "export PATH=\"$HOME/nodejs/node/bin:$PATH\"",
+  "node --version",
+  "npm --version",
   "echo ''",
   "echo '=== Starting Angular Build ==='",
   "cd ClientApp && npm run build:prod && cd ..",

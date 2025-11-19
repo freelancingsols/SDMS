@@ -1,81 +1,69 @@
-/* You can add global styles to this file, and also import other style files */
+/* Add this to your existing styles.css */
 
-/* Angular Material Theme */
-@import '@angular/material/prebuilt-themes/indigo-pink.css';
-
-/* Global Styles */
-* {
-  box-sizing: border-box;
+/* Snackbar/Toast Notification Styles */
+.success-snackbar {
+  background-color: #4caf50 !important;
+  color: white !important;
 }
 
-html, body {
-  margin: 0;
-  padding: 0;
-  height: 100%;
+.success-snackbar .mat-mdc-snack-bar-action {
+  color: white !important;
+}
+
+.error-snackbar {
+  background-color: #f44336 !important;
+  color: white !important;
+}
+
+.error-snackbar .mat-mdc-snack-bar-action {
+  color: white !important;
+}
+
+.warning-snackbar {
+  background-color: #ff9800 !important;
+  color: white !important;
+}
+
+.warning-snackbar .mat-mdc-snack-bar-action {
+  color: white !important;
+}
+
+.info-snackbar {
+  background-color: #2196f3 !important;
+  color: white !important;
+}
+
+.info-snackbar .mat-mdc-snack-bar-action {
+  color: white !important;
+}
+
+/* Global Loading Overlay */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
   width: 100%;
-  font-family: Roboto, "Helvetica Neue", sans-serif;
-  overflow: hidden;
-}
-
-app-root {
-  display: block;
   height: 100%;
-  width: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
 }
 
-/* Material Design Overrides */
-.mat-toolbar {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+.loading-overlay-content {
+  background: white;
+  padding: 2rem;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
 }
 
-.mat-card {
-  margin: 16px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  transition: box-shadow 0.3s ease;
-}
-
-.mat-card:hover {
-  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
-}
-
-/* Custom button styles */
-.mat-raised-button {
-  margin: 8px;
-}
-
-/* Spacing utilities */
-.spacer {
-  flex: 1 1 auto;
-}
-
-/* Container */
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 16px;
-}
-
-/* Smooth transitions */
-* {
-  transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-/* Scrollbar styling */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #555;
+.loading-overlay-message {
+  color: #333;
+  font-size: 16px;
+  font-weight: 500;
 }

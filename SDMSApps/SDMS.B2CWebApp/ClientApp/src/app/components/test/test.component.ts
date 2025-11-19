@@ -3,6 +3,8 @@ import { Router } from '@angular/router';
 import { AuthorizeService } from '../../auth/authorize.service';
 import { AuthService, UserInfo } from '../../services/auth.service';
 import { OAuthService } from 'angular-oauth2-oidc';
+import { NotificationService } from '../../services/notification.service';
+import { LoadingService } from '../../services/loading.service';
 import { Subscription } from 'rxjs';
 
 @Component({
@@ -22,7 +24,9 @@ export class TestComponent implements OnInit, OnDestroy {
     private router: Router,
     private authorizeService: AuthorizeService,
     private authService: AuthService,
-    private oauthService: OAuthService
+    private oauthService: OAuthService,
+    private notificationService: NotificationService,
+    private loadingService: LoadingService
   ) { }
 
   async ngOnInit() {
@@ -124,36 +128,43 @@ export class TestComponent implements OnInit, OnDestroy {
 
   public async refreshUserInfo() {
     this.isLoading = true;
+    this.loadingService.show('Refreshing user information...');
     try {
       await this.authService.loadUserProfile();
       this.loadTokenInfo();
+      this.notificationService.showSuccess('User information refreshed successfully');
     } catch (error) {
       console.error('Error refreshing user info:', error);
+      this.notificationService.showError('Failed to refresh user information');
     } finally {
       this.isLoading = false;
+      this.loadingService.hide();
     }
   }
 
   public async refreshToken() {
     this.isLoading = true;
+    this.loadingService.show('Refreshing token...');
     try {
       const success = await this.authService.refreshToken();
       if (success) {
         this.loadTokenInfo();
-        alert('Token refreshed successfully!');
+        this.notificationService.showSuccess('Token refreshed successfully');
       } else {
-        alert('Failed to refresh token. Please login again.');
+        this.notificationService.showWarning('Failed to refresh token. Please login again.');
       }
     } catch (error) {
       console.error('Error refreshing token:', error);
-      alert('Error refreshing token');
+      this.notificationService.showError('Error refreshing token');
     } finally {
       this.isLoading = false;
+      this.loadingService.hide();
     }
   }
 
   public async logout() {
     this.isLoading = true;
+    this.loadingService.show('Logging out...');
     try {
       this.username = '';
       this.userInfo = null;
@@ -162,12 +173,15 @@ export class TestComponent implements OnInit, OnDestroy {
       await this.authorizeService.signOut({ returnUrl: '/' });
       await new Promise(resolve => setTimeout(resolve, 300));
       
+      this.notificationService.showInfo('You have been logged out successfully');
       this.router.navigate(['/'], { replaceUrl: true });
     } catch (error) {
       console.error('Error during logout:', error);
+      this.notificationService.showError('Error during logout');
       this.router.navigate(['/'], { replaceUrl: true });
     } finally {
       this.isLoading = false;
+      this.loadingService.hide();
     }
   }
 }

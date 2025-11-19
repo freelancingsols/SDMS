@@ -5,7 +5,7 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "dotnet SDMS.AuthenticationWebApp.dll"
+startCommand = "cd /app/publish && dotnet SDMS.AuthenticationWebApp.dll"
 healthcheckPath = "/ping"
 healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"

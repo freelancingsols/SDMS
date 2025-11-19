@@ -44,8 +44,9 @@ FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
 
-# Set environment variable for port (Railway uses PORT env var)
-ENV ASPNETCORE_URLS=http://+:${PORT:-8080}
+# Railway sets PORT environment variable automatically
+# ASP.NET Core will use it via ASPNETCORE_URLS or PORT
+ENV ASPNETCORE_URLS=http://+:8080
 
 # Start the application
 ENTRYPOINT ["dotnet", "SDMS.AuthenticationWebApp.dll"]

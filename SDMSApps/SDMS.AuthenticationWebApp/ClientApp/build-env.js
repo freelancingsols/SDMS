@@ -32,6 +32,11 @@ if (fs.existsSync(rootAppSettingsPath)) {
     console.log('📋 Configuration Source:');
     console.log(`  SDMS_AuthenticationWebApp_url: ${envUrl ? '✅ Environment Variable' : '⚠️  Fallback to appsettings.json'}`);
     console.log(`  SDMS_AuthenticationWebApp_clientid: ${envClientId ? '✅ Environment Variable' : '⚠️  Fallback to appsettings.json'}`);
+    if (envUrl) {
+      console.log(`  ✅ Using Railway URL: ${envUrl}`);
+    } else {
+      console.log(`  ⚠️  Using fallback URL: ${appSettingsConfig.SDMS_AuthenticationWebApp_url}`);
+    }
     
     // Warn if using localhost in what appears to be a production build
     if (appSettingsConfig.SDMS_AuthenticationWebApp_url && appSettingsConfig.SDMS_AuthenticationWebApp_url.includes('localhost')) {

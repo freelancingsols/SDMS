@@ -135,6 +135,13 @@ export class LoginComponent implements OnInit {
     });
   }
 
+  public retryLogin() {
+    // Clear any error messages and retry login
+    this.message.next(null);
+    const returnUrl = this.getReturnUrl();
+    this.login(returnUrl);
+  }
+
   private getReturnUrl(state?: INavigationState): string {
     const fromQuery = (this.activatedRoute.snapshot.queryParams as INavigationState).returnUrl;
     // If the url is comming from the query string, check that is either

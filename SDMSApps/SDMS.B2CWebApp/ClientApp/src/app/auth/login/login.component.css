@@ -1,0 +1,198 @@
+.login-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.login-card {
+  max-width: 500px;
+  width: 100%;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+}
+
+.login-card mat-card-header {
+  text-align: center;
+  padding: 24px 24px 16px 24px;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.login-card mat-card-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 24px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.login-card mat-card-title mat-icon {
+  font-size: 28px;
+  width: 28px;
+  height: 28px;
+  color: #667eea;
+}
+
+.login-card mat-card-subtitle {
+  font-size: 14px;
+  color: #666;
+  margin-top: 4px;
+}
+
+.login-card mat-card-content {
+  padding: 24px;
+}
+
+/* Loading Section */
+.loading-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1rem;
+  gap: 1rem;
+}
+
+.loading-text {
+  font-size: 16px;
+  font-weight: 500;
+  color: #333;
+  margin: 0;
+}
+
+.loading-subtext {
+  font-size: 14px;
+  color: #666;
+  margin: 0;
+}
+
+/* Message Section */
+.message-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  gap: 1rem;
+  text-align: center;
+}
+
+.message-section mat-icon {
+  font-size: 64px;
+  width: 64px;
+  height: 64px;
+}
+
+.message-section .error-icon {
+  color: #f44336;
+}
+
+.message-section .success-icon {
+  color: #4caf50;
+}
+
+.message-section p {
+  font-size: 16px;
+  line-height: 1.6;
+  margin: 0;
+  max-width: 400px;
+}
+
+.error-message {
+  color: #d32f2f;
+  font-weight: 500;
+}
+
+.success-message {
+  color: #2e7d32;
+  font-weight: 500;
+}
+
+/* Help Section */
+.help-section {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.help-section mat-expansion-panel {
+  box-shadow: none;
+  border: 1px solid #e0e0e0;
+}
+
+.help-section mat-expansion-panel-header {
+  padding: 12px 16px;
+}
+
+.help-section mat-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #667eea;
+}
+
+.help-section mat-panel-title mat-icon {
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+}
+
+.help-content {
+  padding: 16px;
+}
+
+.help-content p {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: #333;
+}
+
+.help-content ul {
+  margin: 12px 0;
+  padding-left: 24px;
+  color: #555;
+}
+
+.help-content ul li {
+  margin: 8px 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.help-content button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Responsive Design */
+@media (max-width: 600px) {
+  .login-container {
+    padding: 1rem;
+  }
+
+  .login-card {
+    max-width: 100%;
+  }
+
+  .login-card mat-card-title {
+    font-size: 20px;
+  }
+
+  .message-section mat-icon {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+  }
+
+  .message-section p {
+    font-size: 14px;
+  }
+}

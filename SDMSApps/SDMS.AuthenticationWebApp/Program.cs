@@ -300,6 +300,36 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Initialize database BEFORE any middleware runs
+// This ensures DataProtectionKeys table exists before DataProtection tries to access it
+using (var scope = app.Services.CreateScope())
+{
+    var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    
+    // Ensure database is created (creates all tables including DataProtectionKeys)
+    await context.Database.EnsureCreatedAsync();
+    
+    // Explicitly ensure DataProtectionKeys table exists with correct schema
+    // Entity Framework Core expects: Id (int), FriendlyName (string), Xml (string)
+    try
+    {
+        await context.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS ""DataProtectionKeys""
+            (
+                ""Id"" SERIAL PRIMARY KEY,
+                ""FriendlyName"" TEXT NULL,
+                ""Xml"" TEXT NULL
+            );
+        ");
+    }
+    catch (Exception ex)
+    {
+        // Table might already exist or there might be a permission issue
+        // Log but don't fail - EnsureCreatedAsync should have handled it
+        Console.WriteLine($"Note: DataProtectionKeys table creation: {ex.Message}");
+    }
+}
+
 // Configure HTTP pipeline
 // ForwardedHeaders must be first to handle reverse proxy headers correctly (Railway, etc.)
 app.UseForwardedHeaders();
@@ -403,7 +433,7 @@ if (fileProviders.Count > 0)
     }).ExcludeFromDescription(); // Exclude from API documentation
 }
 
-// Initialize database and OpenIddict
+// Initialize OpenIddict and create default data
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -411,6 +441,7 @@ using (var scope = app.Services.CreateScope())
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
     var applicationManager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
     
+    // Database is already initialized above, just ensure it's still created
     await context.Database.EnsureCreatedAsync();
 
     // Get B2C URL from configuration

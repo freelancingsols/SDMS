@@ -6,15 +6,16 @@ nixPkgs = ["dotnet-sdk_8"]
 
 [phases.install]
 cmds = [
-  "echo 'Installing Node.js 20 using fnm...'",
-  "curl -fsSL https://fnm.vercel.app/install | bash",
-  "export PATH=\"$HOME/.local/share/fnm:$PATH\"",
-  "eval \"$(fnm env --use-on-cd)\"",
-  "fnm install 20",
-  "fnm use 20",
-  "fnm alias 20 default",
-  "export PATH=\"$HOME/.local/share/fnm:$PATH\" && eval \"$(fnm env)\" && node --version && npm --version",
-  "export PATH=\"$HOME/.local/share/fnm:$PATH\" && eval \"$(fnm env)\" && cd ClientApp && npm install --legacy-peer-deps && cd .. && dotnet restore"
+  "echo 'Installing Node.js 20...'",
+  "apt-get update && apt-get install -y curl xz-utils",
+  "curl -fsSL https://nodejs.org/dist/v20.19.0/node-v20.19.0-linux-x64.tar.xz -o /tmp/node.tar.xz",
+  "tar -xJf /tmp/node.tar.xz -C /tmp",
+  "mkdir -p $HOME/nodejs",
+  "mv /tmp/node-v20.19.0-linux-x64 $HOME/nodejs/node",
+  "export PATH=\"$HOME/nodejs/node/bin:$PATH\"",
+  "node --version",
+  "npm --version",
+  "export PATH=\"$HOME/nodejs/node/bin:$PATH\" && cd ClientApp && npm install --legacy-peer-deps && cd .. && dotnet restore"
 ]
 
 [phases.build]
@@ -35,13 +36,12 @@ cmds = [
   "echo '✅ Environment variables are set'",
   "echo ''",
   "echo '=== Verifying Node.js version ==='",
-  "export PATH=\"$HOME/.local/share/fnm:$PATH\"",
-  "eval \"$(fnm env)\"",
+  "export PATH=\"$HOME/nodejs/node/bin:$PATH\"",
   "node --version",
   "npm --version",
   "echo ''",
   "echo '=== Starting Angular Build ==='",
-  "export PATH=\"$HOME/.local/share/fnm:$PATH\" && eval \"$(fnm env)\" && cd ClientApp && npm run build:prod && cd ..",
+  "export PATH=\"$HOME/nodejs/node/bin:$PATH\" && cd ClientApp && npm run build:prod && cd ..",
   "dotnet build -c Release",
   "dotnet publish -c Release -o ./publish",
   "echo 'Copying Angular dist files...'",

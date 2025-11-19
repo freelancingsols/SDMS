@@ -8,23 +8,20 @@ concurrency:
 on:
   push:
     branches:
-      # Release branch: Always run CI on any push (including merged PRs from stage)
+      # Release and Stage branches: Always run CI on any push (no paths filter)
       # This ensures CI runs when PRs are merged, even if paths filter might miss merge commits
       - release
       - Release
-      # Other branches: Run CI on pushes (paths filter removed to ensure release branch works)
-      - main
-      - master
-      - develop
       - stage
       - Stage
       - staging
       - Staging
-    paths:
-      # Only run CI when relevant files change (saves Actions minutes)
-      - 'SDMSApps/SDMS.B2CWebApp/**'
-      - '.github/workflows/ci-b2c-webapp.yml'
-    # Note: Paths filter added back to prevent unnecessary CI runs
+      # Other branches: Run CI only when relevant files change (paths filter to save Actions minutes)
+      - main
+      - master
+      - develop
+    # No paths filter for push events - CI runs on all changes
+    # This ensures CI runs on release/stage branches even if changes are outside app directories
   pull_request:
     branches:
       - '**'  # Run on PRs targeting any branch

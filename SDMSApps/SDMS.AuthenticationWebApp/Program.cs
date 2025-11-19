@@ -534,6 +534,7 @@ using (var scope = app.Services.CreateScope())
             Permissions.Endpoints.Authorization,
             Permissions.Endpoints.Token,
             Permissions.Endpoints.Logout,
+            Permissions.Endpoints.Userinfo, // Required for /connect/userinfo endpoint access
             Permissions.GrantTypes.AuthorizationCode,
             Permissions.GrantTypes.RefreshToken,
             Permissions.GrantTypes.Password, // Allow password grant for API access

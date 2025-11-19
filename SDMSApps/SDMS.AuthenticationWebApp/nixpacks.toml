@@ -36,12 +36,12 @@ cmds = [
   "echo '=== Starting Angular Build ==='",
   "export PATH=\"$HOME/nodejs/node/bin:$PATH\" && cd ClientApp && npm run build:prod && cd ..",
   "dotnet build -c Release",
-  "dotnet publish -c Release -o ./publish",
+  "dotnet publish -c Release -o ./publish --self-contained true -r linux-x64",
   "echo 'Copying Angular dist files...'",
   "mkdir -p ./publish/ClientApp/dist/sdms-auth-client",
   "if [ -d 'ClientApp/dist/sdms-auth-client' ]; then cp -r ClientApp/dist/sdms-auth-client/. ./publish/ClientApp/dist/sdms-auth-client/; echo 'Angular files copied successfully'; else echo 'ERROR: Angular dist directory not found!'; ls -la ClientApp/ || true; ls -la ClientApp/dist/ || true; exit 1; fi"
 ]
 
 [start]
-cmd = "cd /app/publish && dotnet --info && dotnet SDMS.AuthenticationWebApp.dll"
+cmd = "cd /app/publish && ./SDMS.AuthenticationWebApp"
 

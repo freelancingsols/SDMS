@@ -8,13 +8,8 @@ nixPkgs = ["dotnet-sdk_8"]
 cmds = [
   "echo 'Installing Node.js 20...'",
   "apt-get update && apt-get install -y curl xz-utils",
-  "curl -fsSL https://nodejs.org/dist/v20.19.0/node-v20.19.0-linux-x64.tar.xz -o /tmp/node.tar.xz",
-  "tar -xJf /tmp/node.tar.xz -C /tmp",
-  "mkdir -p $HOME/nodejs",
-  "mv /tmp/node-v20.19.0-linux-x64 $HOME/nodejs/node",
-  "export PATH=\"$HOME/nodejs/node/bin:$PATH\"",
-  "node --version",
-  "npm --version",
+  "curl -fsSL https://nodejs.org/dist/v20.19.0/node-v20.19.0-linux-x64.tar.xz -o /tmp/node.tar.xz && tar -xJf /tmp/node.tar.xz -C /tmp && mkdir -p $HOME/nodejs && mv /tmp/node-v20.19.0-linux-x64 $HOME/nodejs/node",
+  "export PATH=\"$HOME/nodejs/node/bin:$PATH\" && node --version && npm --version",
   "export PATH=\"$HOME/nodejs/node/bin:$PATH\" && cd ClientApp && npm install --legacy-peer-deps && cd .. && dotnet restore"
 ]
 
@@ -36,9 +31,7 @@ cmds = [
   "echo '✅ Environment variables are set'",
   "echo ''",
   "echo '=== Verifying Node.js version ==='",
-  "export PATH=\"$HOME/nodejs/node/bin:$PATH\"",
-  "node --version",
-  "npm --version",
+  "export PATH=\"$HOME/nodejs/node/bin:$PATH\" && node --version && npm --version",
   "echo ''",
   "echo '=== Starting Angular Build ==='",
   "export PATH=\"$HOME/nodejs/node/bin:$PATH\" && cd ClientApp && npm run build:prod && cd ..",

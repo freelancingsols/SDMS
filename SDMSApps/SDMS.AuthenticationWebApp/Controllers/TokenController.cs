@@ -114,6 +114,10 @@ public class TokenController : ControllerBase
         logger.LogInformation("Token exchange request received. Method: {Method}, ContentType: {ContentType}", 
             Request.Method, Request.ContentType);
         
+        // Declare variables outside try block for use in catch
+        string? grantType = null;
+        string? clientId = null;
+        
         try
         {
         
@@ -208,8 +212,6 @@ public class TokenController : ControllerBase
         var request = requestObj;
 
         // Log request details for debugging
-        string? grantType = null;
-        string? clientId = null;
         if (request is OpenIddictTokenRequestWrapper wrapperLog)
         {
             grantType = wrapperLog.GrantType;

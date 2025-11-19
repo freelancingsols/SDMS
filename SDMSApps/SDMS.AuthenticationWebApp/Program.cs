@@ -534,7 +534,8 @@ using (var scope = app.Services.CreateScope())
             Permissions.Endpoints.Authorization,
             Permissions.Endpoints.Token,
             Permissions.Endpoints.Logout,
-            Permissions.Endpoints.Userinfo, // Required for /connect/userinfo endpoint access
+            // Note: Userinfo endpoint permission is not available in this OpenIddict version
+            // The endpoint is accessible if the user has a valid access token
             Permissions.GrantTypes.AuthorizationCode,
             Permissions.GrantTypes.RefreshToken,
             Permissions.GrantTypes.Password, // Allow password grant for API access

@@ -524,6 +524,16 @@ public class TokenController : ControllerBase
             error = Errors.UnsupportedGrantType,
             error_description = $"The specified grant type '{grantType}' is not supported."
         });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "An unexpected error occurred during token exchange for GrantType={GrantType}, ClientId={ClientId}", grantType, clientId);
+            return StatusCode(500, new
+            {
+                error = Errors.ServerError,
+                error_description = "An unexpected internal server error occurred during token exchange."
+            });
+        }
     }
 
     private async Task<IEnumerable<string>> GetResourcesAsync(IEnumerable<string> scopes)

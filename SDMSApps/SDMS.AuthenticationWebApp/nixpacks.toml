@@ -43,5 +43,5 @@ cmds = [
 ]
 
 [start]
-cmd = "dotnet ./publish/SDMS.AuthenticationWebApp.dll"
+cmd = "dotnet /app/publish/SDMS.AuthenticationWebApp.dll"
 

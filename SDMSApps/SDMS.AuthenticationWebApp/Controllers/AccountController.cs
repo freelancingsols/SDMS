@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
+using OpenIddict.Validation.AspNetCore;
 using SDMS.AuthenticationWebApp.Models;
 using SDMS.AuthenticationWebApp.Services;
 using static OpenIddict.Abstractions.OpenIddictConstants;
@@ -180,7 +181,9 @@ public class AccountController : ControllerBase
         }
     }
 
-    [Authorize] // Accept both cookie and Bearer token authentication
+    // Accept both cookie and Bearer token authentication
+    // Note: OpenIddict validation scheme name is "OpenIddict.Validation.AspNetCore"
+    [Authorize(AuthenticationSchemes = "Identity.Application,OpenIddict.Validation.AspNetCore")]
     [HttpGet("userinfo")]
     public async Task<IActionResult> UserInfo()
     {

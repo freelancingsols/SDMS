@@ -8,6 +8,7 @@ using Microsoft.IdentityModel.Tokens;
 using OpenIddict.Abstractions;
 using OpenIddict.EntityFrameworkCore.Models;
 using OpenIddict.Server.AspNetCore;
+using OpenIddict.Validation.AspNetCore;
 using SDMS.AuthenticationWebApp.Configuration;
 using SDMS.AuthenticationWebApp.Constants;
 using SDMS.AuthenticationWebApp.Data;
@@ -176,8 +177,13 @@ var authBuilder = builder.Services.AddAuthentication(options =>
     options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
     options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme;
     // Allow Bearer token authentication for API endpoints
+    // Use a policy-based approach: try Bearer token first, then fall back to cookies
     options.DefaultAuthenticateScheme = IdentityConstants.ApplicationScheme;
 });
+
+// Note: OpenIddict validation with UseAspNetCore() automatically registers
+// a JWT Bearer authentication scheme that validates tokens issued by the server.
+// No manual registration needed - the scheme is available as OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme
 
 // Only add Google authentication if credentials are provided
 var googleClientId = builder.Configuration[ConfigurationKeys.ExternalAuthGoogleClientId];

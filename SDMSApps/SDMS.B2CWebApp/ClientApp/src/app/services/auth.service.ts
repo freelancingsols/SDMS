@@ -38,8 +38,14 @@ export class AuthService {
     // Silent refresh requires a refresh token, which is obtained from authorization code or password grant
     const enableSilentRefresh = true; // Set to false to disable silent refresh
 
+    // Normalize issuer URL - ensure it ends with a slash to match discovery document
+    let issuerUrl = AppSettings.SDMS_AuthenticationWebApp_url;
+    if (!issuerUrl.endsWith('/')) {
+      issuerUrl = issuerUrl + '/';
+    }
+
     this.oauthService.configure({
-      issuer: AppSettings.SDMS_AuthenticationWebApp_url,
+      issuer: issuerUrl,
       redirectUri: AppSettings.SDMS_AuthenticationWebApp_redirectUri,
       clientId: AppSettings.SDMS_AuthenticationWebApp_clientid,
       responseType: 'code',

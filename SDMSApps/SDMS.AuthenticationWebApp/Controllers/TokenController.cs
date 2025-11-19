@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
@@ -96,6 +97,11 @@ public class TokenController : ControllerBase
     [Produces("application/json")]
     public async Task<IActionResult> Exchange()
     {
+        // Log request details for debugging
+        var logger = HttpContext.RequestServices.GetRequiredService<ILogger<TokenController>>();
+        logger.LogInformation("Token exchange request received. Method: {Method}, ContentType: {ContentType}", 
+            Request.Method, Request.ContentType);
+        
         // Get the OpenIddict request from HttpContext.Items
         // With passthrough enabled, OpenIddict stores the request in HttpContext.Items
         object? requestObj = null;
@@ -114,6 +120,7 @@ public class TokenController : ControllerBase
             if (HttpContext.Items.TryGetValue(key, out var item) && item != null)
             {
                 requestObj = item;
+                logger.LogDebug("Found OpenIddict request in HttpContext.Items with key: {Key}", key);
                 break;
             }
         }
@@ -126,6 +133,7 @@ public class TokenController : ControllerBase
                 if (item != null && item.GetType().FullName?.Contains("OpenIddict") == true)
                 {
                     requestObj = item;
+                    logger.LogDebug("Found OpenIddict request in HttpContext.Items by type name: {TypeName}", item.GetType().FullName);
                     break;
                 }
             }
@@ -139,12 +147,20 @@ public class TokenController : ControllerBase
             if (!string.IsNullOrEmpty(requestWrapper.ClientId) || !string.IsNullOrEmpty(requestWrapper.GrantType))
             {
                 requestObj = requestWrapper;
+                logger.LogWarning("Using fallback request wrapper. GrantType: {GrantType}, ClientId: {ClientId}", 
+                    requestWrapper.GrantType, requestWrapper.ClientId);
             }
         }
         
         if (requestObj == null)
         {
-            throw new InvalidOperationException("The OpenID Connect request cannot be retrieved.");
+            logger.LogError("The OpenID Connect request cannot be retrieved. Request form keys: {FormKeys}, Query keys: {QueryKeys}",
+                string.Join(", ", Request.Form.Keys), string.Join(", ", Request.Query.Keys));
+            return BadRequest(new
+            {
+                error = Errors.InvalidRequest,
+                error_description = "The OpenID Connect request cannot be retrieved."
+            });
         }
         
         // Use reflection to access the OpenIddict request methods
@@ -170,11 +186,39 @@ public class TokenController : ControllerBase
         {
             // Retrieve the claims principal stored in the authorization code/refresh token.
             var result = await HttpContext.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+            
+            if (result?.Principal == null)
+            {
+                logger.LogWarning("Authentication failed: No principal found for authorization code/refresh token flow");
+                return Forbid(
+                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+                    properties: new AuthenticationProperties(new Dictionary<string, string?>
+                    {
+                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = Errors.InvalidGrant,
+                        [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "The authorization code or refresh token is invalid."
+                    }));
+            }
 
             // Retrieve the user profile corresponding to the authorization code/refresh token.
-            var user = await _userManager.FindByIdAsync(result.Principal?.GetClaim(Claims.Subject) ?? string.Empty);
+            var subject = result.Principal.GetClaim(Claims.Subject);
+            logger.LogDebug("Token exchange: Subject claim: {Subject}", subject);
+            
+            if (string.IsNullOrEmpty(subject))
+            {
+                logger.LogWarning("Token exchange failed: No subject claim found in principal");
+                return Forbid(
+                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+                    properties: new AuthenticationProperties(new Dictionary<string, string?>
+                    {
+                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = Errors.InvalidGrant,
+                        [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "The token does not contain a valid subject claim."
+                    }));
+            }
+            
+            var user = await _userManager.FindByIdAsync(subject);
             if (user == null)
             {
+                logger.LogWarning("Token exchange failed: User not found for subject: {Subject}", subject);
                 return Forbid(
                     authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
                     properties: new AuthenticationProperties(new Dictionary<string, string?>

@@ -2,7 +2,7 @@
 # This file configures the build process
 
 [phases.setup]
-nixPkgs = ["dotnet-sdk_8", "dotnet-runtime_8", "dotnet-aspnetcore-runtime_8"]
+nixPkgs = ["dotnet-sdk_8"]
 
 [phases.install]
 cmds = [
@@ -43,5 +43,5 @@ cmds = [
 ]
 
 [start]
-cmd = "cd /app/publish && dotnet SDMS.AuthenticationWebApp.dll"
+cmd = "cd /app/publish && dotnet --info && dotnet SDMS.AuthenticationWebApp.dll"
 

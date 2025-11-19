@@ -1,0 +1,121 @@
+<div class="about-container">
+  <mat-card class="about-card">
+    <mat-card-header>
+      <mat-card-title>
+        <mat-icon>info</mat-icon>
+        About SDMS
+      </mat-card-title>
+      <mat-card-subtitle>System Information & Configuration</mat-card-subtitle>
+    </mat-card-header>
+    
+    <mat-card-content>
+      <!-- Application Information -->
+      <div class="info-section">
+        <h3>
+          <mat-icon>apps</mat-icon>
+          Application Information
+        </h3>
+        <div class="info-grid">
+          <div class="info-item">
+            <strong>Application Name:</strong>
+            <span>{{ appName }}</span>
+          </div>
+          <div class="info-item">
+            <strong>Version:</strong>
+            <span>{{ appVersion }}</span>
+          </div>
+          <div class="info-item">
+            <strong>Framework:</strong>
+            <span>Angular 18</span>
+          </div>
+          <div class="info-item">
+            <strong>Build Date:</strong>
+            <span>{{ buildDate | date:'medium' }}</span>
+          </div>
+        </div>
+      </div>
+
+      <mat-divider style="margin: 24px 0;"></mat-divider>
+
+      <!-- Configuration -->
+      <div class="info-section">
+        <h3>
+          <mat-icon>settings</mat-icon>
+          Configuration
+        </h3>
+        <div class="info-grid">
+          <div class="info-item">
+            <strong>Authentication Server:</strong>
+            <span>{{ authUrl }}</span>
+          </div>
+          <div class="info-item">
+            <strong>B2C Web App URL:</strong>
+            <span>{{ b2cUrl }}</span>
+          </div>
+          <div class="info-item">
+            <strong>Environment:</strong>
+            <span>{{ environment }}</span>
+          </div>
+        </div>
+      </div>
+
+      <mat-divider style="margin: 24px 0;"></mat-divider>
+
+      <!-- Features -->
+      <div class="info-section">
+        <h3>
+          <mat-icon>star</mat-icon>
+          Features
+        </h3>
+        <ul class="features-list">
+          <li>
+            <mat-icon>lock</mat-icon>
+            <span>Secure OAuth 2.0 / OpenID Connect Authentication</span>
+          </li>
+          <li>
+            <mat-icon>refresh</mat-icon>
+            <span>Automatic Token Refresh</span>
+          </li>
+          <li>
+            <mat-icon>dashboard</mat-icon>
+            <span>User Dashboard</span>
+          </li>
+          <li>
+            <mat-icon>security</mat-icon>
+            <span>PKCE (Proof Key for Code Exchange)</span>
+          </li>
+          <li>
+            <mat-icon>devices</mat-icon>
+            <span>Responsive Design</span>
+          </li>
+          <li>
+            <mat-icon>offline_bolt</mat-icon>
+            <span>Offline Support (PWA Ready)</span>
+          </li>
+        </ul>
+      </div>
+
+      <mat-divider style="margin: 24px 0;"></mat-divider>
+
+      <!-- Technology Stack -->
+      <div class="info-section">
+        <h3>
+          <mat-icon>code</mat-icon>
+          Technology Stack
+        </h3>
+        <div class="tech-stack">
+          <div class="tech-chips">
+            <span class="tech-chip">Angular 18</span>
+            <span class="tech-chip">TypeScript</span>
+            <span class="tech-chip">Angular Material</span>
+            <span class="tech-chip">OAuth 2.0</span>
+            <span class="tech-chip">OpenID Connect</span>
+            <span class="tech-chip">RxJS</span>
+            <span class="tech-chip">Bootstrap</span>
+          </div>
+        </div>
+      </div>
+    </mat-card-content>
+  </mat-card>
+</div>
+

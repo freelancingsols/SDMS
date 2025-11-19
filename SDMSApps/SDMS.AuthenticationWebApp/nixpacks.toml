@@ -2,7 +2,7 @@
 # This file configures the build process
 
 [phases.setup]
-nixPkgs = ["dotnet-sdk_8", "nodejs-18_x"]
+nixPkgs = ["dotnet-sdk_8", "nodejs-20_x"]
 
 [phases.install]
 cmds = [

@@ -71,29 +71,6 @@ builder.Services.AddHealthChecks()
         failureStatus: Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Unhealthy,
         tags: new[] { "db", "sql", "postgresql" });
 
-// Configure DataProtection for persistent key storage
-// For Railway/container deployments, consider using a volume or database storage
-// For now, use the app directory (Railway can mount a volume if persistence is needed)
-try
-{
-    var dataProtectionKeysPath = Path.Combine(builder.Environment.ContentRootPath, "DataProtection-Keys");
-    if (!Directory.Exists(dataProtectionKeysPath))
-    {
-        Directory.CreateDirectory(dataProtectionKeysPath);
-    }
-    
-    builder.Services.AddDataProtection()
-        .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath))
-        .SetApplicationName("SDMS.AuthenticationWebApp");
-}
-catch (Exception ex)
-{
-    // If we can't create the directory, DataProtection will use default in-memory storage
-    // This is acceptable for single-instance deployments but keys will be lost on restart
-    Console.WriteLine($"Warning: Could not configure DataProtection key storage: {ex.Message}");
-    Console.WriteLine("DataProtection will use default storage (keys may be lost on restart)");
-}
-
 // Configure ForwardedHeaders for reverse proxy support (Railway, etc.)
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
@@ -110,6 +87,14 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(connectionString);
     options.UseOpenIddict();
 });
+
+// Configure DataProtection for persistent key storage
+// Store keys in PostgreSQL database for Railway/container deployments
+// This ensures keys persist across container restarts and deployments
+// NOTE: Must be configured AFTER DbContext registration
+builder.Services.AddDataProtection()
+    .PersistKeysToDbContext<ApplicationDbContext>()
+    .SetApplicationName("SDMS.AuthenticationWebApp");
 
 // Identity
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>

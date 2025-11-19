@@ -1,53 +1,143 @@
-<mat-card class="test-card">
-  <mat-card-header>
-    <mat-card-title>
-      <mat-icon>dashboard</mat-icon>
-      Test Component
-    </mat-card-title>
-    <mat-card-subtitle>This is the test component loaded in the center canvas</mat-card-subtitle>
-  </mat-card-header>
-  
-  <mat-card-content>
-    <div class="user-info">
-      <mat-icon class="user-icon">account_circle</mat-icon>
-      <div class="user-details">
-        <h3>Logged in user</h3>
-        <p *ngIf="username; else noUser">
-          <strong>Username:</strong> {{ username }}
-        </p>
-        <ng-template #noUser>
-          <p><em>No user logged in</em></p>
-        </ng-template>
+<div class="test-container">
+  <mat-card class="test-card">
+    <mat-card-header>
+      <mat-card-title>
+        <mat-icon>dashboard</mat-icon>
+        Dashboard
+      </mat-card-title>
+      <mat-card-subtitle>Welcome to your authenticated dashboard</mat-card-subtitle>
+    </mat-card-header>
+    
+    <mat-card-content>
+      <!-- Loading State -->
+      <div *ngIf="isLoading" class="loading-container">
+        <mat-spinner diameter="40"></mat-spinner>
+        <p>Loading...</p>
       </div>
-    </div>
-    
-    <mat-divider style="margin: 24px 0;"></mat-divider>
-    
-    <div class="actions">
-      <button mat-raised-button color="primary" (click)="loadTest()">
-        <mat-icon>login</mat-icon>
-        Login
-      </button>
-      <button mat-raised-button color="accent" (click)="loadTestComponent()">
-        <mat-icon>bug_report</mat-icon>
-        Load Test Component
-      </button>
-      <button mat-raised-button color="warn" (click)="logout()">
-        <mat-icon>logout</mat-icon>
-        Logout
-      </button>
-    </div>
-    
-    <mat-divider style="margin: 24px 0;"></mat-divider>
-    
-    <div class="info-section">
-      <h4>Component Information</h4>
-      <p>This component can be loaded from:</p>
-      <ul>
-        <li>Header menu buttons</li>
-        <li>Left sidebar menu items</li>
-        <li>Right sidebar quick actions</li>
-      </ul>
-    </div>
-  </mat-card-content>
-</mat-card>
+
+      <!-- User Information Section -->
+      <div *ngIf="!isLoading" class="user-info-section">
+        <div class="user-info-card">
+          <div class="user-avatar">
+            <mat-icon class="user-icon">account_circle</mat-icon>
+          </div>
+          <div class="user-details">
+            <h3 *ngIf="userInfo?.displayName || username; else noUser">
+              {{ userInfo?.displayName || username }}
+            </h3>
+            <ng-template #noUser>
+              <h3><em>No user logged in</em></h3>
+            </ng-template>
+            
+            <div class="user-info-grid" *ngIf="userInfo">
+              <div class="info-item">
+                <mat-icon>email</mat-icon>
+                <span><strong>Email:</strong> {{ userInfo.email }}</span>
+              </div>
+              <div class="info-item" *ngIf="userInfo.userId">
+                <mat-icon>fingerprint</mat-icon>
+                <span><strong>User ID:</strong> {{ userInfo.userId }}</span>
+              </div>
+              <div class="info-item" *ngIf="userInfo.externalProvider">
+                <mat-icon>link</mat-icon>
+                <span><strong>Provider:</strong> {{ userInfo.externalProvider }}</span>
+              </div>
+              <div class="info-item" *ngIf="userInfo.lastLoginDate">
+                <mat-icon>schedule</mat-icon>
+                <span><strong>Last Login:</strong> {{ userInfo.lastLoginDate | date:'short' }}</span>
+              </div>
+              <div class="info-item" *ngIf="userInfo.roles && userInfo.roles.length > 0">
+                <mat-icon>badge</mat-icon>
+                <span><strong>Roles:</strong> {{ userInfo.roles.join(', ') }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Token Information Section -->
+      <div *ngIf="!isLoading && tokenInfo" class="token-info-section">
+        <mat-divider style="margin: 24px 0;"></mat-divider>
+        <h4>
+          <mat-icon>vpn_key</mat-icon>
+          Token Information
+        </h4>
+        <div class="token-info-grid">
+          <div class="token-item" [class.valid]="tokenInfo.isValid" [class.invalid]="!tokenInfo.isValid">
+            <mat-icon>{{ tokenInfo.isValid ? 'check_circle' : 'error' }}</mat-icon>
+            <span>Token Status: {{ tokenInfo.isValid ? 'Valid' : 'Invalid' }}</span>
+          </div>
+          <div class="token-item">
+            <mat-icon>lock</mat-icon>
+            <span>Access Token: {{ tokenInfo.hasAccessToken ? 'Present' : 'Missing' }} ({{ tokenInfo.accessTokenLength }} chars)</span>
+          </div>
+          <div class="token-item">
+            <mat-icon>verified</mat-icon>
+            <span>ID Token: {{ tokenInfo.hasIdToken ? 'Present' : 'Missing' }} ({{ tokenInfo.idTokenLength }} chars)</span>
+          </div>
+          <div class="token-item">
+            <mat-icon>refresh</mat-icon>
+            <span>Refresh Token: {{ tokenInfo.hasRefreshToken ? 'Present' : 'Missing' }} ({{ tokenInfo.refreshTokenLength }} chars)</span>
+          </div>
+          <div class="token-item" *ngIf="tokenInfo.expiresAt">
+            <mat-icon>schedule</mat-icon>
+            <span>Expires in: {{ tokenInfo.expiresAt }}</span>
+          </div>
+          <div class="token-item">
+            <mat-icon>info</mat-icon>
+            <span>Claims: {{ tokenInfo.claims }} claim(s)</span>
+          </div>
+        </div>
+      </div>
+      
+      <mat-divider style="margin: 24px 0;"></mat-divider>
+      
+      <!-- Actions Section -->
+      <div class="actions-section">
+        <h4>
+          <mat-icon>settings</mat-icon>
+          Actions
+        </h4>
+        <div class="actions-grid">
+          <button mat-raised-button color="primary" (click)="refreshUserInfo()" [disabled]="isLoading">
+            <mat-icon>refresh</mat-icon>
+            Refresh User Info
+          </button>
+          <button mat-raised-button color="accent" (click)="refreshToken()" [disabled]="isLoading">
+            <mat-icon>autorenew</mat-icon>
+            Refresh Token
+          </button>
+          <button mat-raised-button color="primary" (click)="loadTest()" [disabled]="isLoading">
+            <mat-icon>login</mat-icon>
+            Go to Login
+          </button>
+          <button mat-raised-button color="warn" (click)="logout()" [disabled]="isLoading">
+            <mat-icon>logout</mat-icon>
+            Logout
+          </button>
+        </div>
+      </div>
+      
+      <mat-divider style="margin: 24px 0;"></mat-divider>
+      
+      <!-- Information Section -->
+      <div class="info-section">
+        <h4>
+          <mat-icon>info</mat-icon>
+          About This Component
+        </h4>
+        <p>This is an authenticated dashboard component that demonstrates:</p>
+        <ul>
+          <li>User authentication status</li>
+          <li>User profile information</li>
+          <li>Token management and validation</li>
+          <li>OAuth 2.0 / OpenID Connect integration</li>
+        </ul>
+        <p class="note">
+          <mat-icon>lightbulb</mat-icon>
+          <strong>Note:</strong> This component requires authentication. If you're not logged in, you'll be redirected to the login page.
+        </p>
+      </div>
+    </mat-card-content>
+  </mat-card>
+</div>

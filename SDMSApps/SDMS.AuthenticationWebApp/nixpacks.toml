@@ -11,10 +11,35 @@ cmds = [
 ]
 
 [phases.build]
+# Railway environment variables should be available during build
+# If they're not set, the build will fail with a clear error message
 cmds = [
   "echo '🔧 Building Angular ClientApp with environment variables...'",
+  "echo ''",
+  "echo '=== Checking Railway Environment Variables ==='",
   "echo 'SDMS_AuthenticationWebApp_url='${SDMS_AuthenticationWebApp_url:-NOT_SET}",
   "echo 'SDMS_AuthenticationWebApp_clientid='${SDMS_AuthenticationWebApp_clientid:-NOT_SET}",
+  "echo 'RAILWAY_ENVIRONMENT='${RAILWAY_ENVIRONMENT:-NOT_SET}",
+  "echo 'RAILWAY_PROJECT_ID='${RAILWAY_PROJECT_ID:-NOT_SET}",
+  "echo 'PORT='${PORT:-NOT_SET}",
+  "echo ''",
+  "if [ -z \"${SDMS_AuthenticationWebApp_url}\" ]; then",
+  "  echo '❌ ERROR: SDMS_AuthenticationWebApp_url environment variable is not set!'",
+  "  echo '   Please set this variable in Railway Dashboard → Variables tab'",
+  "  echo '   Variable name: SDMS_AuthenticationWebApp_url'",
+  "  echo '   Value should be: https://sdms-production.up.railway.app (or your Railway URL)'",
+  "  exit 1",
+  "fi",
+  "if [ -z \"${SDMS_AuthenticationWebApp_clientid}\" ]; then",
+  "  echo '❌ ERROR: SDMS_AuthenticationWebApp_clientid environment variable is not set!'",
+  "  echo '   Please set this variable in Railway Dashboard → Variables tab'",
+  "  echo '   Variable name: SDMS_AuthenticationWebApp_clientid'",
+  "  echo '   Value should be: sdms_frontend'",
+  "  exit 1",
+  "fi",
+  "echo '✅ Environment variables are set'",
+  "echo ''",
+  "echo '=== Starting Angular Build ==='",
   "cd ClientApp && npm run build:prod && cd ..",
   "dotnet build -c Release",
   "dotnet publish -c Release -o ./publish",

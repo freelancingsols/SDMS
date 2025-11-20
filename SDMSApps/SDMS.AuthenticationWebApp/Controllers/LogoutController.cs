@@ -149,7 +149,6 @@ public class LogoutController : ControllerBase
                     var allowedUris = await _applicationManager.GetPostLogoutRedirectUrisAsync(client);
                     
                     // Normalize the requested URI for comparison
-                    // Strategy: Always ensure trailing slash, lowercase, trim whitespace
                     var requestedUriString = redirectUri.ToString().Trim();
                     var normalizedRedirectUri = requestedUriString.TrimEnd('/').ToLowerInvariant();
                     if (!normalizedRedirectUri.EndsWith("/"))
@@ -157,13 +156,14 @@ public class LogoutController : ControllerBase
                         normalizedRedirectUri += "/";
                     }
                     
+                    // Log all URIs before/after normalization in a single statement
+                    var allowedUrisBefore = string.Join(", ", allowedUris.Select(u => u.ToString()));
                     var isAllowed = false;
                     string? matchedUriString = null;
                     string? matchStrategy = null;
                     
                     foreach (var allowedUri in allowedUris)
                     {
-                        // allowedUri is a Uri object from OpenIddict, convert to string for comparison
                         var allowedUriString = allowedUri.ToString().Trim();
                         var normalizedAllowed = allowedUriString.TrimEnd('/').ToLowerInvariant();
                         if (!normalizedAllowed.EndsWith("/"))
@@ -171,7 +171,7 @@ public class LogoutController : ControllerBase
                             normalizedAllowed += "/";
                         }
                         
-                        // Strategy 1: Exact match (case-insensitive, normalized)
+                        // Strategy 1: Exact match
                         if (normalizedAllowed.Equals(normalizedRedirectUri, StringComparison.OrdinalIgnoreCase))
                         {
                             isAllowed = true;
@@ -180,7 +180,7 @@ public class LogoutController : ControllerBase
                             break;
                         }
                         
-                        // Strategy 2: Authority match (scheme + host + port + /)
+                        // Strategy 2: Authority match
                         var requestedAuthority = redirectUri.GetLeftPart(UriPartial.Authority).ToLowerInvariant() + "/";
                         if (normalizedAllowed.Equals(requestedAuthority, StringComparison.OrdinalIgnoreCase))
                         {
@@ -190,7 +190,7 @@ public class LogoutController : ControllerBase
                             break;
                         }
                         
-                        // Strategy 3: Prefix match (requested starts with allowed, after removing trailing slash)
+                        // Strategy 3: Prefix match
                         var allowedPrefix = normalizedAllowed.TrimEnd('/');
                         if (!string.IsNullOrEmpty(allowedPrefix) && 
                             normalizedRedirectUri.StartsWith(allowedPrefix, StringComparison.OrdinalIgnoreCase))
@@ -200,6 +200,18 @@ public class LogoutController : ControllerBase
                             matchStrategy = "prefix";
                             break;
                         }
+                    }
+                    
+                    // Log comparison details only if no match found (for debugging failures)
+                    if (!isAllowed)
+                    {
+                        var allowedUrisAfter = string.Join(", ", allowedUris.Select(u => {
+                            var s = u.ToString().Trim();
+                            var n = s.TrimEnd('/').ToLowerInvariant();
+                            return n + (n.EndsWith("/") ? "" : "/");
+                        }));
+                        _logger.LogInformation("Post-logout URI validation: Requested='{RequestedBefore}' (normalized='{RequestedAfter}'), Allowed from DB=[{AllowedBefore}] (normalized=[{AllowedAfter}])", 
+                            postLogoutRedirectUri, normalizedRedirectUri, allowedUrisBefore, allowedUrisAfter);
                     }
                     
                     // Strategy 4: Allow localhost for development (any port)
@@ -216,18 +228,19 @@ public class LogoutController : ControllerBase
                     
                     if (!isAllowed)
                     {
-                        // Only log detailed info on failure
-                        _logger.LogWarning("Post-logout redirect URI validation failed. Requested: '{RequestedUri}' (normalized: '{NormalizedUri}'), ClientId: {ClientId}, Allowed: [{AllowedUris}]", 
-                            postLogoutRedirectUri, normalizedRedirectUri, clientId, string.Join(", ", allowedUris.Select(u => u.ToString())));
+                        // Use LogError to ensure it appears in production logs
+                        var allowedUrisList = string.Join(", ", allowedUris.Select(u => u.ToString()));
+                        _logger.LogError("❌ Post-logout redirect URI validation FAILED. Requested: '{RequestedUri}' (normalized: '{NormalizedUri}'), ClientId: {ClientId}, Allowed URIs from DB: [{AllowedUris}]", 
+                            postLogoutRedirectUri, normalizedRedirectUri, clientId, allowedUrisList);
                         return BadRequest(new { 
                             error = "invalid_request", 
-                            error_description = $"The specified 'post_logout_redirect_uri' is invalid. Allowed URIs: {string.Join(", ", allowedUris.Select(u => u.ToString()))}",
+                            error_description = $"The specified 'post_logout_redirect_uri' is invalid. Allowed URIs: {allowedUrisList}",
                             error_uri = "https://documentation.openiddict.com/errors/ID2052"
                         });
                     }
                     
                     // Single log for success case
-                    _logger.LogInformation("Post-logout redirect URI validated. Requested: '{RequestedUri}', Matched: '{MatchedUri}' ({Strategy})", 
+                    _logger.LogInformation("✅ Post-logout redirect URI validated successfully. Requested: '{RequestedUri}', Matched: '{MatchedUri}' (Strategy: {Strategy})", 
                         postLogoutRedirectUri, matchedUriString, matchStrategy);
                 }
                 else

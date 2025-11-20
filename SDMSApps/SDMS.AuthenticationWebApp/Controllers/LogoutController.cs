@@ -191,10 +191,11 @@ public class LogoutController : ControllerBase
                     _logger.LogInformation("Normalized requested URI: {NormalizedUri}", normalizedRedirectUri);
                     
                     var isAllowed = false;
-                    Uri? matchedUri = null;
+                    string? matchedUriString = null;
                     
                     foreach (var allowedUri in allowedUris)
                     {
+                        // allowedUri is already a Uri object, convert to string for comparison
                         var allowedUriString = allowedUri.ToString().Trim();
                         var normalizedAllowed = allowedUriString.TrimEnd('/').ToLowerInvariant();
                         if (!normalizedAllowed.EndsWith("/"))
@@ -209,8 +210,8 @@ public class LogoutController : ControllerBase
                         if (normalizedAllowed.Equals(normalizedRedirectUri, StringComparison.OrdinalIgnoreCase))
                         {
                             isAllowed = true;
-                            matchedUri = allowedUri;
-                            _logger.LogInformation("✅ Exact match found: {MatchedUri}", allowedUri.ToString());
+                            matchedUriString = allowedUriString;
+                            _logger.LogInformation("✅ Exact match found: {MatchedUri}", allowedUriString);
                             break;
                         }
                         
@@ -219,8 +220,8 @@ public class LogoutController : ControllerBase
                         if (normalizedAllowed.Equals(requestedAuthority, StringComparison.OrdinalIgnoreCase))
                         {
                             isAllowed = true;
-                            matchedUri = allowedUri;
-                            _logger.LogInformation("✅ Authority match found: {MatchedUri}", allowedUri.ToString());
+                            matchedUriString = allowedUriString;
+                            _logger.LogInformation("✅ Authority match found: {MatchedUri}", allowedUriString);
                             break;
                         }
                         
@@ -230,8 +231,8 @@ public class LogoutController : ControllerBase
                             normalizedRedirectUri.StartsWith(allowedPrefix, StringComparison.OrdinalIgnoreCase))
                         {
                             isAllowed = true;
-                            matchedUri = allowedUri;
-                            _logger.LogInformation("✅ Prefix match found: {MatchedUri}", allowedUri.ToString());
+                            matchedUriString = allowedUriString;
+                            _logger.LogInformation("✅ Prefix match found: {MatchedUri}", allowedUriString);
                             break;
                         }
                     }
@@ -247,7 +248,7 @@ public class LogoutController : ControllerBase
                         });
                     }
                     
-                    _logger.LogInformation("✅ Post-logout redirect URI validated successfully. Matched: {MatchedUri}", matchedUri?.ToString() ?? "null");
+                    _logger.LogInformation("✅ Post-logout redirect URI validated successfully. Matched: {MatchedUri}", matchedUriString ?? "null");
                 }
                 else
                 {

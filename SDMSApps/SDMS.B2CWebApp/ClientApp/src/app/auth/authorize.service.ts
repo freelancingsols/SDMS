@@ -274,13 +274,16 @@ export class AuthorizeService {
       
       // Check if we already have tokens (prevent multiple processing of the same callback)
       // This should be checked AFTER determining if it's a logout callback
+      // IMPORTANT: If we have valid tokens, skip code exchange entirely to prevent "code already redeemed" errors
       const existingAccessToken = sessionStorage.getItem('access_token');
       const existingIdToken = sessionStorage.getItem('id_token');
       if (existingAccessToken || existingIdToken) {
         console.log('Tokens already exist in storage, checking if valid');
         if (this.oauthService.hasValidAccessToken()) {
-          console.log('Already have valid access token, loading user profile');
+          console.log('Already have valid access token, skipping code exchange to prevent duplicate redemption');
           await this.loadUserProfile();
+          // Clear any OAuth callback parameters from URL after successful login
+          window.history.replaceState({}, document.title, '/');
           return this.success(null);
         } else {
           // Tokens exist but OAuth service says invalid - try to load user profile anyway
@@ -288,11 +291,19 @@ export class AuthorizeService {
           try {
             await this.loadUserProfile();
             if (this.userSubject.value) {
+              // Successfully loaded user with existing tokens - skip code exchange
+              window.history.replaceState({}, document.title, '/');
               return this.success(null);
             }
           } catch (error) {
             console.log('Failed to load user profile with existing tokens:', error);
             // Continue to process callback if profile load fails
+            // But only if we have a code to exchange - otherwise return success
+            if (!hasCode || !hasState) {
+              console.log('No code/state in URL and tokens exist but invalid - treating as already processed');
+              window.history.replaceState({}, document.title, '/');
+              return this.success(null);
+            }
           }
         }
       }
@@ -328,6 +339,18 @@ export class AuthorizeService {
           console.error('Discovery error details:', JSON.stringify(discoveryError, null, 2));
         }
         return this.error('Failed to load discovery document. Please check the authentication server is running.');
+      }
+      
+      // CRITICAL: Double-check if we have valid tokens before attempting code exchange
+      // This prevents "code already redeemed" errors from duplicate processing
+      if (this.oauthService.hasValidAccessToken()) {
+        const storedToken = sessionStorage.getItem('access_token');
+        if (storedToken) {
+          console.log('Valid access token already exists - skipping code exchange to prevent duplicate redemption');
+          await this.loadUserProfile();
+          window.history.replaceState({}, document.title, '/');
+          return this.success(null);
+        }
       }
       
       // Try to process the callback URL
@@ -427,24 +450,33 @@ export class AuthorizeService {
                           (errorObj?.message && errorObj.message.includes('400')) ||
                           (errorObj?.error && errorObj.error.includes('400'));
         
-        if (is400Error) {
-          console.log('Received 400 error - checking if tokens already exist (code may have been used)');
+        // Check for specific "code already redeemed" error
+        const isCodeAlreadyRedeemed = errorObj?.error?.error === 'invalid_grant' ||
+                                     (errorObj?.error?.error_description && 
+                                      errorObj.error.error_description.includes('already been redeemed'));
+        
+        if (is400Error || isCodeAlreadyRedeemed) {
+          console.log('Received 400/invalid_grant error - checking if tokens already exist (code may have been used)');
           const existingAccessToken = sessionStorage.getItem('access_token');
           const existingIdToken = sessionStorage.getItem('id_token');
           
           if (existingAccessToken || existingIdToken) {
-            console.log('Tokens found in storage despite 400 error - attempting to use existing tokens');
+            console.log('Tokens found in storage despite 400 error - code was likely already redeemed. Using existing tokens.');
             try {
               await this.loadUserProfile();
               if (this.userSubject.value) {
                 // Successfully loaded user with existing tokens
-                window.history.replaceState({}, document.title, '/test');
+                // Clear URL and return success - the code was already used but we have valid tokens
+                window.history.replaceState({}, document.title, '/');
                 return this.success(null);
               }
             } catch (profileError) {
               console.log('Failed to load user profile with existing tokens:', profileError);
               // Continue to return error
             }
+          } else {
+            // 400 error but no tokens - this is a real error
+            console.error('Received 400 error but no tokens exist - this indicates a real authentication failure');
           }
         }
         

@@ -535,6 +535,9 @@ export class AuthorizeService {
 
   public async signOut(state: any): Promise<IAuthenticationResult> {
     try {
+      // IMPORTANT: Get the ID token BEFORE clearing tokens (needed for logout request)
+      const idToken = this.oauthService.getIdToken();
+      
       // Clear user subject first to prevent getUserFromStorage from repopulating
       this.userSubject.next(null);
       
@@ -654,9 +657,6 @@ export class AuthorizeService {
           // Use configured postLogoutRedirectUri (defaults to landing page)
           postLogoutRedirectUri = AppSettings.SDMS_AuthenticationWebApp_postLogoutRedirectUri;
         }
-        
-        // Get the ID token for the logout request (if available)
-        const idToken = this.oauthService.getIdToken();
         
         // Get the auth server URL from configuration
         const authServerUrl = AppSettings.SDMS_AuthenticationWebApp_url;

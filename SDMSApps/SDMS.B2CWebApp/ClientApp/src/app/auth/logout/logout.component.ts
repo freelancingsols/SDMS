@@ -23,13 +23,20 @@ export class LogoutComponent implements OnInit {
 
   async ngOnInit() {
     const action = this.activatedRoute.snapshot.url[0];
-    switch (action.path) {
+    switch (action?.path) {
       case LogoutActions.Logout:
-        if (!!window.history.state.local) {
+        // Check if logout was initiated from within the page (via routerLink with state)
+        // Also allow if user is authenticated (safety check)
+        const isLocalLogout = !!window.history.state?.local;
+        const isAuthenticated = await this.authorizeService.isAuthenticated().pipe(take(1)).toPromise();
+        
+        if (isLocalLogout || isAuthenticated) {
           await this.logout(this.getReturnUrl());
         } else {
           // This prevents regular links to <app>/authentication/logout from triggering a logout
           this.message.next('The logout was not initiated from within the page.');
+          // Still navigate to landing page
+          await this.navigateToReturnUrl(this.getReturnUrl());
         }
 
         break;

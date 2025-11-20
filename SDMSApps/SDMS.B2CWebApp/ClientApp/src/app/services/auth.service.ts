@@ -304,6 +304,9 @@ export class AuthService {
   }
 
   async logout(): Promise<void> {
+    // IMPORTANT: Get the ID token BEFORE clearing tokens (needed for logout request)
+    const idToken = this.oauthService.getIdToken();
+    
     // Set logout flag to prevent auto-login
     sessionStorage.setItem('_logout_flag', 'true');
     
@@ -312,9 +315,6 @@ export class AuthService {
     
     // Get the post-logout redirect URI from AppSettings (same pattern as redirectUri)
     const postLogoutRedirectUri = AppSettings.SDMS_AuthenticationWebApp_postLogoutRedirectUri;
-    
-    // Get the ID token for the logout request (if available)
-    const idToken = this.oauthService.getIdToken();
     
     // Get the auth server URL from configuration
     const authServerUrl = AppSettings.SDMS_AuthenticationWebApp_url;

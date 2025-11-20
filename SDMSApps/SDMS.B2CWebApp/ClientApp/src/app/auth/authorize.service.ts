@@ -169,10 +169,32 @@ export class AuthorizeService {
   //    redirect flow.
   public async signIn(state: any): Promise<IAuthenticationResult> {
     try {
+      // Check if we have a logout flag in sessionStorage (set during logout)
+      // If logout flag exists, skip auto-login and force redirect to auth server
+      const logoutFlag = sessionStorage.getItem('_logout_flag');
+      if (logoutFlag) {
+        // Clear the logout flag
+        sessionStorage.removeItem('_logout_flag');
+        // Force redirect to auth server login page
+        await this.oauthService.loadDiscoveryDocument();
+        this.oauthService.initCodeFlow();
+        return this.redirect();
+      }
+
       // Try silent refresh first (equivalent to signinSilent)
+      // But only if we have a valid token AND it's not expired
       if (this.oauthService.hasValidAccessToken()) {
-        await this.loadUserProfile();
-        return this.success(state);
+        // Double-check that tokens actually exist in storage
+        const hasStoredToken = !!sessionStorage.getItem('access_token');
+        if (hasStoredToken) {
+          await this.loadUserProfile();
+          return this.success(state);
+        } else {
+          // Token is marked as valid but not in storage - clear it and redirect
+          await this.oauthService.loadDiscoveryDocument();
+          this.oauthService.initCodeFlow();
+          return this.redirect();
+        }
       }
 
       // Try silent refresh
@@ -180,8 +202,12 @@ export class AuthorizeService {
         await this.oauthService.loadDiscoveryDocument();
         await this.oauthService.tryLoginCodeFlow();
         if (this.oauthService.hasValidAccessToken()) {
-          await this.loadUserProfile();
-          return this.success(state);
+          // Verify token is actually in storage
+          const hasStoredToken = !!sessionStorage.getItem('access_token');
+          if (hasStoredToken) {
+            await this.loadUserProfile();
+            return this.success(state);
+          }
         }
       } catch (silentError) {
         console.log('Silent authentication error: ', silentError);
@@ -512,6 +538,10 @@ export class AuthorizeService {
       // Clear user subject first to prevent getUserFromStorage from repopulating
       this.userSubject.next(null);
       
+      // Set a logout flag to prevent auto-login on next signIn attempt
+      // This flag will be checked in signIn() to force redirect to auth server
+      sessionStorage.setItem('_logout_flag', 'true');
+      
       // Manually clear OAuth-related storage FIRST before calling logOut()
       // This prevents logOut() from redirecting with tokens still in storage
       // angular-oauth2-oidc stores tokens in sessionStorage with these exact keys
@@ -519,6 +549,7 @@ export class AuthorizeService {
         const oauthKeys = [
           'access_token',
           'access_token_stored_at',
+          'access_token_expires_at',
           'id_token',
           'id_token_stored_at',
           'id_token_expires_at',
@@ -528,7 +559,9 @@ export class AuthorizeService {
           'PKCE_verifier',
           'session_state',
           'granted_scopes',
-          'expires_at'
+          'expires_at',
+          'token_type',
+          'scope'
         ];
         
         // Clear all OAuth keys from sessionStorage - do this synchronously
@@ -596,12 +629,74 @@ export class AuthorizeService {
         console.log('Error clearing storage:', storageError);
       }
       
-      // Don't call oauthService.logOut() - it will redirect to /connect/logout
-      // which then redirects back to /auth-callback, causing a login loop
-      // We've already cleared all storage, so logOut() is not needed
-      // The OAuth service's internal state will be cleared when tokens are removed from storage
-      
-      return this.success(state);
+      // Build logout URL manually to ensure proper absolute URI
+      // This will redirect to /connect/logout on the auth server, which will:
+      // 1. Invalidate the session on the auth server
+      // 2. Clear the authentication cookie
+      // 3. Redirect back to the post_logout_redirect_uri (landing page)
+      try {
+        // Get the post-logout redirect URI from AppSettings (same pattern as redirectUri)
+        // If returnUrl is provided and is absolute, use it; otherwise use configured postLogoutRedirectUri
+        let postLogoutRedirectUri: string;
+        if (state?.returnUrl) {
+          const returnUrl = state.returnUrl;
+          // Check if it's already an absolute URI
+          if (returnUrl.startsWith('http://') || returnUrl.startsWith('https://')) {
+            postLogoutRedirectUri = returnUrl;
+          } else {
+            // It's a relative path, use configured postLogoutRedirectUri as base
+            const baseUri = AppSettings.SDMS_AuthenticationWebApp_postLogoutRedirectUri;
+            // Remove trailing slash from base if present, then append returnUrl
+            const baseWithoutSlash = baseUri.endsWith('/') ? baseUri.slice(0, -1) : baseUri;
+            postLogoutRedirectUri = baseWithoutSlash + (returnUrl.startsWith('/') ? returnUrl : '/' + returnUrl);
+          }
+        } else {
+          // Use configured postLogoutRedirectUri (defaults to landing page)
+          postLogoutRedirectUri = AppSettings.SDMS_AuthenticationWebApp_postLogoutRedirectUri;
+        }
+        
+        // Get the ID token for the logout request (if available)
+        const idToken = this.oauthService.getIdToken();
+        
+        // Get the auth server URL from configuration
+        const authServerUrl = AppSettings.SDMS_AuthenticationWebApp_url;
+        const logoutUrl = authServerUrl.endsWith('/') 
+          ? `${authServerUrl}connect/logout`
+          : `${authServerUrl}/connect/logout`;
+        
+        // Build the logout URL with proper parameters
+        const logoutParams = new URLSearchParams();
+        logoutParams.set('post_logout_redirect_uri', postLogoutRedirectUri);
+        if (idToken) {
+          logoutParams.set('id_token_hint', idToken);
+        }
+        
+        const fullLogoutUrl = `${logoutUrl}?${logoutParams.toString()}`;
+        
+        console.log('Logout URL:', fullLogoutUrl); // Debug log
+        
+        // Clear tokens one more time before redirect to ensure they're gone
+        // Do this synchronously to ensure it completes before redirect
+        const finalClearKeys = ['access_token', 'id_token', 'refresh_token', 'nonce', 'PKCE_verifier', 'session_state', 'granted_scopes', 'expires_at'];
+        finalClearKeys.forEach(key => {
+          try {
+            sessionStorage.removeItem(key);
+            localStorage.removeItem(key);
+          } catch (e) {}
+        });
+        
+        // Redirect to auth server logout endpoint
+        // The auth server will invalidate the session and redirect back
+        window.location.href = fullLogoutUrl;
+        
+        // Return redirect status since we're redirecting
+        return this.redirect();
+      } catch (logoutError) {
+        console.error('Error building logout URL:', logoutError);
+        // If logout fails, still clear local state and return success
+        // User will need to manually navigate
+        return this.success(state);
+      }
     } catch (popupSignOutError) {
       console.log('Signout error: ', popupSignOutError);
       try {
@@ -629,11 +724,68 @@ export class AuthorizeService {
 
   public async completeSignOut(_url: string): Promise<IAuthenticationResult> {
     try {
-      this.oauthService.logOut();
+      // Clear user subject first
       this.userSubject.next(null);
+      
+      // Aggressively clear all OAuth tokens from storage
+      const oauthKeys = [
+        'access_token',
+        'access_token_stored_at',
+        'access_token_expires_at',
+        'id_token',
+        'id_token_stored_at',
+        'id_token_expires_at',
+        'id_token_claims_obj',
+        'refresh_token',
+        'nonce',
+        'PKCE_verifier',
+        'session_state',
+        'granted_scopes',
+        'expires_at',
+        'token_type',
+        'scope'
+      ];
+      
+      // Clear from sessionStorage
+      oauthKeys.forEach(key => {
+        try {
+          sessionStorage.removeItem(key);
+        } catch (e) {}
+      });
+      
+      // Clear from localStorage
+      oauthKeys.forEach(key => {
+        try {
+          localStorage.removeItem(key);
+        } catch (e) {}
+      });
+      
+      // Clear any OAuth-prefixed keys
+      for (let i = sessionStorage.length - 1; i >= 0; i--) {
+        const key = sessionStorage.key(i);
+        if (key && (key.startsWith('oauth_') || key.startsWith('oidc_'))) {
+          sessionStorage.removeItem(key);
+        }
+      }
+      
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('oauth_') || key.startsWith('oidc_'))) {
+          localStorage.removeItem(key);
+        }
+      }
+      
+      // Call OAuth service logout
+      this.oauthService.logOut();
+      
+      // Ensure logout flag is set
+      sessionStorage.setItem('_logout_flag', 'true');
+      
       return this.success(null);
     } catch (error) {
       console.log(`There was an error trying to log out '${error}'.`);
+      // Even on error, clear user
+      this.userSubject.next(null);
       return this.error(String(error));
     }
   }

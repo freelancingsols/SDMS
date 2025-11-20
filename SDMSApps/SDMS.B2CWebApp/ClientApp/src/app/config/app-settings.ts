@@ -24,6 +24,7 @@
  * const apiUrl = AppSettings.SDMS_AuthenticationWebApp_url;
  * const clientId = AppSettings.SDMS_AuthenticationWebApp_clientid;
  * const redirectUri = AppSettings.SDMS_AuthenticationWebApp_redirectUri;
+ * const postLogoutRedirectUri = AppSettings.SDMS_AuthenticationWebApp_postLogoutRedirectUri;
  * ```
  * 
  * Note: AppSettings is initialized before Angular bootstrap in main.ts
@@ -37,6 +38,7 @@ export class AppSettings {
   private static _sdmsAuthenticationWebAppUrl: string | undefined;
   private static _sdmsAuthenticationWebAppClientId: string | undefined;
   private static _sdmsAuthenticationWebAppRedirectUri: string | undefined;
+  private static _sdmsAuthenticationWebAppPostLogoutRedirectUri: string | undefined;
   private static _sdmsAuthenticationWebAppScope: string | undefined;
 
   // Getters (throw error if not initialized)
@@ -73,6 +75,18 @@ export class AppSettings {
     return this._sdmsAuthenticationWebAppRedirectUri;
   }
 
+  static get SDMS_AuthenticationWebApp_postLogoutRedirectUri(): string {
+    // Generate from B2CWebApp_url if not explicitly set
+    if (!this._sdmsAuthenticationWebAppPostLogoutRedirectUri) {
+      if (!this._sdmsB2CWebAppUrl) {
+        throw new Error('SDMS_B2CWebApp_url is not configured. Cannot generate postLogoutRedirectUri. Ensure appsettings.json exists or environment variables are set.');
+      }
+      // Generate postLogoutRedirectUri from B2CWebApp_url (landing page)
+      return `${this._sdmsB2CWebAppUrl}/`;
+    }
+    return this._sdmsAuthenticationWebAppPostLogoutRedirectUri;
+  }
+
   static get SDMS_AuthenticationWebApp_scope(): string {
     if (!this._sdmsAuthenticationWebAppScope) {
       throw new Error('SDMS_AuthenticationWebApp_scope is not configured. Ensure appsettings.json exists or environment variables are set.');
@@ -97,6 +111,10 @@ export class AppSettings {
     this._sdmsAuthenticationWebAppRedirectUri = value;
   }
 
+  static set SDMS_AuthenticationWebApp_postLogoutRedirectUri(value: string) {
+    this._sdmsAuthenticationWebAppPostLogoutRedirectUri = value;
+  }
+
   static set SDMS_AuthenticationWebApp_scope(value: string) {
     this._sdmsAuthenticationWebAppScope = value;
   }
@@ -110,6 +128,7 @@ export class AppSettings {
     SDMS_AuthenticationWebApp_url?: string;
     SDMS_AuthenticationWebApp_clientid?: string;
     SDMS_AuthenticationWebApp_redirectUri?: string;
+    SDMS_AuthenticationWebApp_postLogoutRedirectUri?: string;
     SDMS_AuthenticationWebApp_scope?: string;
   }): void {
     const missing: string[] = [];
@@ -135,6 +154,11 @@ export class AppSettings {
     // redirectUri is optional - will be generated from B2CWebApp_url if not provided
     if (config.SDMS_AuthenticationWebApp_redirectUri) {
       this._sdmsAuthenticationWebAppRedirectUri = config.SDMS_AuthenticationWebApp_redirectUri;
+    }
+    
+    // postLogoutRedirectUri is optional - will be generated from B2CWebApp_url if not provided
+    if (config.SDMS_AuthenticationWebApp_postLogoutRedirectUri) {
+      this._sdmsAuthenticationWebAppPostLogoutRedirectUri = config.SDMS_AuthenticationWebApp_postLogoutRedirectUri;
     }
     
     if (!config.SDMS_AuthenticationWebApp_scope) {

@@ -94,7 +94,7 @@
           <span>Account Settings</span>
         </button>
         <mat-divider></mat-divider>
-        <button mat-menu-item>
+        <button mat-menu-item [routerLink]="['/authentication/logout']" [state]="{ local: true }">
           <mat-icon>logout</mat-icon>
           <span>Sign Out</span>
         </button>

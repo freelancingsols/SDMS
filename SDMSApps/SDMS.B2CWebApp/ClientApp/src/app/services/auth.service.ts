@@ -1,6 +1,5 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { Router } from '@angular/router';
 import { OAuthService } from 'angular-oauth2-oidc';
 import { BehaviorSubject, firstValueFrom } from 'rxjs';
 import { AppSettings } from '../config/app-settings';
@@ -26,8 +25,7 @@ export class AuthService {
 
   constructor(
     private oauthService: OAuthService,
-    private http: HttpClient,
-    private router: Router
+    private http: HttpClient
   ) {
     this.configureOAuth();
     this.loadUserProfile();
@@ -306,9 +304,84 @@ export class AuthService {
   }
 
   async logout(): Promise<void> {
-    this.oauthService.logOut();
+    // Set logout flag to prevent auto-login
+    sessionStorage.setItem('_logout_flag', 'true');
+    
+    // Clear user info first
     this.userInfoSubject.next(null);
-    this.router.navigate(['/login']);
+    
+    // Get the post-logout redirect URI from AppSettings (same pattern as redirectUri)
+    const postLogoutRedirectUri = AppSettings.SDMS_AuthenticationWebApp_postLogoutRedirectUri;
+    
+    // Get the ID token for the logout request (if available)
+    const idToken = this.oauthService.getIdToken();
+    
+    // Get the auth server URL from configuration
+    const authServerUrl = AppSettings.SDMS_AuthenticationWebApp_url;
+    const logoutUrl = authServerUrl.endsWith('/') 
+      ? `${authServerUrl}connect/logout`
+      : `${authServerUrl}/connect/logout`;
+    
+    // Build the logout URL with proper parameters
+    const logoutParams = new URLSearchParams();
+    logoutParams.set('post_logout_redirect_uri', postLogoutRedirectUri);
+    if (idToken) {
+      logoutParams.set('id_token_hint', idToken);
+    }
+    
+    const fullLogoutUrl = `${logoutUrl}?${logoutParams.toString()}`;
+    
+    // Clear local tokens first
+    this.clearLocalTokens();
+    
+    // Redirect to auth server logout endpoint
+    // The auth server will invalidate the session and redirect back
+    window.location.href = fullLogoutUrl;
+  }
+  
+  private clearLocalTokens(): void {
+    // Clear all OAuth tokens from storage
+    const oauthKeys = [
+      'access_token',
+      'access_token_stored_at',
+      'access_token_expires_at',
+      'id_token',
+      'id_token_stored_at',
+      'id_token_expires_at',
+      'id_token_claims_obj',
+      'refresh_token',
+      'nonce',
+      'PKCE_verifier',
+      'session_state',
+      'granted_scopes',
+      'expires_at',
+      'token_type',
+      'scope'
+    ];
+    
+    oauthKeys.forEach(key => {
+      try {
+        sessionStorage.removeItem(key);
+        localStorage.removeItem(key);
+      } catch (e) {
+        // Ignore errors
+      }
+    });
+    
+    // Clear any OAuth-prefixed keys
+    for (let i = sessionStorage.length - 1; i >= 0; i--) {
+      const key = sessionStorage.key(i);
+      if (key && (key.startsWith('oauth_') || key.startsWith('oidc_'))) {
+        sessionStorage.removeItem(key);
+      }
+    }
+    
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key && (key.startsWith('oauth_') || key.startsWith('oidc_'))) {
+        localStorage.removeItem(key);
+      }
+    }
   }
 
   getUserInfo(): UserInfo | null {

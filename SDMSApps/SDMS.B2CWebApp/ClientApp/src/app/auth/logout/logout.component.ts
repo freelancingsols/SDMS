@@ -53,18 +53,24 @@ export class LogoutComponent implements OnInit {
       const result = await this.authorizeService.signOut(state);
       switch (result.status) {
         case AuthenticationResultStatus.Redirect:
+          // Logout will redirect to auth server, which will then redirect back
+          // No need to navigate manually - the redirect is handled by OAuth service
           break;
         case AuthenticationResultStatus.Success:
+          // If logout succeeded without redirect, navigate to return URL
           await this.navigateToReturnUrl(returnUrl);
           break;
         case AuthenticationResultStatus.Fail:
-          this.message.next(result.message);
+          this.message.next(result.message || 'Logout failed');
+          // Even on failure, try to navigate to landing page
+          await this.navigateToReturnUrl(returnUrl);
           break;
         default:
           throw new Error('Invalid authentication result status.');
       }
     } else {
-      this.message.next('You successfully logged out!');
+      // User is not authenticated, just navigate to landing page
+      await this.navigateToReturnUrl(returnUrl);
     }
   }
 

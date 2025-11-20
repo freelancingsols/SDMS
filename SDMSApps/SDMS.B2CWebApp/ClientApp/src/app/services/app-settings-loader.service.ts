@@ -8,6 +8,7 @@ export interface AppSettingsConfig {
   SDMS_AuthenticationWebApp_url?: string;
   SDMS_AuthenticationWebApp_clientid?: string;
   SDMS_AuthenticationWebApp_redirectUri?: string;
+  SDMS_AuthenticationWebApp_postLogoutRedirectUri?: string;
   SDMS_AuthenticationWebApp_scope?: string;
 }
 
@@ -53,6 +54,7 @@ export class AppSettingsLoaderService {
               SDMS_AuthenticationWebApp_url: rootConfig.SDMS_AuthenticationWebApp_url,
               SDMS_AuthenticationWebApp_clientid: rootConfig.SDMS_AuthenticationWebApp_clientid,
               SDMS_AuthenticationWebApp_redirectUri: rootConfig.SDMS_AuthenticationWebApp_redirectUri,
+              SDMS_AuthenticationWebApp_postLogoutRedirectUri: rootConfig.SDMS_AuthenticationWebApp_postLogoutRedirectUri,
               SDMS_AuthenticationWebApp_scope: rootConfig.SDMS_AuthenticationWebApp_scope
             };
             AppSettings.initialize(appConfig);

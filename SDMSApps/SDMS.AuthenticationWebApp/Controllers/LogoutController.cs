@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -52,6 +53,36 @@ public class LogoutController : ControllerBase
             if (string.IsNullOrEmpty(clientId))
             {
                 clientId = Request.Form["client_id"].ToString();
+            }
+
+            // If clientId is not provided, try to extract it from id_token_hint
+            if (string.IsNullOrEmpty(clientId) && !string.IsNullOrEmpty(idTokenHint))
+            {
+                try
+                {
+                    var tokenHandler = new JwtSecurityTokenHandler();
+                    var jwtToken = tokenHandler.ReadJwtToken(idTokenHint);
+                    
+                    // Try to get clientId from "azp" (authorized party) or "aud" (audience) claim
+                    clientId = jwtToken.Claims.FirstOrDefault(c => c.Type == "azp")?.Value
+                        ?? jwtToken.Claims.FirstOrDefault(c => c.Type == "aud")?.Value;
+                    
+                    if (!string.IsNullOrEmpty(clientId))
+                    {
+                        _logger.LogInformation("Extracted clientId from id_token_hint: {ClientId}", clientId);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to extract clientId from id_token_hint");
+                }
+            }
+
+            // If still no clientId, use default
+            if (string.IsNullOrEmpty(clientId))
+            {
+                clientId = "sdms_frontend"; // Default client ID
+                _logger.LogInformation("Using default clientId: {ClientId}", clientId);
             }
 
             _logger.LogInformation("Logout request received. PostLogoutRedirectUri: {PostLogoutRedirectUri}, IdTokenHint: {IdTokenHint}, ClientId: {ClientId}",
@@ -137,15 +168,92 @@ public class LogoutController : ControllerBase
                 if (client != null)
                 {
                     var allowedUris = await _applicationManager.GetPostLogoutRedirectUrisAsync(client);
-                    var isAllowed = allowedUris.Any(uri => 
-                        uri.ToString().Equals(redirectUri.ToString(), StringComparison.OrdinalIgnoreCase) ||
-                        uri.ToString().Equals(redirectUri.GetLeftPart(UriPartial.Authority) + "/", StringComparison.OrdinalIgnoreCase));
+                    
+                    // Log for debugging
+                    _logger.LogInformation("Validating post-logout redirect URI. Requested: {RequestedUri}, ClientId: {ClientId}, Allowed URIs Count: {Count}",
+                        postLogoutRedirectUri, clientId, allowedUris.Count());
+                    
+                    if (allowedUris.Any())
+                    {
+                        _logger.LogInformation("Allowed post-logout redirect URIs: {AllowedUris}",
+                            string.Join(", ", allowedUris.Select(u => u.ToString())));
+                    }
+                    
+                    // Normalize the requested URI for comparison
+                    // Strategy: Always ensure trailing slash, lowercase, trim whitespace
+                    var requestedUriString = redirectUri.ToString().Trim();
+                    var normalizedRedirectUri = requestedUriString.TrimEnd('/').ToLowerInvariant();
+                    if (!normalizedRedirectUri.EndsWith("/"))
+                    {
+                        normalizedRedirectUri += "/";
+                    }
+                    
+                    _logger.LogInformation("Normalized requested URI: {NormalizedUri}", normalizedRedirectUri);
+                    
+                    var isAllowed = false;
+                    string? matchedUriString = null;
+                    
+                    foreach (var allowedUri in allowedUris)
+                    {
+                        // allowedUri is already a Uri object, convert to string for comparison
+                        var allowedUriString = allowedUri.ToString().Trim();
+                        var normalizedAllowed = allowedUriString.TrimEnd('/').ToLowerInvariant();
+                        if (!normalizedAllowed.EndsWith("/"))
+                        {
+                            normalizedAllowed += "/";
+                        }
+                        
+                        _logger.LogInformation("Comparing: Requested='{Requested}', Allowed='{Allowed}'",
+                            normalizedRedirectUri, normalizedAllowed);
+                        
+                        // Strategy 1: Exact match (case-insensitive, normalized)
+                        if (normalizedAllowed.Equals(normalizedRedirectUri, StringComparison.OrdinalIgnoreCase))
+                        {
+                            isAllowed = true;
+                            matchedUriString = allowedUriString;
+                            _logger.LogInformation("✅ Exact match found: {MatchedUri}", allowedUriString);
+                            break;
+                        }
+                        
+                        // Strategy 2: Authority match (scheme + host + port + /)
+                        var requestedAuthority = redirectUri.GetLeftPart(UriPartial.Authority).ToLowerInvariant() + "/";
+                        if (normalizedAllowed.Equals(requestedAuthority, StringComparison.OrdinalIgnoreCase))
+                        {
+                            isAllowed = true;
+                            matchedUriString = allowedUriString;
+                            _logger.LogInformation("✅ Authority match found: {MatchedUri}", allowedUriString);
+                            break;
+                        }
+                        
+                        // Strategy 3: Prefix match (requested starts with allowed, after removing trailing slash)
+                        var allowedPrefix = normalizedAllowed.TrimEnd('/');
+                        if (!string.IsNullOrEmpty(allowedPrefix) && 
+                            normalizedRedirectUri.StartsWith(allowedPrefix, StringComparison.OrdinalIgnoreCase))
+                        {
+                            isAllowed = true;
+                            matchedUriString = allowedUriString;
+                            _logger.LogInformation("✅ Prefix match found: {MatchedUri}", allowedUriString);
+                            break;
+                        }
+                    }
                     
                     if (!isAllowed)
                     {
-                        _logger.LogWarning("Post-logout redirect URI not allowed for client: {PostLogoutRedirectUri}", postLogoutRedirectUri);
-                        return BadRequest(new { error = "invalid_request", error_description = "Post-logout redirect URI not allowed" });
+                        _logger.LogWarning("❌ Post-logout redirect URI not allowed for client. Requested: '{RequestedUri}', Normalized: '{NormalizedUri}', ClientId: {ClientId}, Allowed URIs: {AllowedUris}", 
+                            postLogoutRedirectUri, normalizedRedirectUri, clientId, string.Join(", ", allowedUris.Select(u => u.ToString())));
+                        return BadRequest(new { 
+                            error = "invalid_request", 
+                            error_description = $"The specified 'post_logout_redirect_uri' is invalid. Allowed URIs: {string.Join(", ", allowedUris.Select(u => u.ToString()))}",
+                            error_uri = "https://documentation.openiddict.com/errors/ID2052"
+                        });
                     }
+                    
+                    _logger.LogInformation("✅ Post-logout redirect URI validated successfully. Matched: {MatchedUri}", matchedUriString ?? "null");
+                }
+                else
+                {
+                    _logger.LogWarning("Client not found: {ClientId}", clientId);
+                    // Continue with logout even if client not found (for backward compatibility)
                 }
             }
 

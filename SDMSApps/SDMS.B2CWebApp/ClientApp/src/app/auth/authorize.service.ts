@@ -43,6 +43,7 @@ export class AuthorizeService {
   private popUpDisabled = true; // By default pop ups are disabled because they don't work properly on Edge.
   private userSubject: BehaviorSubject<IUser | null> = new BehaviorSubject<IUser | null>(null);
   private oauthConfigured = false;
+  private isProcessingCodeExchange = false; // Flag to prevent duplicate code exchanges
 
   constructor(
     private oauthService: OAuthService,
@@ -98,28 +99,43 @@ export class AuthorizeService {
 
     // Load discovery document and try to login automatically if token exists
     // Use a retry mechanism for better reliability
-    this.loadDiscoveryDocumentWithRetry(3).then(() => {
-      if (this.oauthService.hasValidAccessToken()) {
-        this.loadUserProfile().catch(err => console.error('Error loading user profile on init:', err));
-      }
-    }).catch(err => {
-      // Log the full error for debugging
-      console.warn('Error loading discovery document after retries:', err);
-      if (err instanceof Error) {
-        console.warn('Error details:', err.message, err.stack);
-      } else if (err && typeof err === 'object') {
-        // Handle OAuthErrorEvent
-        console.warn('OAuth error details:', JSON.stringify(err, null, 2));
-        if ('reason' in err) {
-          console.warn('Error reason:', (err as any).reason);
+    // CRITICAL: Check if there's a code in URL first - if so, don't auto-process
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasCode = urlParams.has('code');
+    
+    if (!hasCode) {
+      // Only auto-process if there's no code in the URL
+      // If there's a code, it will be processed by completeSignIn() to prevent duplicate exchanges
+      this.loadDiscoveryDocumentWithRetry(3).then(() => {
+        if (this.oauthService.hasValidAccessToken()) {
+          this.loadUserProfile().catch(err => console.error('Error loading user profile on init:', err));
         }
-        if ('params' in err) {
-          console.warn('Error params:', (err as any).params);
+      }).catch(err => {
+        // Log the full error for debugging
+        console.warn('Error loading discovery document after retries:', err);
+        if (err instanceof Error) {
+          console.warn('Error details:', err.message, err.stack);
+        } else if (err && typeof err === 'object') {
+          // Handle OAuthErrorEvent
+          console.warn('OAuth error details:', JSON.stringify(err, null, 2));
+          if ('reason' in err) {
+            console.warn('Error reason:', (err as any).reason);
+          }
+          if ('params' in err) {
+            console.warn('Error params:', (err as any).params);
+          }
         }
-      }
-      // Try to manually set discovery document URL as fallback
-      this.tryManualDiscoveryDocument();
-    });
+        // Try to manually set discovery document URL as fallback
+        this.tryManualDiscoveryDocument();
+      });
+    } else {
+      // There's a code in the URL - just load discovery document without auto-processing
+      // The code will be processed by completeSignIn() to prevent duplicate exchanges
+      console.log('Authorization code detected in URL during OAuth configuration - skipping auto-login');
+      this.oauthService.loadDiscoveryDocument().catch(err => {
+        console.warn('Error loading discovery document:', err);
+      });
+    }
 
     // Listen for token events
     this.oauthService.events.subscribe(event => {
@@ -197,20 +213,30 @@ export class AuthorizeService {
         }
       }
 
-      // Try silent refresh
-      try {
-        await this.oauthService.loadDiscoveryDocument();
-        await this.oauthService.tryLoginCodeFlow();
-        if (this.oauthService.hasValidAccessToken()) {
-          // Verify token is actually in storage
-          const hasStoredToken = !!sessionStorage.getItem('access_token');
-          if (hasStoredToken) {
-            await this.loadUserProfile();
-            return this.success(state);
+      // Try silent refresh - but ONLY if there's no authorization code in the URL
+      // If there's a code, it should be processed by completeSignIn(), not here
+      const urlParams = new URLSearchParams(window.location.search);
+      const hasCode = urlParams.has('code');
+      
+      if (!hasCode) {
+        // Only try silent refresh if there's no code in the URL
+        // This prevents duplicate code exchanges
+        try {
+          await this.oauthService.loadDiscoveryDocument();
+          await this.oauthService.tryLoginCodeFlow();
+          if (this.oauthService.hasValidAccessToken()) {
+            // Verify token is actually in storage
+            const hasStoredToken = !!sessionStorage.getItem('access_token');
+            if (hasStoredToken) {
+              await this.loadUserProfile();
+              return this.success(state);
+            }
           }
+        } catch (silentError) {
+          console.log('Silent authentication error: ', silentError);
         }
-      } catch (silentError) {
-        console.log('Silent authentication error: ', silentError);
+      } else {
+        console.log('Authorization code detected in URL - skipping silent refresh to prevent duplicate exchange');
       }
 
       // User might not be authenticated, fallback to popup authentication
@@ -274,13 +300,16 @@ export class AuthorizeService {
       
       // Check if we already have tokens (prevent multiple processing of the same callback)
       // This should be checked AFTER determining if it's a logout callback
+      // IMPORTANT: If we have valid tokens, skip code exchange entirely to prevent "code already redeemed" errors
       const existingAccessToken = sessionStorage.getItem('access_token');
       const existingIdToken = sessionStorage.getItem('id_token');
       if (existingAccessToken || existingIdToken) {
         console.log('Tokens already exist in storage, checking if valid');
         if (this.oauthService.hasValidAccessToken()) {
-          console.log('Already have valid access token, loading user profile');
+          console.log('Already have valid access token, skipping code exchange to prevent duplicate redemption');
           await this.loadUserProfile();
+          // Clear any OAuth callback parameters from URL after successful login
+          window.history.replaceState({}, document.title, '/');
           return this.success(null);
         } else {
           // Tokens exist but OAuth service says invalid - try to load user profile anyway
@@ -288,11 +317,19 @@ export class AuthorizeService {
           try {
             await this.loadUserProfile();
             if (this.userSubject.value) {
+              // Successfully loaded user with existing tokens - skip code exchange
+              window.history.replaceState({}, document.title, '/');
               return this.success(null);
             }
           } catch (error) {
             console.log('Failed to load user profile with existing tokens:', error);
             // Continue to process callback if profile load fails
+            // But only if we have a code to exchange - otherwise return success
+            if (!hasCode || !hasState) {
+              console.log('No code/state in URL and tokens exist but invalid - treating as already processed');
+              window.history.replaceState({}, document.title, '/');
+              return this.success(null);
+            }
           }
         }
       }
@@ -330,9 +367,39 @@ export class AuthorizeService {
         return this.error('Failed to load discovery document. Please check the authentication server is running.');
       }
       
+      // CRITICAL: Double-check if we have valid tokens before attempting code exchange
+      // This prevents "code already redeemed" errors from duplicate processing
+      if (this.oauthService.hasValidAccessToken()) {
+        const storedToken = sessionStorage.getItem('access_token');
+        if (storedToken) {
+          console.log('Valid access token already exists - skipping code exchange to prevent duplicate redemption');
+          await this.loadUserProfile();
+          window.history.replaceState({}, document.title, '/');
+          return this.success(null);
+        }
+      }
+      
+      // CRITICAL: Check if we're already processing a code exchange to prevent duplicate calls
+      if (this.isProcessingCodeExchange) {
+        console.log('Code exchange already in progress - skipping duplicate call');
+        // Wait a bit and check if tokens were stored
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const accessToken = sessionStorage.getItem('access_token');
+        if (accessToken) {
+          await this.loadUserProfile();
+          window.history.replaceState({}, document.title, '/');
+          return this.success(null);
+        }
+        return this.error('Code exchange already in progress');
+      }
+      
       // Try to process the callback URL
       // IMPORTANT: Restore the original URL temporarily because tryLoginCodeFlow() reads from window.location.href
       // The OAuth library may have already modified the URL to remove code/state
+      
+      // Set flag to prevent duplicate processing BEFORE the try block
+      this.isProcessingCodeExchange = true;
+      
       try {
         console.log('Processing OAuth callback, original URL:', originalUrl);
         console.log('Processing OAuth callback, current URL:', window.location.href);
@@ -427,24 +494,33 @@ export class AuthorizeService {
                           (errorObj?.message && errorObj.message.includes('400')) ||
                           (errorObj?.error && errorObj.error.includes('400'));
         
-        if (is400Error) {
-          console.log('Received 400 error - checking if tokens already exist (code may have been used)');
+        // Check for specific "code already redeemed" error
+        const isCodeAlreadyRedeemed = errorObj?.error?.error === 'invalid_grant' ||
+                                     (errorObj?.error?.error_description && 
+                                      errorObj.error.error_description.includes('already been redeemed'));
+        
+        if (is400Error || isCodeAlreadyRedeemed) {
+          console.log('Received 400/invalid_grant error - checking if tokens already exist (code may have been used)');
           const existingAccessToken = sessionStorage.getItem('access_token');
           const existingIdToken = sessionStorage.getItem('id_token');
           
           if (existingAccessToken || existingIdToken) {
-            console.log('Tokens found in storage despite 400 error - attempting to use existing tokens');
+            console.log('Tokens found in storage despite 400 error - code was likely already redeemed. Using existing tokens.');
             try {
               await this.loadUserProfile();
               if (this.userSubject.value) {
                 // Successfully loaded user with existing tokens
-                window.history.replaceState({}, document.title, '/test');
+                // Clear URL and return success - the code was already used but we have valid tokens
+                window.history.replaceState({}, document.title, '/');
                 return this.success(null);
               }
             } catch (profileError) {
               console.log('Failed to load user profile with existing tokens:', profileError);
               // Continue to return error
             }
+          } else {
+            // 400 error but no tokens - this is a real error
+            console.error('Received 400 error but no tokens exist - this indicates a real authentication failure');
           }
         }
         
@@ -485,8 +561,13 @@ export class AuthorizeService {
         }
         
         return this.error(errorMessage);
+      } finally {
+        // Always clear the flag when done processing (success or error)
+        this.isProcessingCodeExchange = false;
       }
     } catch (error) {
+      // Ensure flag is cleared even if outer catch is triggered
+      this.isProcessingCodeExchange = false;
       console.error('There was an error signing in: ', error);
       
       // Extract meaningful error message from various error formats
@@ -868,7 +949,21 @@ export class AuthorizeService {
     let lastError: any = null;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        await this.oauthService.loadDiscoveryDocumentAndTryLogin();
+        // CRITICAL: Use loadDiscoveryDocument() instead of loadDiscoveryDocumentAndTryLogin()
+        // to prevent automatic code exchange. We handle code exchange manually in completeSignIn()
+        // Check if there's a code in the URL - if so, don't auto-process it
+        const urlParams = new URLSearchParams(window.location.search);
+        const hasCode = urlParams.has('code');
+        
+        if (hasCode) {
+          // If there's a code, only load discovery document (don't auto-process)
+          // The code will be processed by completeSignIn() to prevent duplicate exchanges
+          console.log('Authorization code detected in URL - loading discovery document only (no auto-login)');
+          await this.oauthService.loadDiscoveryDocument();
+        } else {
+          // No code in URL - safe to use loadDiscoveryDocumentAndTryLogin for silent refresh
+          await this.oauthService.loadDiscoveryDocumentAndTryLogin();
+        }
         return; // Success
       } catch (error) {
         lastError = error;

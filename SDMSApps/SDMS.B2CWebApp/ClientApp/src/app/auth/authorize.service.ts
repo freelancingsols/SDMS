@@ -43,6 +43,7 @@ export class AuthorizeService {
   private popUpDisabled = true; // By default pop ups are disabled because they don't work properly on Edge.
   private userSubject: BehaviorSubject<IUser | null> = new BehaviorSubject<IUser | null>(null);
   private oauthConfigured = false;
+  private isProcessingCodeExchange = false; // Flag to prevent duplicate code exchanges
 
   constructor(
     private oauthService: OAuthService,
@@ -98,28 +99,43 @@ export class AuthorizeService {
 
     // Load discovery document and try to login automatically if token exists
     // Use a retry mechanism for better reliability
-    this.loadDiscoveryDocumentWithRetry(3).then(() => {
-      if (this.oauthService.hasValidAccessToken()) {
-        this.loadUserProfile().catch(err => console.error('Error loading user profile on init:', err));
-      }
-    }).catch(err => {
-      // Log the full error for debugging
-      console.warn('Error loading discovery document after retries:', err);
-      if (err instanceof Error) {
-        console.warn('Error details:', err.message, err.stack);
-      } else if (err && typeof err === 'object') {
-        // Handle OAuthErrorEvent
-        console.warn('OAuth error details:', JSON.stringify(err, null, 2));
-        if ('reason' in err) {
-          console.warn('Error reason:', (err as any).reason);
+    // CRITICAL: Check if there's a code in URL first - if so, don't auto-process
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasCode = urlParams.has('code');
+    
+    if (!hasCode) {
+      // Only auto-process if there's no code in the URL
+      // If there's a code, it will be processed by completeSignIn() to prevent duplicate exchanges
+      this.loadDiscoveryDocumentWithRetry(3).then(() => {
+        if (this.oauthService.hasValidAccessToken()) {
+          this.loadUserProfile().catch(err => console.error('Error loading user profile on init:', err));
         }
-        if ('params' in err) {
-          console.warn('Error params:', (err as any).params);
+      }).catch(err => {
+        // Log the full error for debugging
+        console.warn('Error loading discovery document after retries:', err);
+        if (err instanceof Error) {
+          console.warn('Error details:', err.message, err.stack);
+        } else if (err && typeof err === 'object') {
+          // Handle OAuthErrorEvent
+          console.warn('OAuth error details:', JSON.stringify(err, null, 2));
+          if ('reason' in err) {
+            console.warn('Error reason:', (err as any).reason);
+          }
+          if ('params' in err) {
+            console.warn('Error params:', (err as any).params);
+          }
         }
-      }
-      // Try to manually set discovery document URL as fallback
-      this.tryManualDiscoveryDocument();
-    });
+        // Try to manually set discovery document URL as fallback
+        this.tryManualDiscoveryDocument();
+      });
+    } else {
+      // There's a code in the URL - just load discovery document without auto-processing
+      // The code will be processed by completeSignIn() to prevent duplicate exchanges
+      console.log('Authorization code detected in URL during OAuth configuration - skipping auto-login');
+      this.oauthService.loadDiscoveryDocument().catch(err => {
+        console.warn('Error loading discovery document:', err);
+      });
+    }
 
     // Listen for token events
     this.oauthService.events.subscribe(event => {
@@ -197,20 +213,30 @@ export class AuthorizeService {
         }
       }
 
-      // Try silent refresh
-      try {
-        await this.oauthService.loadDiscoveryDocument();
-        await this.oauthService.tryLoginCodeFlow();
-        if (this.oauthService.hasValidAccessToken()) {
-          // Verify token is actually in storage
-          const hasStoredToken = !!sessionStorage.getItem('access_token');
-          if (hasStoredToken) {
-            await this.loadUserProfile();
-            return this.success(state);
+      // Try silent refresh - but ONLY if there's no authorization code in the URL
+      // If there's a code, it should be processed by completeSignIn(), not here
+      const urlParams = new URLSearchParams(window.location.search);
+      const hasCode = urlParams.has('code');
+      
+      if (!hasCode) {
+        // Only try silent refresh if there's no code in the URL
+        // This prevents duplicate code exchanges
+        try {
+          await this.oauthService.loadDiscoveryDocument();
+          await this.oauthService.tryLoginCodeFlow();
+          if (this.oauthService.hasValidAccessToken()) {
+            // Verify token is actually in storage
+            const hasStoredToken = !!sessionStorage.getItem('access_token');
+            if (hasStoredToken) {
+              await this.loadUserProfile();
+              return this.success(state);
+            }
           }
+        } catch (silentError) {
+          console.log('Silent authentication error: ', silentError);
         }
-      } catch (silentError) {
-        console.log('Silent authentication error: ', silentError);
+      } else {
+        console.log('Authorization code detected in URL - skipping silent refresh to prevent duplicate exchange');
       }
 
       // User might not be authenticated, fallback to popup authentication
@@ -353,9 +379,27 @@ export class AuthorizeService {
         }
       }
       
+      // CRITICAL: Check if we're already processing a code exchange to prevent duplicate calls
+      if (this.isProcessingCodeExchange) {
+        console.log('Code exchange already in progress - skipping duplicate call');
+        // Wait a bit and check if tokens were stored
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const accessToken = sessionStorage.getItem('access_token');
+        if (accessToken) {
+          await this.loadUserProfile();
+          window.history.replaceState({}, document.title, '/');
+          return this.success(null);
+        }
+        return this.error('Code exchange already in progress');
+      }
+      
       // Try to process the callback URL
       // IMPORTANT: Restore the original URL temporarily because tryLoginCodeFlow() reads from window.location.href
       // The OAuth library may have already modified the URL to remove code/state
+      
+      // Set flag to prevent duplicate processing BEFORE the try block
+      this.isProcessingCodeExchange = true;
+      
       try {
         console.log('Processing OAuth callback, original URL:', originalUrl);
         console.log('Processing OAuth callback, current URL:', window.location.href);
@@ -517,8 +561,13 @@ export class AuthorizeService {
         }
         
         return this.error(errorMessage);
+      } finally {
+        // Always clear the flag when done processing (success or error)
+        this.isProcessingCodeExchange = false;
       }
     } catch (error) {
+      // Ensure flag is cleared even if outer catch is triggered
+      this.isProcessingCodeExchange = false;
       console.error('There was an error signing in: ', error);
       
       // Extract meaningful error message from various error formats
@@ -900,7 +949,21 @@ export class AuthorizeService {
     let lastError: any = null;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        await this.oauthService.loadDiscoveryDocumentAndTryLogin();
+        // CRITICAL: Use loadDiscoveryDocument() instead of loadDiscoveryDocumentAndTryLogin()
+        // to prevent automatic code exchange. We handle code exchange manually in completeSignIn()
+        // Check if there's a code in the URL - if so, don't auto-process it
+        const urlParams = new URLSearchParams(window.location.search);
+        const hasCode = urlParams.has('code');
+        
+        if (hasCode) {
+          // If there's a code, only load discovery document (don't auto-process)
+          // The code will be processed by completeSignIn() to prevent duplicate exchanges
+          console.log('Authorization code detected in URL - loading discovery document only (no auto-login)');
+          await this.oauthService.loadDiscoveryDocument();
+        } else {
+          // No code in URL - safe to use loadDiscoveryDocumentAndTryLogin for silent refresh
+          await this.oauthService.loadDiscoveryDocumentAndTryLogin();
+        }
         return; // Success
       } catch (error) {
         lastError = error;

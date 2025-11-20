@@ -38,19 +38,19 @@ public class LogoutController : ControllerBase
             // Read logout parameters directly from query/form parameters
             // OpenIddict logout endpoint uses standard OAuth2/OIDC parameters
             string? postLogoutRedirectUri = Request.Query["post_logout_redirect_uri"].ToString();
-            if (string.IsNullOrEmpty(postLogoutRedirectUri))
+            if (string.IsNullOrEmpty(postLogoutRedirectUri) && Request.HasFormContentType)
             {
                 postLogoutRedirectUri = Request.Form["post_logout_redirect_uri"].ToString();
             }
             
             string? idTokenHint = Request.Query["id_token_hint"].ToString();
-            if (string.IsNullOrEmpty(idTokenHint))
+            if (string.IsNullOrEmpty(idTokenHint) && Request.HasFormContentType)
             {
                 idTokenHint = Request.Form["id_token_hint"].ToString();
             }
             
             string? clientId = Request.Query["client_id"].ToString();
-            if (string.IsNullOrEmpty(clientId))
+            if (string.IsNullOrEmpty(clientId) && Request.HasFormContentType)
             {
                 clientId = Request.Form["client_id"].ToString();
             }

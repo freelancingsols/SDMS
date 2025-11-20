@@ -69,11 +69,25 @@ export class AuthService {
       this.oauthService.setupAutomaticSilentRefresh();
     }
 
-    this.oauthService.loadDiscoveryDocumentAndTryLogin().then(() => {
-      if (this.oauthService.hasValidAccessToken()) {
-        this.loadUserProfile();
-      }
-    });
+    // CRITICAL: Check if there's a code in the URL before auto-processing
+    // If there's a code, only load discovery document (don't auto-process)
+    // The code will be processed by completeSignIn() to prevent duplicate exchanges
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasCode = urlParams.has('code');
+    
+    if (hasCode) {
+      console.log('Authorization code detected in URL - loading discovery document only (no auto-login)');
+      this.oauthService.loadDiscoveryDocument().then(() => {
+        // Don't auto-process - let completeSignIn() handle it
+      });
+    } else {
+      // No code in URL - safe to use loadDiscoveryDocumentAndTryLogin for silent refresh
+      this.oauthService.loadDiscoveryDocumentAndTryLogin().then(() => {
+        if (this.oauthService.hasValidAccessToken()) {
+          this.loadUserProfile();
+        }
+      });
+    }
   }
 
   async loginWithExternalProvider(_provider: 'auth0' | 'google'): Promise<void> {

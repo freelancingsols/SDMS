@@ -191,7 +191,7 @@ public class LogoutController : ControllerBase
                     _logger.LogInformation("Normalized requested URI: {NormalizedUri}", normalizedRedirectUri);
                     
                     var isAllowed = false;
-                    var matchedUri = (Uri?)null;
+                    Uri? matchedUri = null;
                     
                     foreach (var allowedUri in allowedUris)
                     {
@@ -210,7 +210,7 @@ public class LogoutController : ControllerBase
                         {
                             isAllowed = true;
                             matchedUri = allowedUri;
-                            _logger.LogInformation("✅ Exact match found: {MatchedUri}", allowedUri);
+                            _logger.LogInformation("✅ Exact match found: {MatchedUri}", allowedUri.ToString());
                             break;
                         }
                         
@@ -220,7 +220,7 @@ public class LogoutController : ControllerBase
                         {
                             isAllowed = true;
                             matchedUri = allowedUri;
-                            _logger.LogInformation("✅ Authority match found: {MatchedUri}", allowedUri);
+                            _logger.LogInformation("✅ Authority match found: {MatchedUri}", allowedUri.ToString());
                             break;
                         }
                         
@@ -231,7 +231,7 @@ public class LogoutController : ControllerBase
                         {
                             isAllowed = true;
                             matchedUri = allowedUri;
-                            _logger.LogInformation("✅ Prefix match found: {MatchedUri}", allowedUri);
+                            _logger.LogInformation("✅ Prefix match found: {MatchedUri}", allowedUri.ToString());
                             break;
                         }
                     }
@@ -247,7 +247,7 @@ public class LogoutController : ControllerBase
                         });
                     }
                     
-                    _logger.LogInformation("✅ Post-logout redirect URI validated successfully. Matched: {MatchedUri}", matchedUri);
+                    _logger.LogInformation("✅ Post-logout redirect URI validated successfully. Matched: {MatchedUri}", matchedUri?.ToString() ?? "null");
                 }
                 else
                 {

@@ -627,5 +627,16 @@ jobs:
         working-directory: SDMSApps/SDMS.AuthenticationWebApp
         run: |
           echo "=== Deploying to Railway ==="
-          railway up --service ${{ vars.RAILWAY_SERVICE_ID }}
+          n=0
+          until [ "$n" -ge 3 ]
+          do
+            railway up --service ${{ vars.RAILWAY_SERVICE_ID }} && break
+            n=$((n+1))
+            echo "Retry #$n for railway up..."
+            sleep 10
+          done
+          if [ "$n" -eq 3 ]; then
+            echo "❌ Deployment failed after 3 attempts."
+            exit 1
+          fi
           echo "✅ Deployment complete."

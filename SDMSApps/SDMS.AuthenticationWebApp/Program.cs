@@ -74,6 +74,9 @@ try
             .Enrich.WithThreadId()
             .Enrich.WithProperty("Application", "sdms.authenticationwebapp");
 
+        // Enable Serilog self-logging to diagnose issues
+        Serilog.Debugging.SelfLog.Enable(Console.Error);
+
         // Add GrafanaLoki sink if configuration is provided
         if (!string.IsNullOrWhiteSpace(lokiUrl) && !string.IsNullOrWhiteSpace(lokiUser) && !string.IsNullOrWhiteSpace(lokiToken))
         {
@@ -98,6 +101,7 @@ try
 
                 var envName = context.HostingEnvironment.EnvironmentName?.ToLowerInvariant() ?? "unknown";
 
+                // Configure GrafanaLoki sink with additional options for better reliability
                 configuration.WriteTo.GrafanaLoki(
                     normalizedLokiUrl,
                     credentials: new LokiCredentials
@@ -111,11 +115,15 @@ try
                         new LokiLabel { Key = "environment", Value = envName },
                         new LokiLabel { Key = "service", Value = "authentication" }
                     },
-                    restrictedToMinimumLevel: LogEventLevel.Information
+                    restrictedToMinimumLevel: LogEventLevel.Information,
+                    queueLimit: 10000, // Queue limit to prevent memory issues
+                    batchPostingLimit: 100, // Batch size for sending logs
+                    period: TimeSpan.FromSeconds(2) // How often to flush logs
                 );
 
                 // Log that Loki sink is configured (this will go to console only since Serilog isn't fully initialized yet)
                 Console.WriteLine($"[Loki] GrafanaLoki sink configured successfully. URL: {normalizedLokiUrl}, Labels: app=sdms-authenticationwebapp, environment={envName}");
+                Console.WriteLine($"[Loki] User: {lokiUser}, Token length: {lokiToken?.Length ?? 0}");
             }
             catch (Exception ex)
             {
@@ -709,6 +717,11 @@ try
 
     // Start the application
     Log.Information("SDMS Authentication Web App started successfully");
+
+    // Send a test log message to verify Loki integration
+    Log.Information("Test log message for Loki verification - App: sdms-authenticationwebapp, Environment: {Environment}",
+        builder.Environment.EnvironmentName);
+
     app.Run();
 }
 catch (Exception ex)

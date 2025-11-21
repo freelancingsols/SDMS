@@ -63,23 +63,29 @@ try
             ?? context.Configuration["logging_loki_token"];
 
         // Configure Serilog
+        // Minimum level is Information for application code
+        // Microsoft and System namespaces are set to Warning to reduce noise from framework logs
         configuration
             .MinimumLevel.Information()
             .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
             .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
             .MinimumLevel.Override("System", LogEventLevel.Warning)
+            // Ensure application namespace logs are captured at Information level
+            .MinimumLevel.Override("SDMS.AuthenticationWebApp", LogEventLevel.Information)
             .Enrich.FromLogContext()
             .Enrich.WithMachineName()
             .Enrich.WithEnvironmentName()
             .Enrich.WithThreadId()
             .Enrich.WithProperty("Application", "sdms.authenticationwebapp");
 
-        // Enable Serilog self-logging to diagnose issues - this will show internal Serilog errors
-        Serilog.Debugging.SelfLog.Enable(msg =>
+        // Enable Serilog self-logging only in development to diagnose issues
+        if (context.HostingEnvironment.IsDevelopment())
         {
-            Console.WriteLine($"[Serilog SelfLog] {msg}");
-            System.Diagnostics.Debug.WriteLine($"[Serilog SelfLog] {msg}");
-        });
+            Serilog.Debugging.SelfLog.Enable(msg =>
+            {
+                Console.WriteLine($"[Serilog SelfLog] {msg}");
+            });
+        }
 
         // Add GrafanaLoki sink if configuration is provided
         if (!string.IsNullOrWhiteSpace(lokiUrl) && !string.IsNullOrWhiteSpace(lokiUser) && !string.IsNullOrWhiteSpace(lokiToken))
@@ -88,18 +94,29 @@ try
             {
                 // Normalize Loki URL - remove trailing slashes and ensure proper format
                 var normalizedLokiUrl = lokiUrl.TrimEnd('/');
-                // If URL doesn't end with /loki/api/v1/push, add it
-                if (!normalizedLokiUrl.EndsWith("/loki/api/v1/push", StringComparison.OrdinalIgnoreCase))
+
+                // Check if this is a Grafana Cloud URL (contains grafana.net)
+                var isGrafanaCloud = normalizedLokiUrl.Contains("grafana.net", StringComparison.OrdinalIgnoreCase);
+
+                // IMPORTANT: Serilog.Sinks.Grafana.Loki automatically appends /loki/api/v1/push to the URL
+                // So we must provide ONLY the base URL, not the full path
+                // If we provide the full URL, the library will append /loki/api/v1/push again, causing 404 errors
+                if (isGrafanaCloud)
                 {
-                    // If it ends with /loki, add /api/v1/push
-                    if (normalizedLokiUrl.EndsWith("/loki", StringComparison.OrdinalIgnoreCase))
+                    // For Grafana Cloud, extract just the base URL (scheme + host)
+                    // Remove any existing path including /loki/api/v1/push
+                    var uri = new Uri(normalizedLokiUrl);
+                    normalizedLokiUrl = $"{uri.Scheme}://{uri.Host}";
+                }
+                else
+                {
+                    // For self-hosted Loki, also extract just the base URL
+                    // Remove any existing path
+                    var uri = new Uri(normalizedLokiUrl);
+                    normalizedLokiUrl = $"{uri.Scheme}://{uri.Host}";
+                    if (uri.Port != 80 && uri.Port != 443 && uri.Port != -1)
                     {
-                        normalizedLokiUrl += "/api/v1/push";
-                    }
-                    // If it doesn't contain /loki at all, assume it's the base URL
-                    else if (!normalizedLokiUrl.Contains("/loki", StringComparison.OrdinalIgnoreCase))
-                    {
-                        normalizedLokiUrl = normalizedLokiUrl.TrimEnd('/') + "/loki/api/v1/push";
+                        normalizedLokiUrl += $":{uri.Port}";
                     }
                 }
 
@@ -115,7 +132,6 @@ try
                 };
 
                 // Configure GrafanaLoki sink with additional options for better reliability
-                // Reduced batch period to send logs more frequently
                 configuration.WriteTo.GrafanaLoki(
                     normalizedLokiUrl,
                     credentials: lokiCredentials,
@@ -127,39 +143,9 @@ try
                     },
                     restrictedToMinimumLevel: LogEventLevel.Information,
                     queueLimit: 10000, // Queue limit to prevent memory issues
-                    batchPostingLimit: 50, // Reduced batch size for faster sending
-                    period: TimeSpan.FromSeconds(1) // Flush more frequently (every 1 second)
+                    batchPostingLimit: 50, // Batch size for sending logs
+                    period: TimeSpan.FromSeconds(1) // Flush interval
                 );
-
-                // Log that Loki sink is configured (this will go to console only since Serilog isn't fully initialized yet)
-                Console.WriteLine($"[Loki] GrafanaLoki sink configured successfully. URL: {normalizedLokiUrl}, Labels: app=sdms-authenticationwebapp, environment={envName}");
-                Console.WriteLine($"[Loki] User: {lokiUser}, Token length: {lokiToken?.Length ?? 0}");
-                Console.WriteLine($"[Loki] Batch period: 1 second, Batch limit: 50");
-
-                // Test connectivity to Loki endpoint (async, don't block startup)
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        await Task.Delay(3000); // Wait a bit for app to start
-                        using var httpClient = new HttpClient();
-                        var authValue = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{lokiUser}:{lokiToken}"));
-                        httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", authValue);
-
-                        // Test with a simple HEAD request to verify connectivity
-                        var response = await httpClient.SendAsync(new HttpRequestMessage(HttpMethod.Head, normalizedLokiUrl));
-                        Console.WriteLine($"[Loki] Connectivity test: {response.StatusCode} - {(response.IsSuccessStatusCode ? "SUCCESS" : "FAILED")}");
-                        if (!response.IsSuccessStatusCode)
-                        {
-                            var errorContent = await response.Content.ReadAsStringAsync();
-                            Console.WriteLine($"[Loki] Error response: {errorContent}");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[Loki] Connectivity test failed: {ex.Message}");
-                    }
-                });
             }
             catch (Exception ex)
             {
@@ -170,7 +156,11 @@ try
         }
         else
         {
-            Console.WriteLine("[Loki] GrafanaLoki sink not configured - missing configuration values (logging_loki_url, logging_loki_user, or logging_loki_token)");
+            // Only log missing configuration in development
+            if (context.HostingEnvironment.IsDevelopment())
+            {
+                Console.WriteLine("[Loki] GrafanaLoki sink not configured - missing configuration values (logging_loki_url, logging_loki_user, or logging_loki_token)");
+            }
         }
 
         // Always write to console
@@ -753,15 +743,6 @@ try
 
     // Start the application
     Log.Information("SDMS Authentication Web App started successfully");
-
-    // Send multiple test log messages to verify Loki integration
-    Log.Information("Test log message for Loki verification - App: sdms-authenticationwebapp, Environment: {Environment}",
-        builder.Environment.EnvironmentName);
-    Log.Warning("Test WARNING log for Loki - this should appear in Loki Explorer");
-    Log.Error("Test ERROR log for Loki - this should appear in Loki Explorer");
-
-    // Give Loki sink time to send the batch (batch period is 1 second)
-    await Task.Delay(2000);
 
     app.Run();
 }

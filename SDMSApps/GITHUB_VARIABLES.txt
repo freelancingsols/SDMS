@@ -43,3 +43,7 @@ SDMS_AuthenticationWebApp_RedirectUris = https://your-frontend-domain.com/auth-c
 
 SDMS_AuthenticationWebApp_PostLogoutRedirectUris = https://your-frontend-domain.com/,https://your-b2c-domain.vercel.app/
 
+logging_loki_url = https://your-loki-instance.com/loki/api/v1/push
+
+logging_loki_user = your-loki-username
+

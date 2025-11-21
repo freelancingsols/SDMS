@@ -47,6 +47,14 @@ Add the following secrets in your GitHub repository (Settings → Secrets and va
 ### Signing Key
 - `SDMS_AuthenticationWebApp_SigningKeyPath` - Path to signing key file (default: `signing-key.pem`)
 
+### Logging Configuration (Grafana Loki)
+- `logging_loki_url` - Grafana Loki endpoint URL (GitHub Variable)
+  - Example: `https://your-loki-instance.com/loki/api/v1/push`
+- `logging_loki_user` - Grafana Loki username (GitHub Variable)
+  - Example: `your-loki-username`
+- `logging_loki_token` - Grafana Loki API token (GitHub Secret)
+  - Example: `your-loki-api-token`
+
 ### Railway Configuration
 - `RAILWAY_TOKEN` - Railway authentication token
 - `RAILWAY_PROJECT_ID` - Railway project ID
@@ -115,6 +123,11 @@ SDMS_AuthenticationWebApp_WebhookSecret
 
 # Signing Key
 SDMS_AuthenticationWebApp_SigningKeyPath
+
+# Logging Configuration (Grafana Loki)
+logging_loki_url
+logging_loki_user
+logging_loki_token
 ```
 
 ## Verification

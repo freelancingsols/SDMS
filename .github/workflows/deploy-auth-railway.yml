@@ -208,6 +208,10 @@ jobs:
           SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri: ${{ vars.SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri }}
           SDMS_AuthenticationWebApp_RedirectUris: ${{ vars.SDMS_AuthenticationWebApp_RedirectUris }}
           SDMS_AuthenticationWebApp_PostLogoutRedirectUris: ${{ vars.SDMS_AuthenticationWebApp_PostLogoutRedirectUris }}
+          # Logging Configuration (Grafana Loki)
+          logging_loki_url: ${{ vars.logging_loki_url }}
+          logging_loki_user: ${{ vars.logging_loki_user }}
+          logging_loki_token: ${{ secrets.logging_loki_token }}
         working-directory: SDMSApps/SDMS.AuthenticationWebApp
         run: |
           echo "=== Debug: Environment Variables from GitHub ==="
@@ -405,6 +409,10 @@ jobs:
           VARS_TO_SYNC["SDMS_AuthenticationWebApp_RedirectUris"]="$SDMS_AuthenticationWebApp_RedirectUris"
           VARS_TO_SYNC["SDMS_AuthenticationWebApp_PostLogoutRedirectUris"]="$SDMS_AuthenticationWebApp_PostLogoutRedirectUris"
           VARS_TO_SYNC["SDMS_AuthenticationWebApp_WebhookSecret"]="$SDMS_AuthenticationWebApp_WebhookSecret"
+          # Logging Configuration (Grafana Loki)
+          VARS_TO_SYNC["logging_loki_url"]="$logging_loki_url"
+          VARS_TO_SYNC["logging_loki_user"]="$logging_loki_user"
+          VARS_TO_SYNC["logging_loki_token"]="$logging_loki_token"
           
           # Step 3: Compare and sync
           echo "🔄 Comparing and syncing variables..."

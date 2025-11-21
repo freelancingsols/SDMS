@@ -19,8 +19,77 @@ using Microsoft.Extensions.FileProviders;
 using System.Net;
 using Microsoft.OpenApi.Models;
 using Microsoft.Extensions.Logging;
+using Serilog;
+using Serilog.Events;
+using Serilog.Sinks.Grafana.Loki;
 
-var builder = WebApplication.CreateBuilder(args);
+// Configure Serilog early, before creating the builder
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+    .MinimumLevel.Override("System", LogEventLevel.Warning)
+    .Enrich.FromLogContext()
+    .Enrich.WithMachineName()
+    .Enrich.WithEnvironmentName()
+    .Enrich.WithThreadId()
+    .WriteTo.Console()
+    .CreateBootstrapLogger();
+
+try
+{
+    Log.Information("Starting SDMS Authentication Web App");
+
+    var builder = WebApplication.CreateBuilder(args);
+    
+    // Configure Serilog with GrafanaLoki sink
+    builder.Host.UseSerilog((context, services, configuration) => 
+    {
+        // Get Loki configuration from environment variables or configuration
+        var lokiUrl = Environment.GetEnvironmentVariable("logging_loki_url")
+            ?? context.Configuration["logging_loki_url"];
+        
+        var lokiUser = Environment.GetEnvironmentVariable("logging_loki_user")
+            ?? context.Configuration["logging_loki_user"];
+        
+        var lokiToken = Environment.GetEnvironmentVariable("logging_loki_token")
+            ?? context.Configuration["logging_loki_token"];
+        
+        // Configure Serilog
+        configuration
+            .MinimumLevel.Information()
+            .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+            .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+            .MinimumLevel.Override("System", LogEventLevel.Warning)
+            .Enrich.FromLogContext()
+            .Enrich.WithMachineName()
+            .Enrich.WithEnvironmentName()
+            .Enrich.WithThreadId()
+            .Enrich.WithProperty("Application", "SDMS.AuthenticationWebApp");
+        
+        // Add GrafanaLoki sink if configuration is provided
+        if (!string.IsNullOrEmpty(lokiUrl) && !string.IsNullOrEmpty(lokiUser) && !string.IsNullOrEmpty(lokiToken))
+        {
+            configuration.WriteTo.GrafanaLoki(
+                lokiUrl,
+                credentials: new LokiCredentials
+                {
+                    Login = lokiUser,
+                    Password = lokiToken
+                },
+                labels: new[]
+                {
+                    new LokiLabel { Key = "app", Value = "sdms-authentication" },
+                    new LokiLabel { Key = "env", Value = context.HostingEnvironment.EnvironmentName }
+                }
+            );
+        }
+        
+        // Always write to console
+        configuration.WriteTo.Console(
+            outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}",
+            restrictedToMinimumLevel: LogEventLevel.Information
+        );
+    });
 
 // Configuration loading order (highest to lowest priority):
 // 1. Environment Variables (loaded here - highest priority)
@@ -601,5 +670,16 @@ using (var scope = app.Services.CreateScope())
 }
 
 // Start the application
+Log.Information("SDMS Authentication Web App started successfully");
 app.Run();
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "SDMS Authentication Web App terminated unexpectedly");
+    throw;
+}
+finally
+{
+    Log.CloseAndFlush();
+}
 

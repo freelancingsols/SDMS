@@ -74,8 +74,12 @@ try
             .Enrich.WithThreadId()
             .Enrich.WithProperty("Application", "sdms.authenticationwebapp");
 
-        // Enable Serilog self-logging to diagnose issues
-        Serilog.Debugging.SelfLog.Enable(Console.Error);
+        // Enable Serilog self-logging to diagnose issues - this will show internal Serilog errors
+        Serilog.Debugging.SelfLog.Enable(msg =>
+        {
+            Console.WriteLine($"[Serilog SelfLog] {msg}");
+            System.Diagnostics.Debug.WriteLine($"[Serilog SelfLog] {msg}");
+        });
 
         // Add GrafanaLoki sink if configuration is provided
         if (!string.IsNullOrWhiteSpace(lokiUrl) && !string.IsNullOrWhiteSpace(lokiUser) && !string.IsNullOrWhiteSpace(lokiToken))
@@ -101,14 +105,20 @@ try
 
                 var envName = context.HostingEnvironment.EnvironmentName?.ToLowerInvariant() ?? "unknown";
 
+                // For Grafana Cloud, the Login should be the instance ID (usually a number)
+                // and Password should be the API token
+                // Try both formats: Login/Password and also check if we need to use different auth
+                var lokiCredentials = new LokiCredentials
+                {
+                    Login = lokiUser,
+                    Password = lokiToken
+                };
+
                 // Configure GrafanaLoki sink with additional options for better reliability
+                // Reduced batch period to send logs more frequently
                 configuration.WriteTo.GrafanaLoki(
                     normalizedLokiUrl,
-                    credentials: new LokiCredentials
-                    {
-                        Login = lokiUser,
-                        Password = lokiToken
-                    },
+                    credentials: lokiCredentials,
                     labels: new[]
                     {
                         new LokiLabel { Key = "app", Value = "sdms-authenticationwebapp" },
@@ -117,13 +127,39 @@ try
                     },
                     restrictedToMinimumLevel: LogEventLevel.Information,
                     queueLimit: 10000, // Queue limit to prevent memory issues
-                    batchPostingLimit: 100, // Batch size for sending logs
-                    period: TimeSpan.FromSeconds(2) // How often to flush logs
+                    batchPostingLimit: 50, // Reduced batch size for faster sending
+                    period: TimeSpan.FromSeconds(1) // Flush more frequently (every 1 second)
                 );
 
                 // Log that Loki sink is configured (this will go to console only since Serilog isn't fully initialized yet)
                 Console.WriteLine($"[Loki] GrafanaLoki sink configured successfully. URL: {normalizedLokiUrl}, Labels: app=sdms-authenticationwebapp, environment={envName}");
                 Console.WriteLine($"[Loki] User: {lokiUser}, Token length: {lokiToken?.Length ?? 0}");
+                Console.WriteLine($"[Loki] Batch period: 1 second, Batch limit: 50");
+
+                // Test connectivity to Loki endpoint (async, don't block startup)
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(3000); // Wait a bit for app to start
+                        using var httpClient = new HttpClient();
+                        var authValue = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{lokiUser}:{lokiToken}"));
+                        httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", authValue);
+
+                        // Test with a simple HEAD request to verify connectivity
+                        var response = await httpClient.SendAsync(new HttpRequestMessage(HttpMethod.Head, normalizedLokiUrl));
+                        Console.WriteLine($"[Loki] Connectivity test: {response.StatusCode} - {(response.IsSuccessStatusCode ? "SUCCESS" : "FAILED")}");
+                        if (!response.IsSuccessStatusCode)
+                        {
+                            var errorContent = await response.Content.ReadAsStringAsync();
+                            Console.WriteLine($"[Loki] Error response: {errorContent}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[Loki] Connectivity test failed: {ex.Message}");
+                    }
+                });
             }
             catch (Exception ex)
             {
@@ -718,9 +754,14 @@ try
     // Start the application
     Log.Information("SDMS Authentication Web App started successfully");
 
-    // Send a test log message to verify Loki integration
+    // Send multiple test log messages to verify Loki integration
     Log.Information("Test log message for Loki verification - App: sdms-authenticationwebapp, Environment: {Environment}",
         builder.Environment.EnvironmentName);
+    Log.Warning("Test WARNING log for Loki - this should appear in Loki Explorer");
+    Log.Error("Test ERROR log for Loki - this should appear in Loki Explorer");
+
+    // Give Loki sink time to send the batch (batch period is 1 second)
+    await Task.Delay(2000);
 
     app.Run();
 }

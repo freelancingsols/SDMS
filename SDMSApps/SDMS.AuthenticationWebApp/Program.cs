@@ -75,6 +75,7 @@ try
             .Enrich.WithProperty("Application", "sdms.authenticationwebapp");
 
         // Enable Serilog self-logging to diagnose issues - this will show internal Serilog errors
+        // This will show the actual HTTP requests being made and any errors
         Serilog.Debugging.SelfLog.Enable(msg =>
         {
             Console.WriteLine($"[Serilog SelfLog] {msg}");
@@ -87,20 +88,37 @@ try
             try
             {
                 // Normalize Loki URL - remove trailing slashes and ensure proper format
-                var normalizedLokiUrl = lokiUrl.TrimEnd('/');
-                // If URL doesn't end with /loki/api/v1/push, add it
-                if (!normalizedLokiUrl.EndsWith("/loki/api/v1/push", StringComparison.OrdinalIgnoreCase))
+                var originalUrl = lokiUrl.TrimEnd('/');
+                Console.WriteLine($"[Loki] Original URL from config: {originalUrl}");
+
+                var normalizedLokiUrl = originalUrl;
+
+                // Check if this is a Grafana Cloud URL (contains grafana.net)
+                var isGrafanaCloud = normalizedLokiUrl.Contains("grafana.net", StringComparison.OrdinalIgnoreCase);
+                Console.WriteLine($"[Loki] Is Grafana Cloud: {isGrafanaCloud}");
+
+                // IMPORTANT: Serilog.Sinks.Grafana.Loki automatically appends /loki/api/v1/push to the URL
+                // So we must provide ONLY the base URL, not the full path
+                // If we provide the full URL, the library will append /loki/api/v1/push again, causing 404 errors
+                if (isGrafanaCloud)
                 {
-                    // If it ends with /loki, add /api/v1/push
-                    if (normalizedLokiUrl.EndsWith("/loki", StringComparison.OrdinalIgnoreCase))
+                    // For Grafana Cloud, extract just the base URL (scheme + host)
+                    // Remove any existing path including /loki/api/v1/push
+                    var uri = new Uri(normalizedLokiUrl);
+                    normalizedLokiUrl = $"{uri.Scheme}://{uri.Host}";
+                    Console.WriteLine($"[Loki] Extracted base URL for Grafana Cloud (library will append /loki/api/v1/push): {normalizedLokiUrl}");
+                }
+                else
+                {
+                    // For self-hosted Loki, also extract just the base URL
+                    // Remove any existing path
+                    var uri = new Uri(normalizedLokiUrl);
+                    normalizedLokiUrl = $"{uri.Scheme}://{uri.Host}";
+                    if (uri.Port != 80 && uri.Port != 443 && uri.Port != -1)
                     {
-                        normalizedLokiUrl += "/api/v1/push";
+                        normalizedLokiUrl += $":{uri.Port}";
                     }
-                    // If it doesn't contain /loki at all, assume it's the base URL
-                    else if (!normalizedLokiUrl.Contains("/loki", StringComparison.OrdinalIgnoreCase))
-                    {
-                        normalizedLokiUrl = normalizedLokiUrl.TrimEnd('/') + "/loki/api/v1/push";
-                    }
+                    Console.WriteLine($"[Loki] Extracted base URL for self-hosted Loki (library will append /loki/api/v1/push): {normalizedLokiUrl}");
                 }
 
                 var envName = context.HostingEnvironment.EnvironmentName?.ToLowerInvariant() ?? "unknown";
@@ -116,23 +134,38 @@ try
 
                 // Configure GrafanaLoki sink with additional options for better reliability
                 // Reduced batch period to send logs more frequently
-                configuration.WriteTo.GrafanaLoki(
-                    normalizedLokiUrl,
-                    credentials: lokiCredentials,
-                    labels: new[]
-                    {
-                        new LokiLabel { Key = "app", Value = "sdms-authenticationwebapp" },
-                        new LokiLabel { Key = "environment", Value = envName },
-                        new LokiLabel { Key = "service", Value = "authentication" }
-                    },
-                    restrictedToMinimumLevel: LogEventLevel.Information,
-                    queueLimit: 10000, // Queue limit to prevent memory issues
-                    batchPostingLimit: 50, // Reduced batch size for faster sending
-                    period: TimeSpan.FromSeconds(1) // Flush more frequently (every 1 second)
-                );
+                // NOTE: The library expects the FULL URL including the path
+                // For Grafana Cloud: https://logs-prod-XXX.grafana.net/loki/api/v1/push
+                try
+                {
+                    configuration.WriteTo.GrafanaLoki(
+                        normalizedLokiUrl,
+                        credentials: lokiCredentials,
+                        labels: new[]
+                        {
+                            new LokiLabel { Key = "app", Value = "sdms-authenticationwebapp" },
+                            new LokiLabel { Key = "environment", Value = envName },
+                            new LokiLabel { Key = "service", Value = "authentication" }
+                        },
+                        restrictedToMinimumLevel: LogEventLevel.Information,
+                        queueLimit: 10000, // Queue limit to prevent memory issues
+                        batchPostingLimit: 50, // Reduced batch size for faster sending
+                        period: TimeSpan.FromSeconds(1) // Flush more frequently (every 1 second)
+                    );
+                    Console.WriteLine($"[Loki] Serilog sink WriteTo.GrafanaLoki called successfully with URL: {normalizedLokiUrl}");
+                }
+                catch (Exception sinkEx)
+                {
+                    Console.WriteLine($"[Loki] ERROR configuring WriteTo.GrafanaLoki: {sinkEx.Message}");
+                    Console.WriteLine($"[Loki] Exception: {sinkEx}");
+                    throw; // Re-throw to see the full error
+                }
 
                 // Log that Loki sink is configured (this will go to console only since Serilog isn't fully initialized yet)
-                Console.WriteLine($"[Loki] GrafanaLoki sink configured successfully. URL: {normalizedLokiUrl}, Labels: app=sdms-authenticationwebapp, environment={envName}");
+                Console.WriteLine($"[Loki] GrafanaLoki sink configured successfully.");
+                Console.WriteLine($"[Loki] Final URL being used: {normalizedLokiUrl}");
+                Console.WriteLine($"[Loki] Base URL (library will append /loki/api/v1/push): {normalizedLokiUrl}");
+                Console.WriteLine($"[Loki] Labels: app=sdms-authenticationwebapp, environment={envName}");
                 Console.WriteLine($"[Loki] User: {lokiUser}, Token length: {lokiToken?.Length ?? 0}");
                 Console.WriteLine($"[Loki] Batch period: 1 second, Batch limit: 50");
 
@@ -146,18 +179,29 @@ try
                         var authValue = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{lokiUser}:{lokiToken}"));
                         httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", authValue);
 
-                        // Test with a simple HEAD request to verify connectivity
-                        var response = await httpClient.SendAsync(new HttpRequestMessage(HttpMethod.Head, normalizedLokiUrl));
+                        // Test with a POST request (Loki push endpoint requires POST, not HEAD)
+                        // Use the Prometheus format that Grafana Cloud expects
+                        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1000000; // nanoseconds
+                        var testPayload = new StringContent($"{{\"streams\":[{{\"stream\":{{\"test\":\"connectivity\"}},\"values\":[[\"{timestamp}\",\"test message\"]]}}]}}", System.Text.Encoding.UTF8, "application/json");
+                        var response = await httpClient.PostAsync(normalizedLokiUrl, testPayload);
                         Console.WriteLine($"[Loki] Connectivity test: {response.StatusCode} - {(response.IsSuccessStatusCode ? "SUCCESS" : "FAILED")}");
+                        Console.WriteLine($"[Loki] Test URL: {normalizedLokiUrl}");
+                        Console.WriteLine($"[Loki] Test Auth Header: Basic {authValue.Substring(0, Math.Min(20, authValue.Length))}...");
                         if (!response.IsSuccessStatusCode)
                         {
                             var errorContent = await response.Content.ReadAsStringAsync();
                             Console.WriteLine($"[Loki] Error response: {errorContent}");
+                            Console.WriteLine($"[Loki] Response headers: {string.Join(", ", response.Headers.Select(h => $"{h.Key}={string.Join(",", h.Value)}"))}");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"[Loki] SUCCESS! Connectivity test passed. Logs should work.");
                         }
                     }
                     catch (Exception ex)
                     {
                         Console.WriteLine($"[Loki] Connectivity test failed: {ex.Message}");
+                        Console.WriteLine($"[Loki] Exception: {ex}");
                     }
                 });
             }

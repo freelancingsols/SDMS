@@ -41,6 +41,14 @@ try
 
     var builder = WebApplication.CreateBuilder(args);
 
+    // Configuration loading order (highest to lowest priority):
+    // 1. Environment Variables (loaded here - highest priority)
+    // 2. appsettings.json (loaded automatically by CreateBuilder - base/default values with local development values)
+    //
+    // Note: We use a single appsettings.json file with local development values.
+    // Production values are set via environment variables at runtime, which override the default values in appsettings.json.
+    builder.Configuration.AddEnvironmentVariables();
+
     // Configure Serilog with GrafanaLoki sink
     builder.Host.UseSerilog((context, services, configuration) =>
     {
@@ -67,17 +75,58 @@ try
             .Enrich.WithProperty("Application", "sdms.authenticationwebapp");
 
         // Add GrafanaLoki sink if configuration is provided
-        if (!string.IsNullOrEmpty(lokiUrl) && !string.IsNullOrEmpty(lokiUser) && !string.IsNullOrEmpty(lokiToken))
+        if (!string.IsNullOrWhiteSpace(lokiUrl) && !string.IsNullOrWhiteSpace(lokiUser) && !string.IsNullOrWhiteSpace(lokiToken))
         {
-            configuration.WriteTo.GrafanaLoki(
-                lokiUrl,
-                credentials: new LokiCredentials(lokiUser, lokiToken),
-                labels: new[]
+            try
+            {
+                // Normalize Loki URL - remove trailing slashes and ensure proper format
+                var normalizedLokiUrl = lokiUrl.TrimEnd('/');
+                // If URL doesn't end with /loki/api/v1/push, add it
+                if (!normalizedLokiUrl.EndsWith("/loki/api/v1/push", StringComparison.OrdinalIgnoreCase))
                 {
-                    new LokiLabel { Key = "app", Value = "sdms.authenticationwebapp" },
-                    new LokiLabel { Key = "env", Value = context.HostingEnvironment.EnvironmentName }
+                    // If it ends with /loki, add /api/v1/push
+                    if (normalizedLokiUrl.EndsWith("/loki", StringComparison.OrdinalIgnoreCase))
+                    {
+                        normalizedLokiUrl += "/api/v1/push";
+                    }
+                    // If it doesn't contain /loki at all, assume it's the base URL
+                    else if (!normalizedLokiUrl.Contains("/loki", StringComparison.OrdinalIgnoreCase))
+                    {
+                        normalizedLokiUrl = normalizedLokiUrl.TrimEnd('/') + "/loki/api/v1/push";
+                    }
                 }
-            );
+
+                var envName = context.HostingEnvironment.EnvironmentName?.ToLowerInvariant() ?? "unknown";
+
+                configuration.WriteTo.GrafanaLoki(
+                    normalizedLokiUrl,
+                    credentials: new LokiCredentials
+                    {
+                        Login = lokiUser,
+                        Password = lokiToken
+                    },
+                    labels: new[]
+                    {
+                        new LokiLabel { Key = "app", Value = "sdms-authenticationwebapp" },
+                        new LokiLabel { Key = "environment", Value = envName },
+                        new LokiLabel { Key = "service", Value = "authentication" }
+                    },
+                    restrictedToMinimumLevel: LogEventLevel.Information
+                );
+
+                // Log that Loki sink is configured (this will go to console only since Serilog isn't fully initialized yet)
+                Console.WriteLine($"[Loki] GrafanaLoki sink configured successfully. URL: {normalizedLokiUrl}, Labels: app=sdms-authenticationwebapp, environment={envName}");
+            }
+            catch (Exception ex)
+            {
+                // Log error but don't fail - app should still start with console logging
+                Console.WriteLine($"[Loki] Error configuring GrafanaLoki sink: {ex.Message}");
+                Console.WriteLine($"[Loki] Stack trace: {ex.StackTrace}");
+            }
+        }
+        else
+        {
+            Console.WriteLine("[Loki] GrafanaLoki sink not configured - missing configuration values (logging_loki_url, logging_loki_user, or logging_loki_token)");
         }
 
         // Always write to console
@@ -86,14 +135,6 @@ try
             restrictedToMinimumLevel: LogEventLevel.Information
         );
     });
-
-    // Configuration loading order (highest to lowest priority):
-    // 1. Environment Variables (loaded here - highest priority)
-    // 2. appsettings.json (loaded automatically by CreateBuilder - base/default values with local development values)
-    //
-    // Note: We use a single appsettings.json file with local development values.
-    // Production values are set via environment variables at runtime, which override the default values in appsettings.json.
-    builder.Configuration.AddEnvironmentVariables();
 
     // Configure server URLs from configuration
     // Priority: Environment Variable (PORT) > Configuration (SDMS_AuthenticationWebApp_ServerPort) > Configuration (SDMS_AuthenticationWebApp_ServerUrls) > Default

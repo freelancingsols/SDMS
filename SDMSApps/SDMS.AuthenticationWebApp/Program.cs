@@ -554,7 +554,7 @@ try
 
     app.UseRouting();
     
-    // Add middleware to log all /connect/logout requests BEFORE OpenIddict processes them
+    // Add middleware to log all /connect/logout requests and capture OpenIddict's response
     app.Use(async (context, next) =>
     {
         if (context.Request.Path.StartsWithSegments("/connect/logout"))
@@ -564,21 +564,89 @@ try
             var clientId = context.Request.Query["client_id"].ToString();
             var idTokenHint = context.Request.Query["id_token_hint"].ToString();
             
+            // Extract client ID from id_token_hint if not provided
+            if (string.IsNullOrEmpty(clientId) && !string.IsNullOrEmpty(idTokenHint))
+            {
+                try
+                {
+                    var tokenHandler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+                    var jwtToken = tokenHandler.ReadJwtToken(idTokenHint);
+                    clientId = jwtToken.Claims.FirstOrDefault(c => c.Type == "azp")?.Value
+                        ?? jwtToken.Claims.FirstOrDefault(c => c.Type == "aud")?.Value
+                        ?? "sdms_frontend";
+                }
+                catch
+                {
+                    clientId = "sdms_frontend";
+                }
+            }
+            
+            if (string.IsNullOrEmpty(clientId))
+            {
+                clientId = "sdms_frontend";
+            }
+            
             logger.LogError("MIDDLEWARE: /connect/logout request intercepted. Method: {Method}, PostLogoutUri: {PostLogoutUri}, ClientId: {ClientId}, HasIdToken: {HasIdToken}", 
                 context.Request.Method, 
                 postLogoutUri ?? "(empty)",
-                clientId ?? "(empty)",
+                clientId,
                 !string.IsNullOrEmpty(idTokenHint));
             
             Log.Error("MIDDLEWARE: /connect/logout request intercepted. Method: {Method}, PostLogoutUri: {PostLogoutUri}, ClientId: {ClientId}", 
                 context.Request.Method, 
                 postLogoutUri ?? "(empty)",
-                clientId ?? "(empty)");
+                clientId);
             
-            Console.WriteLine($"[MIDDLEWARE] /connect/logout request - Method: {context.Request.Method}, PostLogoutUri: {postLogoutUri ?? "(empty)"}, ClientId: {clientId ?? "(empty)"}");
+            Console.WriteLine($"[MIDDLEWARE] /connect/logout request - Method: {context.Request.Method}, PostLogoutUri: {postLogoutUri ?? "(empty)"}, ClientId: {clientId}");
+            
+            // Capture the response to log OpenIddict's error
+            var originalBodyStream = context.Response.Body;
+            using var responseBody = new MemoryStream();
+            context.Response.Body = responseBody;
+            
+            await next();
+            
+            // Read the response
+            responseBody.Seek(0, SeekOrigin.Begin);
+            var responseText = await new StreamReader(responseBody).ReadToEndAsync();
+            responseBody.Seek(0, SeekOrigin.Begin);
+            
+            // If OpenIddict rejected the request, log it
+            if (context.Response.StatusCode == 400 && !string.IsNullOrEmpty(responseText))
+            {
+                var errorMsg = $"OpenIddict rejected logout request. Status: {context.Response.StatusCode}, PostLogoutUri: {postLogoutUri ?? "(empty)"}, ClientId: {clientId}, Response: {responseText}";
+                logger.LogError(errorMsg);
+                Log.Error(errorMsg);
+                Console.WriteLine($"[ERROR] {errorMsg}");
+                
+                // Also try to get allowed URIs from database for better error message
+                try
+                {
+                    using var scope = context.RequestServices.CreateScope();
+                    var applicationManager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
+                    var client = await applicationManager.FindByClientIdAsync(clientId);
+                    if (client != null)
+                    {
+                        var allowedUris = await applicationManager.GetPostLogoutRedirectUrisAsync(client);
+                        var allowedUrisList = string.Join(", ", allowedUris.Select(u => u.ToString()));
+                        var detailedError = $"OpenIddict rejected logout: Requested URI '{postLogoutUri}' not in allowed list. ClientId: {clientId}, Allowed URIs: {allowedUrisList}";
+                        logger.LogError(detailedError);
+                        Log.Error(detailedError);
+                        Console.WriteLine($"[ERROR] {detailedError}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Error retrieving allowed URIs for logging");
+                }
+            }
+            
+            await responseBody.CopyToAsync(originalBodyStream);
         }
-        
-        await next();
+        else
+        {
+            await next();
+        }
     });
 
     // Map health check and ping endpoints BEFORE authentication/authorization

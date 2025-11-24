@@ -204,7 +204,14 @@ public class LogoutController : ControllerBase
                                 
                                 var errorDescription = $"The specified 'post_logout_redirect_uri' is invalid. Allowed URIs: {allowedUrisList}";
                                 
-                                // Log error - use both simple message and structured logging
+                                // Log error - use explicit Error level to ensure it's captured
+                                // Log with both structured parameters and a simple message
+                                var errorMessage = $"Post-logout redirect URI validation failed. Requested: {postLogoutRedirectUri}, Normalized: {normalizedRedirectUri}, ClientId: {clientId}, Allowed URIs: {allowedUrisList}";
+                                
+                                // Use LogError which is Error level - should always be captured
+                                _logger.LogError(errorMessage);
+                                
+                                // Also log with structured parameters for better searchability in Loki
                                 _logger.LogError(
                                     "Post-logout redirect URI validation failed. Requested: {RequestUri}, Normalized: {NormalizedUri}, ClientId: {ClientId}, Allowed URIs: {AllowedUris}", 
                                     postLogoutRedirectUri, 
@@ -212,8 +219,8 @@ public class LogoutController : ControllerBase
                                     clientId, 
                                     allowedUrisList);
                                 
-                                // Force flush logs to ensure they're sent to Loki immediately
-                                await Task.CompletedTask; // Placeholder for potential async flush if needed
+                                // Log to console as backup (will show in Railway logs)
+                                Console.WriteLine($"[ERROR] {errorMessage}");
                                 
                                 return StatusCode(400, new { 
                                     error = "invalid_request", 

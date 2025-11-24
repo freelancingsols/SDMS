@@ -141,7 +141,6 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-          cache-dotnet: true  # Cache .NET dependencies (saves Actions minutes)
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -424,6 +423,26 @@ jobs:
           echo "  SDMS_AuthenticationWebApp_clientid: ${SDMS_AuthenticationWebApp_clientid:-❌ NOT SET}"
           echo "  SDMS_B2CWebApp_url: ${SDMS_B2CWebApp_url:-❌ NOT SET}"
           echo ""
+          echo "📋 Loki Configuration Status:"
+          if [ -z "$logging_loki_url" ]; then
+            echo "  logging_loki_url: ❌ NOT SET"
+          else
+            echo "  logging_loki_url: ✅ SET (${#logging_loki_url} chars)"
+            echo "    Preview: ${logging_loki_url:0:50}..."
+          fi
+          if [ -z "$logging_loki_user" ]; then
+            echo "  logging_loki_user: ❌ NOT SET"
+          else
+            echo "  logging_loki_user: ✅ SET (${#logging_loki_user} chars)"
+            echo "    Value: $logging_loki_user"
+          fi
+          if [ -z "$logging_loki_token" ]; then
+            echo "  logging_loki_token: ❌ NOT SET"
+          else
+            echo "  logging_loki_token: ✅ SET (${#logging_loki_token} chars)"
+            echo "    Preview: ${logging_loki_token:0:20}..."
+          fi
+          echo ""
           
           # Track results
           INSERTED_VARS=()
@@ -464,6 +483,15 @@ jobs:
                 echo "  ⚠️  WARNING: Skipping CRITICAL variable $VAR_NAME (not set in GitHub Variables)"
                 echo "     This variable is required for Railway build to work correctly!"
                 echo "     Please set it in GitHub → Settings → Secrets and variables → Actions → Variables"
+              elif [[ "$VAR_NAME" == logging_loki_* ]]; then
+                echo "  ⚠️  WARNING: Skipping Loki variable $VAR_NAME (not set in GitHub Variables/Secrets)"
+                echo "     This variable is required for logs to be sent to Grafana Loki!"
+                echo "     Please set it in GitHub → Settings → Secrets and variables → Actions"
+                if [ "$VAR_NAME" = "logging_loki_token" ]; then
+                  echo "     Note: logging_loki_token should be set in Secrets (not Variables)"
+                else
+                  echo "     Note: $VAR_NAME should be set in Variables"
+                fi
               else
                 echo "  ⏭️  Skipping $VAR_NAME (not set in GitHub Variables - optional)"
               fi
@@ -474,9 +502,33 @@ jobs:
             # Get current value from Railway
             RAILWAY_VALUE=$(get_railway_var_value "$VAR_NAME")
             
+            # Function to mask sensitive values for logging
+            mask_value() {
+              local val="$1"
+              local var_name="$2"
+              # Mask secrets and tokens
+              if [[ "$var_name" == *"Secret"* ]] || [[ "$var_name" == *"Token"* ]] || [[ "$var_name" == *"Password"* ]] || [[ "$var_name" == *"ConnectionString"* ]] || [[ "$var_name" == *"token"* ]]; then
+                if [ ${#val} -gt 10 ]; then
+                  echo "${val:0:4}...${val: -4}"
+                else
+                  echo "***"
+                fi
+              else
+                # For non-secrets, show first 50 chars
+                if [ ${#val} -gt 50 ]; then
+                  echo "${val:0:50}..."
+                else
+                  echo "$val"
+                fi
+              fi
+            }
+            
             if [ -z "$RAILWAY_VALUE" ]; then
               # Variable doesn't exist - INSERT
-              echo -n "  Processing $VAR_NAME... "
+              echo "  Processing $VAR_NAME..."
+              echo "    GitHub: $(mask_value "$GITHUB_VALUE" "$VAR_NAME")"
+              echo "    Railway: ❌ NOT SET"
+              echo -n "    Action: INSERTING... "
               if set_railway_env "$VAR_NAME" "$GITHUB_VALUE" "insert"; then
                 INSERTED_VARS+=("$VAR_NAME")
                 echo "✅ INSERTED"
@@ -489,7 +541,11 @@ jobs:
               fi
             elif [ "$RAILWAY_VALUE" != "$GITHUB_VALUE" ]; then
               # Variable exists but value is different - UPDATE
-              echo -n "  Processing $VAR_NAME... "
+              echo "  Processing $VAR_NAME..."
+              echo "    GitHub: $(mask_value "$GITHUB_VALUE" "$VAR_NAME")"
+              echo "    Railway: $(mask_value "$RAILWAY_VALUE" "$VAR_NAME")"
+              echo "    Status: ⚠️  VALUES DIFFER - UPDATE NEEDED"
+              echo -n "    Action: UPDATING... "
               if set_railway_env "$VAR_NAME" "$GITHUB_VALUE" "update"; then
                 UPDATED_VARS+=("$VAR_NAME")
                 echo "✅ UPDATED"
@@ -502,9 +558,14 @@ jobs:
               fi
             else
               # Variable exists and value is the same - SKIP
-              echo "  ✓ $VAR_NAME is already up to date"
+              echo "  Processing $VAR_NAME..."
+              echo "    GitHub: $(mask_value "$GITHUB_VALUE" "$VAR_NAME")"
+              echo "    Railway: $(mask_value "$RAILWAY_VALUE" "$VAR_NAME")"
+              echo "    Status: ✅ VALUES MATCH - NO UPDATE NEEDED"
+              echo "    Action: SKIPPED"
               UNCHANGED_VARS+=("$VAR_NAME")
             fi
+            echo ""
           done
           
           # Summary

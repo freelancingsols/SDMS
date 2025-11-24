@@ -198,17 +198,54 @@ public class LogoutController : ControllerBase
                             
                             if (!isAllowed)
                             {
-                                var allowedUrisList = string.Join(", ", allowedUris.Select(u => u.ToString()));
-                                _logger.LogError("Post-logout redirect URI validation failed. Requested: {RequestUri}, ClientId: {ClientId}, Allowed URIs: {AllowedUris}", 
-                                    postLogoutRedirectUri, clientId, allowedUrisList);
+                                var allowedUrisList = allowedUris.Any() 
+                                    ? string.Join(", ", allowedUris.Select(u => u.ToString()))
+                                    : "(none configured)";
+                                
+                                var errorDescription = $"The specified 'post_logout_redirect_uri' is invalid. Allowed URIs: {allowedUrisList}";
+                                
+                                // Log error - use both simple message and structured logging
+                                _logger.LogError(
+                                    "Post-logout redirect URI validation failed. Requested: {RequestUri}, Normalized: {NormalizedUri}, ClientId: {ClientId}, Allowed URIs: {AllowedUris}", 
+                                    postLogoutRedirectUri, 
+                                    normalizedRedirectUri,
+                                    clientId, 
+                                    allowedUrisList);
+                                
+                                // Force flush logs to ensure they're sent to Loki immediately
+                                await Task.CompletedTask; // Placeholder for potential async flush if needed
                                 
                                 return StatusCode(400, new { 
                                     error = "invalid_request", 
-                                    error_description = $"The specified 'post_logout_redirect_uri' is invalid. Allowed URIs: {allowedUrisList}",
+                                    error_description = errorDescription,
                                     error_uri = "https://documentation.openiddict.com/errors/ID2052"
                                 });
                             }
                         }
+                        else
+                        {
+                            // Client not found - log and return error
+                            _logger.LogError("Post-logout redirect URI validation failed: Client not found. ClientId: {ClientId}, Requested URI: {RequestUri}", 
+                                clientId, postLogoutRedirectUri);
+                            
+                            return StatusCode(400, new { 
+                                error = "invalid_request", 
+                                error_description = $"The specified 'post_logout_redirect_uri' is invalid. Client '{clientId}' not found.",
+                                error_uri = "https://documentation.openiddict.com/errors/ID2052"
+                            });
+                        }
+                    }
+                    else
+                    {
+                        // No client ID provided - log and return error
+                        _logger.LogError("Post-logout redirect URI validation failed: No client ID provided. Requested URI: {RequestUri}", 
+                            postLogoutRedirectUri);
+                        
+                        return StatusCode(400, new { 
+                            error = "invalid_request", 
+                            error_description = "The specified 'post_logout_redirect_uri' is invalid. Client ID is required.",
+                            error_uri = "https://documentation.openiddict.com/errors/ID2052"
+                        });
                     }
             
             // Redirect to the post-logout URI

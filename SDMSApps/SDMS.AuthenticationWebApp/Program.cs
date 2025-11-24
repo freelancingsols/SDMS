@@ -294,7 +294,7 @@ try
                 .EnableTokenEndpointPassthrough()
                 .EnableAuthorizationEndpointPassthrough()
                 .EnableUserinfoEndpointPassthrough()
-                .EnableLogoutEndpointPassthrough();
+                .EnableLogoutEndpointPassthrough(); // This allows our controller to handle logout, but OpenIddict may still validate post_logout_redirect_uri
         })
         .AddValidation(options =>
         {
@@ -553,6 +553,33 @@ try
     }
 
     app.UseRouting();
+    
+    // Add middleware to log all /connect/logout requests BEFORE OpenIddict processes them
+    app.Use(async (context, next) =>
+    {
+        if (context.Request.Path.StartsWithSegments("/connect/logout"))
+        {
+            var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+            var postLogoutUri = context.Request.Query["post_logout_redirect_uri"].ToString();
+            var clientId = context.Request.Query["client_id"].ToString();
+            var idTokenHint = context.Request.Query["id_token_hint"].ToString();
+            
+            logger.LogError("MIDDLEWARE: /connect/logout request intercepted. Method: {Method}, PostLogoutUri: {PostLogoutUri}, ClientId: {ClientId}, HasIdToken: {HasIdToken}", 
+                context.Request.Method, 
+                postLogoutUri ?? "(empty)",
+                clientId ?? "(empty)",
+                !string.IsNullOrEmpty(idTokenHint));
+            
+            Log.Error("MIDDLEWARE: /connect/logout request intercepted. Method: {Method}, PostLogoutUri: {PostLogoutUri}, ClientId: {ClientId}", 
+                context.Request.Method, 
+                postLogoutUri ?? "(empty)",
+                clientId ?? "(empty)");
+            
+            Console.WriteLine($"[MIDDLEWARE] /connect/logout request - Method: {context.Request.Method}, PostLogoutUri: {postLogoutUri ?? "(empty)"}, ClientId: {clientId ?? "(empty)"}");
+        }
+        
+        await next();
+    });
 
     // Map health check and ping endpoints BEFORE authentication/authorization
     // This allows Railway and other platforms to check if the container is healthy

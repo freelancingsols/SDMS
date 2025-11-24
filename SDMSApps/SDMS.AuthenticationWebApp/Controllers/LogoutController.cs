@@ -8,6 +8,7 @@ using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
 using SDMS.AuthenticationWebApp.Models;
 using static OpenIddict.Abstractions.OpenIddictConstants;
+using Serilog;
 
 namespace SDMS.AuthenticationWebApp.Controllers;
 
@@ -33,11 +34,18 @@ public class LogoutController : ControllerBase
     [IgnoreAntiforgeryToken]
     public async Task<IActionResult> Logout()
     {
+        // Log entry to method - helps trace execution
+        _logger.LogInformation("Logout endpoint called. Method: {Method}, Path: {Path}", Request.Method, Request.Path);
+        
         try
         {
             // Read logout parameters directly from query/form parameters
             // OpenIddict logout endpoint uses standard OAuth2/OIDC parameters
             string? postLogoutRedirectUri = Request.Query["post_logout_redirect_uri"].ToString();
+            
+            // Log received parameters for debugging
+            _logger.LogInformation("Logout request parameters - post_logout_redirect_uri: {PostLogoutUri}, HasFormContentType: {HasForm}", 
+                postLogoutRedirectUri ?? "(empty)", Request.HasFormContentType);
             if (string.IsNullOrEmpty(postLogoutRedirectUri) && Request.HasFormContentType)
             {
                 postLogoutRedirectUri = Request.Form["post_logout_redirect_uri"].ToString();
@@ -128,19 +136,30 @@ public class LogoutController : ControllerBase
             }
             
                     // Validate the redirect URI
+                    _logger.LogInformation("Validating post-logout redirect URI: {Uri}", postLogoutRedirectUri);
+                    
                     if (!Uri.TryCreate(postLogoutRedirectUri, UriKind.Absolute, out var redirectUri))
                     {
-                        _logger.LogWarning("Invalid post-logout redirect URI format: {Uri}", postLogoutRedirectUri);
+                        var errorMsg = $"Invalid post-logout redirect URI format: {postLogoutRedirectUri}";
+                        _logger.LogWarning(errorMsg);
+                        Log.Warning(errorMsg);
+                        Console.WriteLine($"[WARNING] {errorMsg}");
+                        
                         return BadRequest(new { error = "invalid_request", error_description = "Invalid post-logout redirect URI" });
                     }
+                    
+                    _logger.LogInformation("URI validation passed. Checking client: {ClientId}", clientId);
 
                     // Check if the redirect URI is allowed for this client
                     if (!string.IsNullOrEmpty(clientId))
                     {
+                        _logger.LogInformation("Looking up client: {ClientId}", clientId);
                         var client = await _applicationManager.FindByClientIdAsync(clientId);
                         if (client != null)
                         {
+                            _logger.LogInformation("Client found. Retrieving allowed post-logout redirect URIs.");
                             var allowedUris = await _applicationManager.GetPostLogoutRedirectUrisAsync(client);
+                            _logger.LogInformation("Found {Count} allowed post-logout redirect URI(s)", allowedUris.Count());
                             
                             // Normalize the requested URI for comparison
                             var requestedUriString = redirectUri.ToString().Trim();
@@ -219,6 +238,15 @@ public class LogoutController : ControllerBase
                                     clientId, 
                                     allowedUrisList);
                                 
+                                // Use Serilog directly as additional backup (bypasses ILogger abstraction)
+                                Log.Error(errorMessage);
+                                Log.Error(
+                                    "Post-logout redirect URI validation failed. Requested: {RequestUri}, Normalized: {NormalizedUri}, ClientId: {ClientId}, Allowed URIs: {AllowedUris}", 
+                                    postLogoutRedirectUri, 
+                                    normalizedRedirectUri,
+                                    clientId, 
+                                    allowedUrisList);
+                                
                                 // Log to console as backup (will show in Railway logs)
                                 Console.WriteLine($"[ERROR] {errorMessage}");
                                 
@@ -260,7 +288,17 @@ public class LogoutController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during logout");
+            // Log exception with full details
+            var exceptionMessage = $"Error during logout: {ex.Message}";
+            _logger.LogError(ex, exceptionMessage);
+            
+            // Also use Serilog directly
+            Log.Error(ex, exceptionMessage);
+            
+            // Console backup
+            Console.WriteLine($"[ERROR] {exceptionMessage}");
+            Console.WriteLine($"[ERROR] Stack trace: {ex.StackTrace}");
+            
             return StatusCode(500, new { error = "server_error", error_description = "An error occurred during logout" });
         }
     }

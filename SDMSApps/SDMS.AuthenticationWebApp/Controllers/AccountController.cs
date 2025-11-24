@@ -57,8 +57,6 @@ public class AccountController : ControllerBase
                     {
                         user = externalUser;
                         externalAuthSuccess = true;
-                        _logger.LogInformation("External authentication successful for {Provider}: {Email}", 
-                            request.Provider, user.Email);
                     }
                     else
                     {
@@ -76,11 +74,6 @@ public class AccountController : ControllerBase
             // Fallback to local authentication if external failed or not attempted
             if (user == null && !string.IsNullOrEmpty(request.Email) && !string.IsNullOrEmpty(request.Password))
             {
-                if (externalAuthSuccess == false)
-                {
-                    _logger.LogInformation("Attempting local authentication fallback for {Email}", request.Email);
-                }
-
                 user = await _userManager.FindByEmailAsync(request.Email);
                 if (user != null)
                 {
@@ -92,7 +85,6 @@ public class AccountController : ControllerBase
                         
                         user.LastLoginDate = DateTime.UtcNow;
                         await _userManager.UpdateAsync(user);
-                        _logger.LogInformation("Local authentication successful for {Email}", request.Email);
                     }
                     else
                     {

@@ -140,7 +140,6 @@ public class ExternalAuthService : IExternalAuthService
                 {
                     return (false, null, string.Join(", ", result.Errors.Select(e => e.Description)));
                 }
-                _logger.LogInformation("Created new user from Auth0: {Email}", email);
             }
             else
             {
@@ -154,7 +153,6 @@ public class ExternalAuthService : IExternalAuthService
                     user.ExternalId = externalId;
                 }
                 await _userManager.UpdateAsync(user);
-                _logger.LogInformation("Updated user from Auth0: {Email}", email);
             }
 
             return (true, user, null);
@@ -253,7 +251,6 @@ public class ExternalAuthService : IExternalAuthService
                 {
                     return (false, null, string.Join(", ", result.Errors.Select(e => e.Description)));
                 }
-                _logger.LogInformation("Created new user from Google: {Email}", email);
             }
             else
             {
@@ -267,7 +264,6 @@ public class ExternalAuthService : IExternalAuthService
                     user.ExternalId = externalId;
                 }
                 await _userManager.UpdateAsync(user);
-                _logger.LogInformation("Updated user from Google: {Email}", email);
             }
 
             return (true, user, null);

@@ -142,9 +142,9 @@ try
                         new LokiLabel { Key = "service", Value = "authentication" }
                     },
                     restrictedToMinimumLevel: LogEventLevel.Information,
-                    queueLimit: 10000, // Queue limit to prevent memory issues
-                    batchPostingLimit: 50, // Batch size for sending logs
-                    period: TimeSpan.FromSeconds(1) // Flush interval
+                    queueLimit: 50000, // Increased queue limit to handle bursts
+                    batchPostingLimit: 200, // Increased batch size for better throughput
+                    period: TimeSpan.FromSeconds(2) // Flush interval - balance between latency and efficiency
                 );
             }
             catch (Exception ex)

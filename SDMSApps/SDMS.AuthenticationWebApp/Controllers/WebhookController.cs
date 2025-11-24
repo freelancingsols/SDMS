@@ -72,8 +72,6 @@ public class WebhookController : ControllerBase
                         string.Join(", ", result.Errors.Select(e => e.Description)));
                     return BadRequest(new { error = "Failed to create user" });
                 }
-
-                _logger.LogInformation("Created user from webhook: {Email}", payload.Email);
             }
             else
             {
@@ -85,7 +83,6 @@ public class WebhookController : ControllerBase
                 user.LastLoginDate = DateTime.UtcNow;
 
                 await _userManager.UpdateAsync(user);
-                _logger.LogInformation("Updated user from webhook: {Email}", payload.Email);
             }
 
             return Ok(new

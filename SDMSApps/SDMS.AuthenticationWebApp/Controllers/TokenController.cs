@@ -109,10 +109,8 @@ public class TokenController : ControllerBase
     
     private async Task<IActionResult> ExchangeInternal()
     {
-        // Log request details for debugging
+        // Get logger for error logging only
         var logger = HttpContext.RequestServices.GetRequiredService<ILogger<TokenController>>();
-        logger.LogInformation("Token exchange request received. Method: {Method}, ContentType: {ContentType}", 
-            Request.Method, Request.ContentType);
         
         // Declare variables outside try block for use in catch
         string? grantType = null;
@@ -139,7 +137,6 @@ public class TokenController : ControllerBase
             if (HttpContext.Items.TryGetValue(key, out var item) && item != null)
             {
                 requestObj = item;
-                logger.LogDebug("Found OpenIddict request in HttpContext.Items with key: {Key}", key);
                 break;
             }
         }
@@ -152,7 +149,6 @@ public class TokenController : ControllerBase
                 if (item != null && item.GetType().FullName?.Contains("OpenIddict") == true)
                 {
                     requestObj = item;
-                    logger.LogDebug("Found OpenIddict request in HttpContext.Items by type name: {TypeName}", item.GetType().FullName);
                     break;
                 }
             }
@@ -166,8 +162,6 @@ public class TokenController : ControllerBase
             if (!string.IsNullOrEmpty(requestWrapper.ClientId) || !string.IsNullOrEmpty(requestWrapper.GrantType))
             {
                 requestObj = requestWrapper;
-                logger.LogWarning("Using fallback request wrapper. GrantType: {GrantType}, ClientId: {ClientId}", 
-                    requestWrapper.GrantType, requestWrapper.ClientId);
             }
         }
         
@@ -224,8 +218,6 @@ public class TokenController : ControllerBase
             grantType = grantTypeProp?.GetValue(request)?.ToString();
             clientId = clientIdProp?.GetValue(request)?.ToString();
         }
-        logger.LogInformation("Token exchange request: GrantType={GrantType}, ClientId={ClientId}", grantType, clientId);
-        
         // Check grant type - handle both wrapper and real OpenIddict request
         bool isAuthCode, isRefreshToken;
         if (request is OpenIddictTokenRequestWrapper wrapper)
@@ -240,8 +232,6 @@ public class TokenController : ControllerBase
             isAuthCode = isAuthCodeMethod != null && (bool)isAuthCodeMethod.Invoke(request, null)!;
             isRefreshToken = isRefreshTokenMethod != null && (bool)isRefreshTokenMethod.Invoke(request, null)!;
         }
-        
-        logger.LogDebug("Token exchange: isAuthCode={IsAuthCode}, isRefreshToken={IsRefreshToken}", isAuthCode, isRefreshToken);
         
         if (isAuthCode || isRefreshToken)
         {
@@ -259,10 +249,6 @@ public class TokenController : ControllerBase
                     ? codeProp?.GetValue(request)?.ToString() 
                     : refreshTokenProp?.GetValue(request)?.ToString();
             }
-            
-            logger.LogInformation("Token exchange: GrantType={GrantType}, Code/Token length={Length}", 
-                isAuthCode ? "authorization_code" : "refresh_token", 
-                codeOrToken?.Length ?? 0);
             
             // Retrieve the claims principal stored in the authorization code/refresh token.
             var result = await HttpContext.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
@@ -283,7 +269,6 @@ public class TokenController : ControllerBase
 
             // Retrieve the user profile corresponding to the authorization code/refresh token.
             var subject = result.Principal.GetClaim(Claims.Subject);
-            logger.LogDebug("Token exchange: Subject claim: {Subject}", subject);
             
             if (string.IsNullOrEmpty(subject))
             {
@@ -348,9 +333,6 @@ public class TokenController : ControllerBase
             identity.SetResources(await GetResourcesAsync(scopes2));
             identity.SetDestinations(GetDestinations);
 
-            logger.LogInformation("Token exchange successful: UserId={UserId}, Scopes={Scopes}", 
-                subject, string.Join(", ", scopes2));
-            
             return SignIn(new ClaimsPrincipal(identity), OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         }
 

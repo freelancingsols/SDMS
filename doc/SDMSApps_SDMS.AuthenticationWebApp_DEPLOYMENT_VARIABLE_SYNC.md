@@ -42,6 +42,9 @@ GitHub Actions Workflow
   - ✅ `SDMS_AuthenticationWebApp_clientid` - **CRITICAL** (used during Railway build)
   - ✅ `SDMS_B2CWebApp_url`
   - ✅ `SDMS_AuthenticationWebApp_ConnectionString`
+  - ✅ `logging_loki_url` - Grafana Loki endpoint URL (GitHub Variable)
+  - ✅ `logging_loki_user` - Grafana Loki username (GitHub Variable)
+  - ✅ `logging_loki_token` - Grafana Loki API token (GitHub Secret)
   - ✅ All other configuration variables
   - ❌ `SDMS_AuthenticationWebApp_FrontendUrl` - **REMOVED** (obsolete)
 
@@ -106,6 +109,21 @@ These variables **MUST** be set in GitHub Variables and will be synced to Railwa
 - ✅ `SDMS_AuthenticationWebApp_redirectUri` - Optional (generated in code if not set)
 - ✅ `SDMS_AuthenticationWebApp_scope` - **CRITICAL**
 
+## Optional Variables (Synced but Not Required for Build)
+
+These variables are synced to Railway but are optional - the application will work without them:
+
+### Logging Configuration (Grafana Loki)
+- `logging_loki_url` - Grafana Loki endpoint URL (GitHub Variable)
+  - If not set: Logs only go to console
+  - If set: Logs are sent to Grafana Loki
+- `logging_loki_user` - Grafana Loki username (GitHub Variable)
+  - Required if `logging_loki_url` is set
+- `logging_loki_token` - Grafana Loki API token (GitHub Secret)
+  - Required if `logging_loki_url` is set
+
+**Note:** All three `logging_loki_*` variables must be set together for Loki logging to work. If any are missing, the application will log a warning and continue with console-only logging.
+
 ---
 
 ## Variable Sync Logic
@@ -123,6 +141,9 @@ These variables **MUST** be set in GitHub Variables and will be synced to Railwa
 **Variables synced:**
 - All `SDMS_AuthenticationWebApp_*` variables from GitHub Variables
 - All secrets from GitHub Secrets
+- `logging_loki_url` - Grafana Loki endpoint URL (GitHub Variable)
+- `logging_loki_user` - Grafana Loki username (GitHub Variable)
+- `logging_loki_token` - Grafana Loki API token (GitHub Secret)
 - **Removed:** `SDMS_AuthenticationWebApp_FrontendUrl` (obsolete)
 
 ### Vercel Sync (`.github/workflows/deploy-b2c-vercel.yml`)
@@ -143,6 +164,9 @@ These variables **MUST** be set in GitHub Variables and will be synced to Railwa
 ### ✅ Added to Railway Sync
 - `SDMS_AuthenticationWebApp_url` - **NEW** (was missing, now synced)
 - `SDMS_AuthenticationWebApp_clientid` - **NEW** (was missing, now synced)
+- `logging_loki_url` - Grafana Loki endpoint URL (GitHub Variable)
+- `logging_loki_user` - Grafana Loki username (GitHub Variable)
+- `logging_loki_token` - Grafana Loki API token (GitHub Secret)
 
 ### ❌ Removed from Railway Sync
 - `SDMS_AuthenticationWebApp_FrontendUrl` - **REMOVED** (obsolete, replaced with `SDMS_B2CWebApp_url`)
@@ -166,6 +190,7 @@ After deployment, verify:
   - Check Railway dashboard → Variables tab
   - Should see `SDMS_AuthenticationWebApp_url` with production URL
   - Should see `SDMS_AuthenticationWebApp_clientid`
+  - Should see `logging_loki_url`, `logging_loki_user`, and `logging_loki_token` (if logging to Loki is configured)
 
 - [ ] **Build logs show correct URLs:**
   - Railway build logs should show: `SDMS_AuthenticationWebApp_url=✅ Environment Variable`
@@ -198,6 +223,20 @@ After deployment, verify:
 2. Add missing variables
 3. Redeploy
 
+### Issue: Logs not appearing in Grafana Loki
+
+**Cause:** `logging_loki_*` variables not set or not synced to Railway.
+
+**Fix:**
+1. Verify GitHub Variables/Secrets are set:
+   - `logging_loki_url` (GitHub Variable)
+   - `logging_loki_user` (GitHub Variable)
+   - `logging_loki_token` (GitHub Secret)
+2. Check Railway Variables tab - ensure all three variables are present
+3. Verify values are correct (not empty)
+4. Check application logs for Loki configuration errors
+5. Note: If variables are not set, logs will only go to console (this is expected behavior)
+
 ---
 
 ## Summary
@@ -207,6 +246,7 @@ After deployment, verify:
 - Syncs to Railway BEFORE build
 - Railway build uses synced variables
 - ✅ Now includes `SDMS_AuthenticationWebApp_url` and `clientid`
+- ✅ Includes `logging_loki_*` variables for Grafana Loki logging
 - ❌ Removed obsolete `FrontendUrl`
 
 ✅ **Vercel Deployment:**

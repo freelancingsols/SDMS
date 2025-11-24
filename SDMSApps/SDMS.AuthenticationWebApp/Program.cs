@@ -65,13 +65,16 @@ try
         // Configure Serilog
         // Minimum level is Information for application code
         // Microsoft and System namespaces are set to Warning to reduce noise from framework logs
+        // CRITICAL: Error and Fatal levels should ALWAYS be captured regardless of namespace
         configuration
             .MinimumLevel.Information()
             .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
             .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
             .MinimumLevel.Override("System", LogEventLevel.Warning)
-            // Ensure application namespace logs are captured at Information level
+            // Ensure application namespace logs are captured at Information level (includes Error, Warning, Fatal)
             .MinimumLevel.Override("SDMS.AuthenticationWebApp", LogEventLevel.Information)
+            // CRITICAL: Ensure Error and Fatal logs are ALWAYS captured for all namespaces
+            .MinimumLevel.Override("SDMS.AuthenticationWebApp.Controllers", LogEventLevel.Information)
             .Enrich.FromLogContext()
             .Enrich.WithMachineName()
             .Enrich.WithEnvironmentName()
@@ -132,6 +135,7 @@ try
                 };
 
                 // Configure GrafanaLoki sink with additional options for better reliability
+                // CRITICAL: Use Information level to capture all application logs including Errors
                 configuration.WriteTo.GrafanaLoki(
                     normalizedLokiUrl,
                     credentials: lokiCredentials,
@@ -141,11 +145,14 @@ try
                         new LokiLabel { Key = "environment", Value = envName },
                         new LokiLabel { Key = "service", Value = "authentication" }
                     },
-                    restrictedToMinimumLevel: LogEventLevel.Information,
+                    restrictedToMinimumLevel: LogEventLevel.Information, // Captures Information, Warning, Error, Fatal
                     queueLimit: 50000, // Increased queue limit to handle bursts
                     batchPostingLimit: 200, // Increased batch size for better throughput
                     period: TimeSpan.FromSeconds(2) // Flush interval - balance between latency and efficiency
                 );
+                
+                // Log successful Loki configuration (this will test if Loki is working)
+                Console.WriteLine($"[Loki] GrafanaLoki sink configured successfully. URL: {normalizedLokiUrl}, Environment: {envName}");
             }
             catch (Exception ex)
             {
@@ -556,6 +563,25 @@ try
         message = "pong",
         timestamp = DateTime.UtcNow
     })).AllowAnonymous();
+    
+    // Diagnostic endpoint to test logging to Loki
+    app.MapGet("/test-logs", (ILogger<Program> logger) =>
+    {
+        logger.LogError("TEST ERROR: This is a test error log from /test-logs endpoint");
+        logger.LogWarning("TEST WARNING: This is a test warning log from /test-logs endpoint");
+        logger.LogInformation("TEST INFO: This is a test information log from /test-logs endpoint");
+        
+        // Also use Serilog directly
+        Log.Error("TEST ERROR (Serilog): This is a test error log from /test-logs endpoint using Serilog directly");
+        Log.Warning("TEST WARNING (Serilog): This is a test warning log from /test-logs endpoint using Serilog directly");
+        Log.Information("TEST INFO (Serilog): This is a test information log from /test-logs endpoint using Serilog directly");
+        
+        return Results.Ok(new
+        {
+            message = "Test logs sent. Check Loki for: TEST ERROR, TEST WARNING, TEST INFO",
+            timestamp = DateTime.UtcNow
+        });
+    }).AllowAnonymous();
 
     // Note: OpenIddict automatically exposes /.well-known/openid-configuration
     // No explicit mapping needed - OpenIddict middleware handles it
@@ -743,6 +769,12 @@ try
 
     // Start the application
     Log.Information("SDMS Authentication Web App started successfully");
+    
+    // Test Loki logging on startup - this helps verify Loki is working
+    var startupLogger = app.Services.GetRequiredService<ILogger<Program>>();
+    startupLogger.LogError("TEST: This is a test error log to verify Loki is working. If you see this in Loki, logging is configured correctly.");
+    startupLogger.LogWarning("TEST: This is a test warning log to verify Loki is working.");
+    startupLogger.LogInformation("TEST: This is a test information log to verify Loki is working.");
 
     app.Run();
 }

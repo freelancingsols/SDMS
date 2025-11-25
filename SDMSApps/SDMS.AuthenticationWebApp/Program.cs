@@ -756,8 +756,12 @@ try
         // Add B2C URL redirect URIs (required)
         if (!string.IsNullOrEmpty(b2cUrlForClient))
         {
-            defaultRedirectUris.Add(new Uri($"{b2cUrlForClient}/auth-callback"));
-            defaultPostLogoutRedirectUris.Add(new Uri($"{b2cUrlForClient}/"));
+            // Normalize B2C URL - remove trailing slash for consistency
+            var normalizedB2cUrl = b2cUrlForClient.TrimEnd('/');
+            defaultRedirectUris.Add(new Uri($"{normalizedB2cUrl}/auth-callback"));
+            // Add both with and without trailing slash for post-logout to handle both cases
+            defaultPostLogoutRedirectUris.Add(new Uri($"{normalizedB2cUrl}/"));
+            defaultPostLogoutRedirectUris.Add(new Uri(normalizedB2cUrl));
         }
 
         // Get redirect URIs from configuration
@@ -767,6 +771,33 @@ try
         // Get post-logout redirect URIs from configuration
         var postLogoutRedirectUrisConfig = builder.Configuration[ConfigurationKeys.PostLogoutRedirectUris];
         var postLogoutRedirectUris = ParseUrisFromConfig(postLogoutRedirectUrisConfig, defaultPostLogoutRedirectUris);
+        
+        // Normalize post-logout redirect URIs: add both with and without trailing slash for root URIs
+        // This ensures OpenIddict can match requests with or without trailing slashes
+        var normalizedPostLogoutUris = new HashSet<Uri>(postLogoutRedirectUris);
+        foreach (var uri in postLogoutRedirectUris.ToList())
+        {
+            var uriString = uri.ToString();
+            // If URI ends with /, also add version without /
+            if (uriString.EndsWith("/"))
+            {
+                var withoutSlash = uriString.TrimEnd('/');
+                if (Uri.TryCreate(withoutSlash, UriKind.Absolute, out var uriWithoutSlash))
+                {
+                    normalizedPostLogoutUris.Add(uriWithoutSlash);
+                }
+            }
+            // If URI doesn't end with /, also add version with /
+            else
+            {
+                var withSlash = uriString + "/";
+                if (Uri.TryCreate(withSlash, UriKind.Absolute, out var uriWithSlash))
+                {
+                    normalizedPostLogoutUris.Add(uriWithSlash);
+                }
+            }
+        }
+        postLogoutRedirectUris = normalizedPostLogoutUris;
 
         // Validate that we have at least one redirect URI
         if (redirectUris.Count == 0)
@@ -821,6 +852,12 @@ try
         }
 
         // Add post-logout redirect URIs (collection is read-only, so we add items individually)
+        // Log the URIs being added for debugging
+        var logger = app.Services.GetRequiredService<ILogger<Program>>();
+        logger.LogInformation("Adding {Count} post-logout redirect URI(s) to client: {Uris}", 
+            postLogoutRedirectUris.Count, 
+            string.Join(", ", postLogoutRedirectUris.Select(u => u.ToString())));
+        
         foreach (var uri in postLogoutRedirectUris)
         {
             clientDescriptor.PostLogoutRedirectUris.Add(uri);

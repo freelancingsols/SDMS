@@ -20,14 +20,25 @@ on:
       - main
       - master
       - develop
-    # No paths filter for push events - CI runs on all changes
-    # This ensures CI runs on release/stage branches even if changes are outside app directories
+    paths:
+      # Only trigger CI when files in B2C WebApp change
+      # Note: Path filter applies to all branches, but release/stage branches will still trigger
+      # due to job-level conditions that check branch name
+      - 'SDMSApps/SDMS.B2CWebApp/**'
+      - '.github/workflows/ci-b2c-webapp.yml'
   pull_request:
     branches:
       - '**'  # Run on PRs targeting any branch
     paths:
+      # Only trigger CI when files in B2C WebApp change
       - 'SDMSApps/SDMS.B2CWebApp/**'
       - '.github/workflows/ci-b2c-webapp.yml'
+      # Explicitly exclude other apps to prevent false triggers
+      - '!SDMSApps/SDMS.AuthenticationWebApp/**'
+      - '!SDMSApps/SDMS.B2BWebApp/**'
+      - '!SDMSApps/SDMS.BackOfficeWebApp/**'
+      - '!SDMSApps/SDMS.VendorWebApp/**'
+      - '!SDMSApps/SDMS.DeliveryPartnerWebApp/**'
     types:
       - opened
       - synchronize
@@ -36,8 +47,33 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Check if this workflow should run based on changed files
+  check-changes:
+    name: Check Changed Files
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      should-run: ${{ steps.filter.outputs.b2c-app }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for PR comparison
+      
+      - name: Check if relevant files changed
+        id: filter
+        uses: dorny/paths-filter@v2
+        with:
+          filters: |
+            b2c-app:
+              - 'SDMSApps/SDMS.B2CWebApp/**'
+              - '.github/workflows/ci-b2c-webapp.yml'
+          list-files: shell
+
   lint:
     name: Lint Code
+    needs: check-changes
+    if: needs.check-changes.outputs.should-run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10  # Prevent long-running jobs
     steps:
@@ -76,6 +112,8 @@ jobs:
 
   build-dev:
     name: Build (Development)
+    needs: check-changes
+    if: needs.check-changes.outputs.should-run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15  # Prevent long-running jobs
     steps:
@@ -111,6 +149,8 @@ jobs:
 
   build-prod:
     name: Build (Production)
+    needs: check-changes
+    if: needs.check-changes.outputs.should-run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15  # Prevent long-running jobs
     steps:
@@ -156,6 +196,8 @@ jobs:
 
   test:
     name: Run Unit Tests
+    needs: check-changes
+    if: needs.check-changes.outputs.should-run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15  # Prevent long-running jobs
     steps:
@@ -195,8 +237,8 @@ jobs:
   ci-complete:
     name: CI Complete
     runs-on: ubuntu-latest
-    needs: [lint, build-dev, build-prod, test]
-    if: always()
+    needs: [check-changes, lint, build-dev, build-prod, test]
+    if: always() && needs.check-changes.outputs.should-run == 'true'
     timeout-minutes: 2  # Very quick status check
     steps:
       - name: Check CI status

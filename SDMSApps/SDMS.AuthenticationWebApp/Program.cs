@@ -650,6 +650,7 @@ try
                                 if (Uri.TryCreate(withoutSlash, UriKind.Absolute, out var uriWithoutSlash))
                                 {
                                     uris.Add(uriWithoutSlash);
+                                    Console.WriteLine($"Added both versions of root URI: {uriString} -> also added {withoutSlash}");
                                 }
                             }
                             // Add version with trailing slash if current doesn't have it
@@ -659,6 +660,7 @@ try
                                 if (Uri.TryCreate(withSlash, UriKind.Absolute, out var uriWithSlash))
                                 {
                                     uris.Add(uriWithSlash);
+                                    Console.WriteLine($"Added both versions of root URI: {uriString} -> also added {withSlash}");
                                 }
                             }
                         }
@@ -678,9 +680,34 @@ try
             else
             {
                 // Also add default URIs (they might not be in config)
-                foreach (var defaultUri in defaultUris)
+                // For default URIs that are root paths, also add the opposite version
+                foreach (var defaultUri in defaultUris.ToList())
                 {
                     uris.Add(defaultUri);
+                    
+                    // For root URIs, add both versions
+                    if (defaultUri.AbsolutePath == "/")
+                    {
+                        var defaultUriString = defaultUri.ToString();
+                        if (defaultUriString.EndsWith("/"))
+                        {
+                            var withoutSlash = defaultUriString.TrimEnd('/');
+                            if (Uri.TryCreate(withoutSlash, UriKind.Absolute, out var uriWithoutSlash))
+                            {
+                                uris.Add(uriWithoutSlash);
+                                Console.WriteLine($"Added both versions of default root URI: {defaultUriString} -> also added {withoutSlash}");
+                            }
+                        }
+                        else
+                        {
+                            var withSlash = defaultUriString + "/";
+                            if (Uri.TryCreate(withSlash, UriKind.Absolute, out var uriWithSlash))
+                            {
+                                uris.Add(uriWithSlash);
+                                Console.WriteLine($"Added both versions of default root URI: {defaultUriString} -> also added {withSlash}");
+                            }
+                        }
+                    }
                 }
             }
 
@@ -698,9 +725,8 @@ try
             // Normalize B2C URL - remove trailing slash for consistency
             var normalizedB2cUrl = b2cUrlForClient.TrimEnd('/');
             defaultRedirectUris.Add(new Uri($"{normalizedB2cUrl}/auth-callback"));
-            // Add both with and without trailing slash for post-logout to handle both cases
-            // ParseUrisFromConfig will also add the opposite version automatically
-            defaultPostLogoutRedirectUris.Add(new Uri($"{normalizedB2cUrl}/"));
+            // Add post-logout URI without trailing slash (ParseUrisFromConfig will add the version with slash)
+            defaultPostLogoutRedirectUris.Add(new Uri(normalizedB2cUrl));
         }
 
         // Get redirect URIs from configuration

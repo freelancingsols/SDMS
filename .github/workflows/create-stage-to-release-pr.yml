@@ -5,14 +5,9 @@ concurrency:
   group: create-pr-stage-to-release
   cancel-in-progress: true
 
-# Auto-triggers when CI workflows complete successfully, or manual dispatch
+# Auto-triggers on any push to stage branch, or manual dispatch
 on:
-  workflow_run:
-    workflows:
-      - "CI - B2C WebApp (Build, Test, and Lint)"
-      - "CI - Authentication WebApp (Build, Test, and Lint)"
-    types:
-      - completed
+  push:
     branches:
       - stage
       - Stage
@@ -46,41 +41,121 @@ jobs:
           echo "📋 Purpose: Create/update PR from stage → release"
           echo "🌿 Source Branch: stage"
           echo "🎯 Target Branch: release"
-          if [ "${{ github.event_name }}" == "workflow_run" ]; then
-            echo "🔍 Triggered by: Auto (CI workflow completed)"
-            echo "📋 CI Workflow: ${{ github.event.workflow_run.name }}"
-            echo "✅ CI Status: ${{ github.event.workflow_run.conclusion }}"
-            echo "🌿 CI Branch: ${{ github.event.workflow_run.head_branch }}"
-            echo "🔖 CI Commit: ${{ github.event.workflow_run.head_sha }}"
-            echo "🔍 CI Check: Auto-enabled (CI already passed)"
+          if [ "${{ github.event_name }}" == "push" ]; then
+            echo "🔍 Triggered by: Auto (push to stage branch)"
+            echo "🌿 Branch: ${{ github.ref_name }}"
+            echo "🔖 Commit: ${{ github.sha }}"
+            echo "👤 Author: ${{ github.event.head_commit.author.name }}"
+            echo "📝 Message: ${{ github.event.head_commit.message }}"
+            echo "🔍 CI Check: Will wait for CI if running"
           else
             echo "🔍 Triggered by: Manual dispatch"
             echo "🔍 CI Check: ${{ github.event.inputs.check_ci }}"
           fi
           echo ""
 
-      - name: Verify CI workflow status (for auto-trigger)
-        if: github.event_name == 'workflow_run'
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for branch comparison
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Wait for CI workflows to complete (if running)
+        id: wait-ci
+        if: github.event_name == 'push'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "🔍 Verifying CI workflow status..."
+          echo "🔍 Checking CI workflow status for stage branch..."
+          echo ""
           
-          CI_CONCLUSION="${{ github.event.workflow_run.conclusion }}"
-          CI_BRANCH="${{ github.event.workflow_run.head_branch }}"
+          PUSH_SHA="${{ github.sha }}"
+          MAX_WAIT_MINUTES=30
+          CHECK_INTERVAL=30  # Check every 30 seconds
+          MAX_CHECKS=$((MAX_WAIT_MINUTES * 60 / CHECK_INTERVAL))
+          CHECK_COUNT=0
           
-          # Only proceed if CI succeeded and ran on stage branch
-          if [ "$CI_CONCLUSION" != "success" ]; then
-            echo "⏭️  CI workflow did not succeed (conclusion: $CI_CONCLUSION)"
-            echo "   Skipping PR creation - only successful CI runs trigger PR creation"
-            exit 0
+          echo "📋 Commit SHA: $PUSH_SHA"
+          echo "⏱️  Max wait time: $MAX_WAIT_MINUTES minutes"
+          echo "🔄 Check interval: $CHECK_INTERVAL seconds"
+          echo ""
+          
+          # Workflows to check
+          WORKFLOWS=("CI - B2C WebApp (Build, Test, and Lint)" "CI - Authentication WebApp (Build, Test, and Lint)")
+          
+          while [ $CHECK_COUNT -lt $MAX_CHECKS ]; do
+            CHECK_COUNT=$((CHECK_COUNT + 1))
+            ALL_COMPLETE=true
+            ALL_PASSED=true
+            ANY_RUNNING=false
+            
+            echo "🔍 Check #$CHECK_COUNT ($(date +%H:%M:%S))..."
+            
+            for WORKFLOW in "${WORKFLOWS[@]}"; do
+              # Get the latest workflow run for this commit
+              RUN_DATA=$(gh run list \
+                --branch stage \
+                --workflow "$WORKFLOW" \
+                --limit 5 \
+                --json conclusion,status,headSha,workflowName \
+                --jq ".[] | select(.headSha == \"$PUSH_SHA\") | ." 2>/dev/null | head -1) || RUN_DATA=""
+              
+              if [ -z "$RUN_DATA" ] || [ "$RUN_DATA" == "null" ] || [ "$RUN_DATA" == "" ]; then
+                # No run found for this commit yet - might be queued or not started
+                echo "  ⏳ $WORKFLOW: Not found for this commit (may be queued)"
+                ANY_RUNNING=true
+                ALL_COMPLETE=false
+              else
+                STATUS=$(echo "$RUN_DATA" | jq -r '.status // "unknown"' 2>/dev/null || echo "unknown")
+                CONCLUSION=$(echo "$RUN_DATA" | jq -r '.conclusion // "unknown"' 2>/dev/null || echo "unknown")
+                
+                if [ "$STATUS" == "completed" ]; then
+                  if [ "$CONCLUSION" == "success" ]; then
+                    echo "  ✅ $WORKFLOW: Passed"
+                  else
+                    echo "  ❌ $WORKFLOW: Failed (conclusion: $CONCLUSION)"
+                    ALL_PASSED=false
+                    ALL_COMPLETE=true
+                  fi
+                else
+                  echo "  ⏳ $WORKFLOW: Running (status: $STATUS)"
+                  ANY_RUNNING=true
+                  ALL_COMPLETE=false
+                fi
+              fi
+            done
+            
+            echo ""
+            
+            if [ "$ALL_COMPLETE" == "true" ]; then
+              if [ "$ALL_PASSED" == "true" ]; then
+                echo "✅ All CI workflows completed successfully!"
+                echo "ci_status=success" >> $GITHUB_OUTPUT
+                echo "ci_ready=true" >> $GITHUB_OUTPUT
+                break
+              else
+                echo "❌ Some CI workflows failed"
+                echo "ci_status=failed" >> $GITHUB_OUTPUT
+                echo "ci_ready=false" >> $GITHUB_OUTPUT
+                break
+              fi
+            fi
+            
+            if [ "$ANY_RUNNING" == "true" ]; then
+              echo "⏳ Waiting for CI workflows to complete..."
+              echo "   Will check again in $CHECK_INTERVAL seconds..."
+              echo ""
+              sleep $CHECK_INTERVAL
+            fi
+          done
+          
+          if [ $CHECK_COUNT -ge $MAX_CHECKS ]; then
+            echo "⏱️  Max wait time reached ($MAX_WAIT_MINUTES minutes)"
+            echo "⚠️  Some CI workflows may still be running"
+            echo "   Proceeding with PR creation anyway"
+            echo "ci_status=timeout" >> $GITHUB_OUTPUT
+            echo "ci_ready=true" >> $GITHUB_OUTPUT
           fi
-          
-          if [ "$CI_BRANCH" != "stage" ] && [ "$CI_BRANCH" != "Stage" ]; then
-            echo "⏭️  CI workflow ran on branch: $CI_BRANCH (not stage)"
-            echo "   Skipping PR creation - only stage branch CI triggers PR creation"
-            exit 0
-          fi
-          
-          echo "✅ CI workflow passed on stage branch - proceeding with PR creation"
           echo ""
 
       - name: Check if PR already exists (early exit)
@@ -435,8 +510,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PR_EXISTS="${{ steps.check-pr.outputs.pr_exists }}"
-          # Get CI ready status from check-ci-status, auto-ci-status, or skip-ci-status step
-          CI_READY="${{ steps.check-ci-status.outputs.ci_ready || steps.auto-ci-status.outputs.ci_ready || steps.skip-ci-status.outputs.ci_ready }}"
+          # Get CI ready status from check-ci-status, push-ci-status, or skip-ci-status step
+          CI_READY="${{ steps.check-ci-status.outputs.ci_ready || steps.push-ci-status.outputs.ci_ready || steps.skip-ci-status.outputs.ci_ready }}"
           CHECK_CI="${{ github.event.inputs.check_ci }}"
           
           echo "📋 PR Creation Decision:"
@@ -446,7 +521,7 @@ jobs:
           echo ""
           
           # If CI check is enabled (manual dispatch) and CI is not ready, skip
-          # Auto-triggered workflows already verified CI passed
+          # Push-triggered workflows wait for CI automatically
           if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "$CHECK_CI" == "true" ] && [ "$CI_READY" != "true" ]; then
             echo "⏭️  Skipping PR creation: Not all CI workflows have passed"
             echo "   Re-run the workflow after CI passes, or disable CI check"
@@ -458,14 +533,28 @@ jobs:
           COMMIT_COUNT=$(git rev-list --count origin/release..origin/stage 2>/dev/null || echo "0")
           
           if [ "$COMMIT_COUNT" == "0" ]; then
-            echo "ℹ️  No commits to merge: stage and release branches are in sync"
+            echo ""
+            echo "╔════════════════════════════════════════════════════════════╗"
+            echo "║              No Action Needed - Branches Synced           ║"
+            echo "╚════════════════════════════════════════════════════════════╝"
+            echo ""
+            echo "✅ Stage and release branches are already in sync"
+            echo "   No commits to merge from stage → release"
+            echo ""
             if [ "$PR_EXISTS" == "true" ]; then
               PR_NUMBER="${{ steps.check-pr.outputs.pr_number }}"
-              echo "   Existing PR #$PR_NUMBER will be left as is (no changes to merge)"
-              echo "   You may want to close it manually if it's no longer needed"
+              PR_URL="${{ steps.check-pr.outputs.pr_url }}"
+              echo "📋 Existing PR found: $PR_URL"
+              echo "   The PR will be left as is (no changes to merge)"
+              echo "   💡 You may want to close it manually if it's no longer needed"
             else
-              echo "   No PR will be created (branches are already in sync)"
+              echo "ℹ️  No PR exists and none is needed"
+              echo "   This is expected when branches are in sync"
             fi
+            echo ""
+            echo "💡 Workflow completed successfully - no action required"
+            echo ""
+            # Exit successfully (0) - this is not an error condition
             exit 0
           fi
           
@@ -478,14 +567,31 @@ jobs:
           
           # Build CI status section
           CI_STATUS_SECTION=""
-          if [ "${{ github.event_name }}" == "workflow_run" ]; then
-            # Auto-triggered - CI already passed
-            CI_STATUS_SECTION="### ✅ CI Status
-          - ✅ CI Workflow: ${{ github.event.workflow_run.name }}
-          - ✅ Status: Passed (auto-triggered)
-          - 🔖 Commit: ${{ github.event.workflow_run.head_sha }}
+          if [ "${{ github.event_name }}" == "push" ]; then
+            # Push-triggered - show CI status from wait step
+            CI_STATUS="${{ steps.wait-ci.outputs.ci_status }}"
+            if [ "$CI_STATUS" == "success" ]; then
+              CI_STATUS_SECTION="### ✅ CI Status
+          - ✅ B2C WebApp CI: Passed
+          - ✅ Authentication WebApp CI: Passed
+          - 🔖 Commit: ${{ github.sha }}
           
           "
+            elif [ "$CI_STATUS" == "failed" ]; then
+              CI_STATUS_SECTION="### ❌ CI Status
+          - ❌ Some CI workflows failed
+          - 🔖 Commit: ${{ github.sha }}
+          - ⚠️  Please check CI workflow runs
+          
+          "
+            else
+              CI_STATUS_SECTION="### ⚠️ CI Status
+          - ⚠️ CI Status: $CI_STATUS
+          - 🔖 Commit: ${{ github.sha }}
+          - ℹ️  CI may still be running or timed out
+          
+          "
+            fi
           elif [ "$CHECK_CI" == "true" ]; then
             B2C_STATUS="${{ steps.check-ci-status.outputs.b2c_ci_passed }}"
             AUTH_STATUS="${{ steps.check-ci-status.outputs.auth_ci_passed }}"
@@ -616,6 +722,7 @@ jobs:
           echo ""
 
       - name: Summary
+        if: always()
         run: |
           echo "╔════════════════════════════════════════════════════════════╗"
           echo "║                    Workflow Summary                        ║"
@@ -625,12 +732,24 @@ jobs:
           PR_NUMBER="${{ steps.create-pr.outputs.pr_number }}"
           PR_URL="${{ steps.create-pr.outputs.pr_url }}"
           
-          if [ "$PR_CREATED" == "true" ]; then
+          # Check if workflow was cancelled early (branches synced)
+          if [ "${{ steps.check-pr-early.outputs.pr_exists }}" == "true" ] && [ "${{ steps.check-sync.outputs.branches_synced }}" == "true" ]; then
+            echo "✅ Workflow completed: PR exists and branches are synced"
+            echo "   PR: ${{ steps.check-pr-early.outputs.pr_url }}"
+            echo "   No action needed - branches are up to date"
+          elif [ "$PR_CREATED" == "true" ]; then
             echo "✅ New PR created: $PR_URL"
-          elif [ -n "$PR_NUMBER" ]; then
+          elif [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "" ]; then
             echo "✅ Existing PR updated: $PR_URL"
+          elif [ "${{ steps.create-pr.outcome }}" == "skipped" ]; then
+            echo "⏭️  PR creation step was skipped"
+            echo "   This may happen if branches are synced or CI checks failed"
           else
-            echo "⏭️  PR creation skipped (waiting for CI workflows to complete)"
+            echo "ℹ️  No PR action taken"
+            echo "   Branches may be in sync or conditions not met"
           fi
           echo ""
+          echo "💡 Workflow completed successfully"
+          echo ""
+
 

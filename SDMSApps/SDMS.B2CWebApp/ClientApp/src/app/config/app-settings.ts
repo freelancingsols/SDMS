@@ -82,9 +82,16 @@ export class AppSettings {
         throw new Error('SDMS_B2CWebApp_url is not configured. Cannot generate postLogoutRedirectUri. Ensure appsettings.json exists or environment variables are set.');
       }
       // Generate postLogoutRedirectUri from B2CWebApp_url (landing page)
-      return `${this._sdmsB2CWebAppUrl}/`;
+      // Remove trailing slash to match database format (OpenIddict does exact matching)
+      // The auth app will accept both versions, but this ensures consistency
+      return this._sdmsB2CWebAppUrl.endsWith('/') 
+        ? this._sdmsB2CWebAppUrl.slice(0, -1) 
+        : this._sdmsB2CWebAppUrl;
     }
-    return this._sdmsAuthenticationWebAppPostLogoutRedirectUri;
+    // Also normalize explicitly set value to remove trailing slash for consistency
+    return this._sdmsAuthenticationWebAppPostLogoutRedirectUri.endsWith('/')
+      ? this._sdmsAuthenticationWebAppPostLogoutRedirectUri.slice(0, -1)
+      : this._sdmsAuthenticationWebAppPostLogoutRedirectUri;
   }
 
   static get SDMS_AuthenticationWebApp_scope(): string {

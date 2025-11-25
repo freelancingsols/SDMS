@@ -554,100 +554,6 @@ try
 
     app.UseRouting();
     
-    // Add middleware to log all /connect/logout requests and capture OpenIddict's response
-    app.Use(async (context, next) =>
-    {
-        if (context.Request.Path.StartsWithSegments("/connect/logout"))
-        {
-            var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
-            var postLogoutUri = context.Request.Query["post_logout_redirect_uri"].ToString();
-            var clientId = context.Request.Query["client_id"].ToString();
-            var idTokenHint = context.Request.Query["id_token_hint"].ToString();
-            
-            // Extract client ID from id_token_hint if not provided
-            if (string.IsNullOrEmpty(clientId) && !string.IsNullOrEmpty(idTokenHint))
-            {
-                try
-                {
-                    var tokenHandler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
-                    var jwtToken = tokenHandler.ReadJwtToken(idTokenHint);
-                    clientId = jwtToken.Claims.FirstOrDefault(c => c.Type == "azp")?.Value
-                        ?? jwtToken.Claims.FirstOrDefault(c => c.Type == "aud")?.Value
-                        ?? "sdms_frontend";
-                }
-                catch
-                {
-                    clientId = "sdms_frontend";
-                }
-            }
-            
-            if (string.IsNullOrEmpty(clientId))
-            {
-                clientId = "sdms_frontend";
-            }
-            
-            logger.LogError("MIDDLEWARE: /connect/logout request intercepted. Method: {Method}, PostLogoutUri: {PostLogoutUri}, ClientId: {ClientId}, HasIdToken: {HasIdToken}", 
-                context.Request.Method, 
-                postLogoutUri ?? "(empty)",
-                clientId,
-                !string.IsNullOrEmpty(idTokenHint));
-            
-            Log.Error("MIDDLEWARE: /connect/logout request intercepted. Method: {Method}, PostLogoutUri: {PostLogoutUri}, ClientId: {ClientId}", 
-                context.Request.Method, 
-                postLogoutUri ?? "(empty)",
-                clientId);
-            
-            Console.WriteLine($"[MIDDLEWARE] /connect/logout request - Method: {context.Request.Method}, PostLogoutUri: {postLogoutUri ?? "(empty)"}, ClientId: {clientId}");
-            
-            // Capture the response to log OpenIddict's error
-            var originalBodyStream = context.Response.Body;
-            using var responseBody = new MemoryStream();
-            context.Response.Body = responseBody;
-            
-            await next();
-            
-            // Read the response
-            responseBody.Seek(0, SeekOrigin.Begin);
-            var responseText = await new StreamReader(responseBody).ReadToEndAsync();
-            responseBody.Seek(0, SeekOrigin.Begin);
-            
-            // If OpenIddict rejected the request, log it
-            if (context.Response.StatusCode == 400 && !string.IsNullOrEmpty(responseText))
-            {
-                var errorMsg = $"OpenIddict rejected logout request. Status: {context.Response.StatusCode}, PostLogoutUri: {postLogoutUri ?? "(empty)"}, ClientId: {clientId}, Response: {responseText}";
-                logger.LogError(errorMsg);
-                Log.Error(errorMsg);
-                Console.WriteLine($"[ERROR] {errorMsg}");
-                
-                // Also try to get allowed URIs from database for better error message
-                try
-                {
-                    using var scope = context.RequestServices.CreateScope();
-                    var applicationManager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
-                    var client = await applicationManager.FindByClientIdAsync(clientId);
-                    if (client != null)
-                    {
-                        var allowedUris = await applicationManager.GetPostLogoutRedirectUrisAsync(client);
-                        var allowedUrisList = string.Join(", ", allowedUris.Select(u => u.ToString()));
-                        var detailedError = $"OpenIddict rejected logout: Requested URI '{postLogoutUri}' not in allowed list. ClientId: {clientId}, Allowed URIs: {allowedUrisList}";
-                        logger.LogError(detailedError);
-                        Log.Error(detailedError);
-                        Console.WriteLine($"[ERROR] {detailedError}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "Error retrieving allowed URIs for logging");
-                }
-            }
-            
-            await responseBody.CopyToAsync(originalBodyStream);
-        }
-        else
-        {
-            await next();
-        }
-    });
 
     // Map health check and ping endpoints BEFORE authentication/authorization
     // This allows Railway and other platforms to check if the container is healthy
@@ -718,6 +624,7 @@ try
             ?? throw new InvalidOperationException("Missing required configuration: SDMS_B2CWebApp_url. Set in appsettings.json or environment variable.");
 
         // Helper function to parse comma-separated URIs from configuration
+        // Also adds both versions (with and without trailing slash) for root URIs to handle trailing slash mismatches
         static HashSet<Uri> ParseUrisFromConfig(string? configValue, HashSet<Uri> defaultUris)
         {
             var uris = new HashSet<Uri>();
@@ -731,6 +638,30 @@ try
                     if (Uri.TryCreate(uriString, UriKind.Absolute, out var uri))
                     {
                         uris.Add(uri);
+                        
+                        // For root URIs (path is just /), add both versions (with and without trailing slash)
+                        // This ensures OpenIddict can match requests with either format
+                        if (uri.AbsolutePath == "/")
+                        {
+                            // Add version without trailing slash if current has it
+                            if (uriString.EndsWith("/"))
+                            {
+                                var withoutSlash = uriString.TrimEnd('/');
+                                if (Uri.TryCreate(withoutSlash, UriKind.Absolute, out var uriWithoutSlash))
+                                {
+                                    uris.Add(uriWithoutSlash);
+                                }
+                            }
+                            // Add version with trailing slash if current doesn't have it
+                            else
+                            {
+                                var withSlash = uriString + "/";
+                                if (Uri.TryCreate(withSlash, UriKind.Absolute, out var uriWithSlash))
+                                {
+                                    uris.Add(uriWithSlash);
+                                }
+                            }
+                        }
                     }
                     else
                     {
@@ -743,6 +674,14 @@ try
             if (uris.Count == 0)
             {
                 uris = defaultUris;
+            }
+            else
+            {
+                // Also add default URIs (they might not be in config)
+                foreach (var defaultUri in defaultUris)
+                {
+                    uris.Add(defaultUri);
+                }
             }
 
             return uris;
@@ -760,8 +699,8 @@ try
             var normalizedB2cUrl = b2cUrlForClient.TrimEnd('/');
             defaultRedirectUris.Add(new Uri($"{normalizedB2cUrl}/auth-callback"));
             // Add both with and without trailing slash for post-logout to handle both cases
+            // ParseUrisFromConfig will also add the opposite version automatically
             defaultPostLogoutRedirectUris.Add(new Uri($"{normalizedB2cUrl}/"));
-            defaultPostLogoutRedirectUris.Add(new Uri(normalizedB2cUrl));
         }
 
         // Get redirect URIs from configuration
@@ -769,35 +708,9 @@ try
         var redirectUris = ParseUrisFromConfig(redirectUrisConfig, defaultRedirectUris);
 
         // Get post-logout redirect URIs from configuration
+        // ParseUrisFromConfig automatically adds both versions (with/without trailing slash) for root URIs
         var postLogoutRedirectUrisConfig = builder.Configuration[ConfigurationKeys.PostLogoutRedirectUris];
         var postLogoutRedirectUris = ParseUrisFromConfig(postLogoutRedirectUrisConfig, defaultPostLogoutRedirectUris);
-        
-        // Normalize post-logout redirect URIs: add both with and without trailing slash for root URIs
-        // This ensures OpenIddict can match requests with or without trailing slashes
-        var normalizedPostLogoutUris = new HashSet<Uri>(postLogoutRedirectUris);
-        foreach (var uri in postLogoutRedirectUris.ToList())
-        {
-            var uriString = uri.ToString();
-            // If URI ends with /, also add version without /
-            if (uriString.EndsWith("/"))
-            {
-                var withoutSlash = uriString.TrimEnd('/');
-                if (Uri.TryCreate(withoutSlash, UriKind.Absolute, out var uriWithoutSlash))
-                {
-                    normalizedPostLogoutUris.Add(uriWithoutSlash);
-                }
-            }
-            // If URI doesn't end with /, also add version with /
-            else
-            {
-                var withSlash = uriString + "/";
-                if (Uri.TryCreate(withSlash, UriKind.Absolute, out var uriWithSlash))
-                {
-                    normalizedPostLogoutUris.Add(uriWithSlash);
-                }
-            }
-        }
-        postLogoutRedirectUris = normalizedPostLogoutUris;
 
         // Validate that we have at least one redirect URI
         if (redirectUris.Count == 0)

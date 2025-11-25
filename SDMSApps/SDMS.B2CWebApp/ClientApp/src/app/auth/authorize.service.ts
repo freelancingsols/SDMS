@@ -739,6 +739,21 @@ export class AuthorizeService {
           postLogoutRedirectUri = AppSettings.SDMS_AuthenticationWebApp_postLogoutRedirectUri;
         }
         
+        // Normalize postLogoutRedirectUri: remove trailing slash for root URIs
+        // This ensures it matches the database format (OpenIddict does exact matching)
+        if (postLogoutRedirectUri && postLogoutRedirectUri.endsWith('/')) {
+          try {
+            const url = new URL(postLogoutRedirectUri);
+            // If the path is just "/", remove the trailing slash
+            if (url.pathname === '/') {
+              postLogoutRedirectUri = postLogoutRedirectUri.slice(0, -1);
+            }
+          } catch {
+            // If URL parsing fails, just remove trailing slash
+            postLogoutRedirectUri = postLogoutRedirectUri.slice(0, -1);
+          }
+        }
+        
         // Get the auth server URL from configuration
         const authServerUrl = AppSettings.SDMS_AuthenticationWebApp_url;
         const logoutUrl = authServerUrl.endsWith('/') 

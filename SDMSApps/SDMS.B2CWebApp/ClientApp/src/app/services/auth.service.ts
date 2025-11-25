@@ -328,7 +328,25 @@ export class AuthService {
     this.userInfoSubject.next(null);
     
     // Get the post-logout redirect URI from AppSettings (same pattern as redirectUri)
-    const postLogoutRedirectUri = AppSettings.SDMS_AuthenticationWebApp_postLogoutRedirectUri;
+    let postLogoutRedirectUri = AppSettings.SDMS_AuthenticationWebApp_postLogoutRedirectUri;
+    
+    // Normalize postLogoutRedirectUri: remove trailing slash for root URIs
+    // This ensures it matches the database format (OpenIddict does exact matching)
+    // AppSettings.getter should already normalize it, but do it here as a safety check
+    if (postLogoutRedirectUri && postLogoutRedirectUri.endsWith('/')) {
+      try {
+        const url = new URL(postLogoutRedirectUri);
+        // If the path is just "/", remove the trailing slash
+        if (url.pathname === '/') {
+          postLogoutRedirectUri = postLogoutRedirectUri.slice(0, -1);
+        }
+      } catch {
+        // If URL parsing fails, just remove trailing slash
+        postLogoutRedirectUri = postLogoutRedirectUri.endsWith('/') 
+          ? postLogoutRedirectUri.slice(0, -1) 
+          : postLogoutRedirectUri;
+      }
+    }
     
     // Get the auth server URL from configuration
     const authServerUrl = AppSettings.SDMS_AuthenticationWebApp_url;

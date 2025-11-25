@@ -60,102 +60,81 @@ jobs:
           fetch-depth: 0  # Need full history for branch comparison
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Wait for CI workflows to complete (if running)
-        id: wait-ci
+      - name: Check CI workflow status (no waiting)
+        id: check-ci
         if: github.event_name == 'push'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "🔍 Checking CI workflow status for stage branch..."
+          echo "🔍 Checking CI workflow status for stage branch (no waiting)..."
           echo ""
           
           PUSH_SHA="${{ github.sha }}"
-          MAX_WAIT_MINUTES=30
-          CHECK_INTERVAL=30  # Check every 30 seconds
-          MAX_CHECKS=$((MAX_WAIT_MINUTES * 60 / CHECK_INTERVAL))
-          CHECK_COUNT=0
           
           echo "📋 Commit SHA: $PUSH_SHA"
-          echo "⏱️  Max wait time: $MAX_WAIT_MINUTES minutes"
-          echo "🔄 Check interval: $CHECK_INTERVAL seconds"
+          echo "ℹ️  Checking CI status but not waiting - will create PR immediately"
           echo ""
           
           # Workflows to check
           WORKFLOWS=("CI - B2C WebApp (Build, Test, and Lint)" "CI - Authentication WebApp (Build, Test, and Lint)")
+          ALL_PASSED=true
+          ANY_FOUND=false
+          ANY_RUNNING=false
           
-          while [ $CHECK_COUNT -lt $MAX_CHECKS ]; do
-            CHECK_COUNT=$((CHECK_COUNT + 1))
-            ALL_COMPLETE=true
-            ALL_PASSED=true
-            ANY_RUNNING=false
+          for WORKFLOW in "${WORKFLOWS[@]}"; do
+            # Get the latest workflow run for this commit
+            RUN_DATA=$(gh run list \
+              --branch stage \
+              --workflow "$WORKFLOW" \
+              --limit 5 \
+              --json conclusion,status,headSha,workflowName \
+              --jq ".[] | select(.headSha == \"$PUSH_SHA\") | ." 2>/dev/null | head -1) || RUN_DATA=""
             
-            echo "🔍 Check #$CHECK_COUNT ($(date +%H:%M:%S))..."
-            
-            for WORKFLOW in "${WORKFLOWS[@]}"; do
-              # Get the latest workflow run for this commit
-              RUN_DATA=$(gh run list \
-                --branch stage \
-                --workflow "$WORKFLOW" \
-                --limit 5 \
-                --json conclusion,status,headSha,workflowName \
-                --jq ".[] | select(.headSha == \"$PUSH_SHA\") | ." 2>/dev/null | head -1) || RUN_DATA=""
+            if [ -z "$RUN_DATA" ] || [ "$RUN_DATA" == "null" ] || [ "$RUN_DATA" == "" ]; then
+              # No run found for this commit - CI may not have started yet
+              echo "  ⏭️  $WORKFLOW: Not found for this commit (CI may not have started)"
+              ANY_FOUND=false
+            else
+              ANY_FOUND=true
+              STATUS=$(echo "$RUN_DATA" | jq -r '.status // "unknown"' 2>/dev/null || echo "unknown")
+              CONCLUSION=$(echo "$RUN_DATA" | jq -r '.conclusion // "unknown"' 2>/dev/null || echo "unknown")
               
-              if [ -z "$RUN_DATA" ] || [ "$RUN_DATA" == "null" ] || [ "$RUN_DATA" == "" ]; then
-                # No run found for this commit yet - might be queued or not started
-                echo "  ⏳ $WORKFLOW: Not found for this commit (may be queued)"
-                ANY_RUNNING=true
-                ALL_COMPLETE=false
-              else
-                STATUS=$(echo "$RUN_DATA" | jq -r '.status // "unknown"' 2>/dev/null || echo "unknown")
-                CONCLUSION=$(echo "$RUN_DATA" | jq -r '.conclusion // "unknown"' 2>/dev/null || echo "unknown")
-                
-                if [ "$STATUS" == "completed" ]; then
-                  if [ "$CONCLUSION" == "success" ]; then
-                    echo "  ✅ $WORKFLOW: Passed"
-                  else
-                    echo "  ❌ $WORKFLOW: Failed (conclusion: $CONCLUSION)"
-                    ALL_PASSED=false
-                    ALL_COMPLETE=true
-                  fi
+              if [ "$STATUS" == "completed" ]; then
+                if [ "$CONCLUSION" == "success" ]; then
+                  echo "  ✅ $WORKFLOW: Passed"
                 else
-                  echo "  ⏳ $WORKFLOW: Running (status: $STATUS)"
-                  ANY_RUNNING=true
-                  ALL_COMPLETE=false
+                  echo "  ❌ $WORKFLOW: Failed (conclusion: $CONCLUSION)"
+                  ALL_PASSED=false
                 fi
-              fi
-            done
-            
-            echo ""
-            
-            if [ "$ALL_COMPLETE" == "true" ]; then
-              if [ "$ALL_PASSED" == "true" ]; then
-                echo "✅ All CI workflows completed successfully!"
-                echo "ci_status=success" >> $GITHUB_OUTPUT
-                echo "ci_ready=true" >> $GITHUB_OUTPUT
-                break
               else
-                echo "❌ Some CI workflows failed"
-                echo "ci_status=failed" >> $GITHUB_OUTPUT
-                echo "ci_ready=false" >> $GITHUB_OUTPUT
-                break
+                echo "  ⏳ $WORKFLOW: Running (status: $STATUS)"
+                ANY_RUNNING=true
               fi
-            fi
-            
-            if [ "$ANY_RUNNING" == "true" ]; then
-              echo "⏳ Waiting for CI workflows to complete..."
-              echo "   Will check again in $CHECK_INTERVAL seconds..."
-              echo ""
-              sleep $CHECK_INTERVAL
             fi
           done
           
-          if [ $CHECK_COUNT -ge $MAX_CHECKS ]; then
-            echo "⏱️  Max wait time reached ($MAX_WAIT_MINUTES minutes)"
-            echo "⚠️  Some CI workflows may still be running"
-            echo "   Proceeding with PR creation anyway"
-            echo "ci_status=timeout" >> $GITHUB_OUTPUT
-            echo "ci_ready=true" >> $GITHUB_OUTPUT
+          echo ""
+          
+          if [ "$ANY_FOUND" == "true" ]; then
+            if [ "$ALL_PASSED" == "true" ] && [ "$ANY_RUNNING" != "true" ]; then
+              echo "✅ All CI workflows completed successfully!"
+              echo "ci_status=success" >> $GITHUB_OUTPUT
+            elif [ "$ANY_RUNNING" == "true" ]; then
+              echo "⏳ Some CI workflows are still running"
+              echo "   Proceeding with PR creation (will update when CI completes)"
+              echo "ci_status=running" >> $GITHUB_OUTPUT
+            else
+              echo "❌ Some CI workflows failed"
+              echo "   Proceeding with PR creation (CI status will be noted)"
+              echo "ci_status=failed" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "ℹ️  No CI workflows found for this commit"
+            echo "   CI may not have started yet - proceeding with PR creation"
+            echo "ci_status=not_found" >> $GITHUB_OUTPUT
           fi
+          
+          echo "ci_ready=true" >> $GITHUB_OUTPUT
           echo ""
 
       - name: Check if PR already exists (early exit)
@@ -568,8 +547,8 @@ jobs:
           # Build CI status section
           CI_STATUS_SECTION=""
           if [ "${{ github.event_name }}" == "push" ]; then
-            # Push-triggered - show CI status from wait step
-            CI_STATUS="${{ steps.wait-ci.outputs.ci_status }}"
+            # Push-triggered - show CI status from check step
+            CI_STATUS="${{ steps.check-ci.outputs.ci_status }}"
             if [ "$CI_STATUS" == "success" ]; then
               CI_STATUS_SECTION="### ✅ CI Status
           - ✅ B2C WebApp CI: Passed
@@ -584,11 +563,24 @@ jobs:
           - ⚠️  Please check CI workflow runs
           
           "
+            elif [ "$CI_STATUS" == "running" ]; then
+              CI_STATUS_SECTION="### ⏳ CI Status
+          - ⏳ CI workflows are still running
+          - 🔖 Commit: ${{ github.sha }}
+          - ℹ️  PR created - CI status will update when workflows complete
+          
+          "
+            elif [ "$CI_STATUS" == "not_found" ]; then
+              CI_STATUS_SECTION="### ℹ️ CI Status
+          - ℹ️ CI workflows not found for this commit
+          - 🔖 Commit: ${{ github.sha }}
+          - ℹ️  CI may not have started yet
+          
+          "
             else
               CI_STATUS_SECTION="### ⚠️ CI Status
           - ⚠️ CI Status: $CI_STATUS
           - 🔖 Commit: ${{ github.sha }}
-          - ℹ️  CI may still be running or timed out
           
           "
             fi

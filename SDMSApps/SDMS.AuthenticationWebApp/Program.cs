@@ -12,8 +12,10 @@ using OpenIddict.Validation.AspNetCore;
 using SDMS.AuthenticationWebApp.Configuration;
 using SDMS.AuthenticationWebApp.Constants;
 using SDMS.AuthenticationWebApp.Data;
+using SDMS.AuthenticationWebApp.Middleware;
 using SDMS.AuthenticationWebApp.Models;
 using SDMS.AuthenticationWebApp.Services;
+using FluentValidation;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 using Microsoft.Extensions.FileProviders;
 using System.Net;
@@ -244,110 +246,11 @@ try
         .PersistKeysToDbContext<ApplicationDbContext>()
         .SetApplicationName("SDMS.AuthenticationWebApp");
 
-    // Identity
-    builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
-    {
-        options.Password.RequireDigit = false;
-        options.Password.RequireLowercase = false;
-        options.Password.RequireNonAlphanumeric = false;
-        options.Password.RequireUppercase = false;
-        options.Password.RequiredLength = 6;
-        options.User.RequireUniqueEmail = true;
-        options.SignIn.RequireConfirmedEmail = false;
-    })
-    .AddEntityFrameworkStores<ApplicationDbContext>()
-    .AddDefaultTokenProviders();
+    // Configure Identity and Authentication using extension methods
+    builder.Services.AddAuthenticationConfiguration(builder.Configuration);
 
-    // OpenIddict Configuration
-    // Note: OpenIddict doesn't have a direct UserInteraction.LoginUrl like IdentityServer4.
-    // Instead, the login URL is configured via cookie authentication (see below).
-    // When /connect/authorize is called without authentication, AuthorizationController
-    // redirects to the login page configured in Authentication:LoginUrl (default: "/login").
-    builder.Services.AddOpenIddict()
-        .AddCore(options =>
-        {
-            options.UseEntityFrameworkCore()
-                .UseDbContext<ApplicationDbContext>();
-        })
-        .AddServer(options =>
-        {
-            options.SetTokenEndpointUris("/connect/token");
-            options.SetAuthorizationEndpointUris("/connect/authorize");
-            options.SetUserinfoEndpointUris("/connect/userinfo");
-            options.SetLogoutEndpointUris("/connect/logout");
-            options.SetIntrospectionEndpointUris("/connect/introspect");
-
-            options.AllowAuthorizationCodeFlow()
-                .RequireProofKeyForCodeExchange();
-
-            options.AllowRefreshTokenFlow();
-            options.AllowClientCredentialsFlow();
-            options.AllowPasswordFlow(); // Allow password grant for testing and API access
-
-            options.RegisterScopes(Scopes.Email, Scopes.Profile, Scopes.Roles, "api", "offline_access");
-
-            // Signing and encryption - use development certificates for now
-            options.AddDevelopmentEncryptionCertificate()
-                .AddDevelopmentSigningCertificate();
-
-            options.UseAspNetCore()
-                .EnableTokenEndpointPassthrough()
-                .EnableAuthorizationEndpointPassthrough()
-                .EnableUserinfoEndpointPassthrough()
-                .EnableLogoutEndpointPassthrough(); // This allows our controller to handle logout, but OpenIddict may still validate post_logout_redirect_uri
-        })
-        .AddValidation(options =>
-        {
-            options.UseLocalServer();
-            options.UseAspNetCore();
-        });
-
-    // Authentication - configure login interaction similar to IdentityServer4 UserInteraction
-    // Note: AddIdentity already registers Identity.Application and Identity.External schemes
-    // We only need to configure authentication defaults and add external authentication providers
-    // BREAKING CHANGE: No hardcoded defaults. Configuration must be provided.
-    var loginUrl = builder.Configuration[ConfigurationKeys.LoginUrl]
-        ?? throw new InvalidOperationException($"Missing required configuration: {ConfigurationKeys.LoginUrl}. Set in appsettings.json or environment variable.");
-    var logoutUrl = builder.Configuration[ConfigurationKeys.LogoutUrl]
-        ?? throw new InvalidOperationException($"Missing required configuration: {ConfigurationKeys.LogoutUrl}. Set in appsettings.json or environment variable.");
-    var errorUrl = builder.Configuration[ConfigurationKeys.ErrorUrl]
-        ?? throw new InvalidOperationException($"Missing required configuration: {ConfigurationKeys.ErrorUrl}. Set in appsettings.json or environment variable.");
-    var returnUrlParameter = builder.Configuration[ConfigurationKeys.ReturnUrlParameter]
-        ?? throw new InvalidOperationException($"Missing required configuration: {ConfigurationKeys.ReturnUrlParameter}. Set in appsettings.json or environment variable.");
-
-    // Configure authentication defaults
-    // AddIdentity already registers Identity.Application and Identity.External schemes
-    // Do NOT add them again here to avoid duplicate scheme registration
-    var authBuilder = builder.Services.AddAuthentication(options =>
-    {
-        options.DefaultScheme = IdentityConstants.ApplicationScheme;
-        options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
-        options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme;
-        // Allow Bearer token authentication for API endpoints
-        // Use a policy-based approach: try Bearer token first, then fall back to cookies
-        options.DefaultAuthenticateScheme = IdentityConstants.ApplicationScheme;
-    });
-
-    // Note: OpenIddict validation with UseAspNetCore() automatically registers
-    // a JWT Bearer authentication scheme that validates tokens issued by the server.
-    // No manual registration needed - the scheme is available as OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme
-
-    // Only add Google authentication if credentials are provided
-    var googleClientId = builder.Configuration[ConfigurationKeys.ExternalAuthGoogleClientId];
-    var googleClientSecret = builder.Configuration[ConfigurationKeys.ExternalAuthGoogleClientSecret];
-
-    if (!string.IsNullOrEmpty(googleClientId) && !string.IsNullOrEmpty(googleClientSecret))
-    {
-        authBuilder.AddGoogle(options =>
-        {
-            options.ClientId = googleClientId;
-            options.ClientSecret = googleClientSecret;
-            options.SignInScheme = IdentityConstants.ExternalScheme;
-            options.SaveTokens = true;
-            // GetClaimsFromUserInfoEndpoint is automatically enabled in ASP.NET Core 8.0
-            // No need to set it explicitly
-        });
-    }
+    // Configure OpenIddict using extension method
+    builder.Services.AddOpenIddictConfiguration(builder.Configuration);
 
     // Authorization - configure to redirect to login for unauthorized requests
     builder.Services.AddAuthorization(options =>
@@ -358,98 +261,27 @@ try
         });
     });
 
-    // Configure authentication options
-    // Redirect to login only when user is unauthorized or token is invalid
-    builder.Services.ConfigureApplicationCookie(options =>
-    {
-        options.LoginPath = loginUrl;
-        options.LogoutPath = logoutUrl;
-        options.AccessDeniedPath = errorUrl;
-        options.ReturnUrlParameter = returnUrlParameter;
-
-        // Only redirect to login when user is unauthorized or token is invalid
-        // OnRedirectToLogin is only called when authentication is required but user is not authenticated
-        options.Events.OnRedirectToLogin = context =>
-        {
-            // For API calls, always return 401 instead of redirecting
-            if (context.Request.Path.StartsWithSegments("/api") ||
-                context.Request.Path.StartsWithSegments("/account") ||
-                context.Request.Path.StartsWithSegments("/connect/token") ||
-                context.Request.Path.StartsWithSegments("/connect/userinfo"))
-            {
-                context.Response.StatusCode = 401;
-                return Task.CompletedTask;
-            }
-
-            // For browser requests: redirect to login when unauthorized
-            // (OnRedirectToLogin is only called when user is unauthorized or token is invalid)
-            var returnUrl = context.Request.Path + context.Request.QueryString;
-            context.Response.Redirect($"{loginUrl}?{returnUrlParameter}={Uri.EscapeDataString(returnUrl)}");
-            return Task.CompletedTask;
-        };
-    });
+    // Memory cache for caching
+    builder.Services.AddMemoryCache();
 
     // Services
     builder.Services.AddScoped<IExternalAuthService, ExternalAuthService>();
-    builder.Services.AddScoped<TokenService>();
+    builder.Services.AddScoped<ITokenService, TokenService>();
+    builder.Services.AddScoped<ICacheService, MemoryCacheService>();
+    builder.Services.AddScoped<IUserService, UserService>();
+    
+    // Repositories
+    builder.Services.AddScoped<Repositories.IUserRepository, Repositories.UserRepository>();
+    
     builder.Services.AddHttpClient();
 
-    // CORS
-    // BREAKING CHANGE: No hardcoded defaults. Configuration must be provided.
-    // Use consistent naming: SDMS_B2CWebApp_url (no ambiguous FrontendUrl)
-    var b2cUrl = builder.Configuration["SDMS_B2CWebApp_url"]
-        ?? throw new InvalidOperationException("Missing required configuration: SDMS_B2CWebApp_url. Set in appsettings.json or environment variable.");
-    builder.Services.AddCors(options =>
-    {
-        options.AddDefaultPolicy(policy =>
-        {
-            var origins = new List<string>
-            {
-            "http://localhost:4200",
-            "https://localhost:4200"
-            };
+    // FluentValidation
+    builder.Services.AddFluentValidationAutoValidation();
+    builder.Services.AddFluentValidationClientsideAdapters();
+    builder.Services.AddValidatorsFromAssemblyContaining<LoginRequestValidator>();
 
-            // Add B2C URL if not already in list
-            if (!string.IsNullOrEmpty(b2cUrl) && !origins.Contains(b2cUrl))
-            {
-                origins.Add(b2cUrl);
-            }
-
-            // Use SetIsOriginAllowed to allow configured origins, Vercel preview deployments, and localhost
-            // This is needed because Vercel generates dynamic preview URLs (*.vercel.app)
-            policy.SetIsOriginAllowed(origin =>
-            {
-                // Allow configured origins
-                if (origins.Contains(origin))
-                {
-                    return true;
-                }
-
-                // Allow any Vercel preview deployment (*.vercel.app)
-                // This is needed because Vercel generates DYNAMIC preview URLs for each branch/PR:
-                // - Production: https://sdms-production.vercel.app (configured in env vars)
-                // - Preview: https://sdms-cc16mhpsa-freelancingsols-projects.vercel.app (dynamic, can't be pre-configured)
-                // - Branch: https://sdms-git-main-freelancingsols-projects.vercel.app (dynamic, can't be pre-configured)
-                // Without this wildcard, only the production URL would work, and all preview deployments would fail CORS
-                if (origin.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-
-                // Allow localhost for development (any port)
-                if (origin.StartsWith("http://localhost:", StringComparison.OrdinalIgnoreCase) ||
-                    origin.StartsWith("https://localhost:", StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-
-                return false;
-            })
-            .AllowAnyMethod()
-            .AllowAnyHeader()
-            .AllowCredentials();
-        });
-    });
+    // Configure CORS using extension method
+    builder.Services.AddCorsConfiguration(builder.Configuration);
 
     var app = builder.Build();
 
@@ -484,8 +316,34 @@ try
     }
 
     // Configure HTTP pipeline
-    // ForwardedHeaders must be first to handle reverse proxy headers correctly (Railway, etc.)
+    // Global exception handler must be first to catch all exceptions
+    app.UseGlobalExceptionHandler();
+    
+    // Security headers middleware (early in pipeline)
+    app.UseSecurityHeaders(options =>
+    {
+        options.EnableContentSecurityPolicy = true;
+        options.EnableStrictTransportSecurity = !app.Environment.IsDevelopment();
+        options.EnableXContentTypeOptions = true;
+        options.EnableXFrameOptions = true;
+        options.EnableXssProtection = true;
+        options.EnableReferrerPolicy = true;
+        options.EnablePermissionsPolicy = true;
+        options.RemoveServerHeader = true;
+    });
+    
+    // ForwardedHeaders must be early to handle reverse proxy headers correctly (Railway, etc.)
     app.UseForwardedHeaders();
+    
+    // Correlation ID middleware for distributed tracing
+    app.UseCorrelationId();
+    
+    // Rate limiting middleware
+    app.UseRateLimiting(options =>
+    {
+        options.MaxRequestsPerWindow = 100;
+        options.Window = TimeSpan.FromMinutes(1);
+    });
 
     if (app.Environment.IsDevelopment())
     {
@@ -610,232 +468,11 @@ try
     // Initialize OpenIddict and create default data
     using (var scope = app.Services.CreateScope())
     {
-        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
-        var applicationManager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
-
-        // Database is already initialized above, just ensure it's still created
-        await context.Database.EnsureCreatedAsync();
-
-        // Get B2C URL from configuration
-        // BREAKING CHANGE: No hardcoded defaults. Configuration must be provided.
-        var b2cUrlForClient = builder.Configuration["SDMS_B2CWebApp_url"]
-            ?? throw new InvalidOperationException("Missing required configuration: SDMS_B2CWebApp_url. Set in appsettings.json or environment variable.");
-
-        // Helper function to parse comma-separated URIs from configuration
-        // Also adds both versions (with and without trailing slash) for root URIs to handle trailing slash mismatches
-        static HashSet<Uri> ParseUrisFromConfig(string? configValue, HashSet<Uri> defaultUris)
-        {
-            var uris = new HashSet<Uri>();
-
-            if (!string.IsNullOrWhiteSpace(configValue))
-            {
-                // Parse comma-separated values
-                var uriStrings = configValue.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                foreach (var uriString in uriStrings)
-                {
-                    if (Uri.TryCreate(uriString, UriKind.Absolute, out var uri))
-                    {
-                        uris.Add(uri);
-                        
-                        // For root URIs (path is just /), add both versions (with and without trailing slash)
-                        // This ensures OpenIddict can match requests with either format
-                        if (uri.AbsolutePath == "/")
-                        {
-                            // Add version without trailing slash if current has it
-                            if (uriString.EndsWith("/"))
-                            {
-                                var withoutSlash = uriString.TrimEnd('/');
-                                if (Uri.TryCreate(withoutSlash, UriKind.Absolute, out var uriWithoutSlash))
-                                {
-                                    uris.Add(uriWithoutSlash);
-                                    Console.WriteLine($"Added both versions of root URI: {uriString} -> also added {withoutSlash}");
-                                }
-                            }
-                            // Add version with trailing slash if current doesn't have it
-                            else
-                            {
-                                var withSlash = uriString + "/";
-                                if (Uri.TryCreate(withSlash, UriKind.Absolute, out var uriWithSlash))
-                                {
-                                    uris.Add(uriWithSlash);
-                                    Console.WriteLine($"Added both versions of root URI: {uriString} -> also added {withSlash}");
-                                }
-                            }
-                        }
-                    }
-                    else
-                    {
-                        Console.WriteLine($"Warning: Invalid URI in configuration: {uriString}");
-                    }
-                }
-            }
-
-            // If no URIs were parsed from config, use defaults
-            if (uris.Count == 0)
-            {
-                uris = defaultUris;
-            }
-            else
-            {
-                // Also add default URIs (they might not be in config)
-                // For default URIs that are root paths, also add the opposite version
-                foreach (var defaultUri in defaultUris.ToList())
-                {
-                    uris.Add(defaultUri);
-                    
-                    // For root URIs, add both versions
-                    if (defaultUri.AbsolutePath == "/")
-                    {
-                        var defaultUriString = defaultUri.ToString();
-                        if (defaultUriString.EndsWith("/"))
-                        {
-                            var withoutSlash = defaultUriString.TrimEnd('/');
-                            if (Uri.TryCreate(withoutSlash, UriKind.Absolute, out var uriWithoutSlash))
-                            {
-                                uris.Add(uriWithoutSlash);
-                                Console.WriteLine($"Added both versions of default root URI: {defaultUriString} -> also added {withoutSlash}");
-                            }
-                        }
-                        else
-                        {
-                            var withSlash = defaultUriString + "/";
-                            if (Uri.TryCreate(withSlash, UriKind.Absolute, out var uriWithSlash))
-                            {
-                                uris.Add(uriWithSlash);
-                                Console.WriteLine($"Added both versions of default root URI: {defaultUriString} -> also added {withSlash}");
-                            }
-                        }
-                    }
-                }
-            }
-
-            return uris;
-        }
-
-        // BREAKING CHANGE: No hardcoded default redirect URIs. Configuration must be provided.
-        // Build redirect URIs from configuration
-        var defaultRedirectUris = new HashSet<Uri>();
-        var defaultPostLogoutRedirectUris = new HashSet<Uri>();
-
-        // Add B2C URL redirect URIs (required)
-        if (!string.IsNullOrEmpty(b2cUrlForClient))
-        {
-            // Normalize B2C URL - remove trailing slash for consistency
-            var normalizedB2cUrl = b2cUrlForClient.TrimEnd('/');
-            defaultRedirectUris.Add(new Uri($"{normalizedB2cUrl}/auth-callback"));
-            // Add post-logout URI without trailing slash (ParseUrisFromConfig will add the version with slash)
-            defaultPostLogoutRedirectUris.Add(new Uri(normalizedB2cUrl));
-        }
-
-        // Get redirect URIs from configuration
-        var redirectUrisConfig = builder.Configuration[ConfigurationKeys.RedirectUris];
-        var redirectUris = ParseUrisFromConfig(redirectUrisConfig, defaultRedirectUris);
-
-        // Get post-logout redirect URIs from configuration
-        // ParseUrisFromConfig automatically adds both versions (with/without trailing slash) for root URIs
-        var postLogoutRedirectUrisConfig = builder.Configuration[ConfigurationKeys.PostLogoutRedirectUris];
-        var postLogoutRedirectUris = ParseUrisFromConfig(postLogoutRedirectUrisConfig, defaultPostLogoutRedirectUris);
-
-        // Validate that we have at least one redirect URI
-        if (redirectUris.Count == 0)
-        {
-            throw new InvalidOperationException(
-                $"No redirect URIs configured. Set {ConfigurationKeys.RedirectUris} in appsettings.json or environment variable, " +
-                "or ensure SDMS_B2CWebApp_url is set to generate default redirect URI.");
-        }
-
-        if (postLogoutRedirectUris.Count == 0)
-        {
-            throw new InvalidOperationException(
-                $"No post-logout redirect URIs configured. Set {ConfigurationKeys.PostLogoutRedirectUris} in appsettings.json or environment variable, " +
-                "or ensure SDMS_B2CWebApp_url is set to generate default post-logout redirect URI.");
-        }
-
-        // Create or update OpenIddict client
-        var clientDescriptor = new OpenIddictApplicationDescriptor
-        {
-            ClientId = "sdms_frontend",
-            // No ClientSecret for public clients (SPA/frontend apps)
-            ClientType = ClientTypes.Public, // Public client for SPA (cannot securely store secrets)
-            DisplayName = "SDMS Frontend Application",
-            ConsentType = ConsentTypes.Implicit, // Use implicit consent for trusted first-party client
-            Permissions =
-        {
-            Permissions.Endpoints.Authorization,
-            Permissions.Endpoints.Token,
-            Permissions.Endpoints.Logout,
-            // Note: Userinfo endpoint permission is not available in this OpenIddict version
-            // The endpoint is accessible if the user has a valid access token
-            Permissions.GrantTypes.AuthorizationCode,
-            Permissions.GrantTypes.RefreshToken,
-            Permissions.GrantTypes.Password, // Allow password grant for API access
-            Permissions.ResponseTypes.Code,
-            Permissions.Scopes.Email,
-            Permissions.Scopes.Profile,
-            Permissions.Scopes.Roles,
-            Permissions.Prefixes.Scope + "api",
-            Permissions.Prefixes.Scope + "offline_access",
-        },
-            Requirements =
-        {
-            Requirements.Features.ProofKeyForCodeExchange
-        }
-        };
-
-        // Add redirect URIs (collection is read-only, so we add items individually)
-        foreach (var uri in redirectUris)
-        {
-            clientDescriptor.RedirectUris.Add(uri);
-        }
-
-        // Add post-logout redirect URIs (collection is read-only, so we add items individually)
-        // Log the URIs being added for debugging
         var logger = app.Services.GetRequiredService<ILogger<Program>>();
-        logger.LogInformation("Adding {Count} post-logout redirect URI(s) to client: {Uris}", 
-            postLogoutRedirectUris.Count, 
-            string.Join(", ", postLogoutRedirectUris.Select(u => u.ToString())));
-        
-        foreach (var uri in postLogoutRedirectUris)
-        {
-            clientDescriptor.PostLogoutRedirectUris.Add(uri);
-        }
-
-        var existingClient = await applicationManager.FindByClientIdAsync("sdms_frontend");
-        if (existingClient == null)
-        {
-            // Create new client
-            await applicationManager.CreateAsync(clientDescriptor);
-            Console.WriteLine("Created OpenIddict client: sdms_frontend");
-        }
-        else
-        {
-            // Update existing client to ensure it has all required permissions and scopes
-            // This will also update the client type to Public (removing client secret requirement)
-            await applicationManager.UpdateAsync(existingClient, clientDescriptor);
-            Console.WriteLine("Updated OpenIddict client: sdms_frontend (updated to Public client type with latest permissions and scopes)");
-        }
-
-        // Create default roles
-        if (!await roleManager.RoleExistsAsync("Administrator"))
-        {
-            await roleManager.CreateAsync(new IdentityRole("Administrator"));
-        }
-
-        // Create default admin user if not exists
-        if (!userManager.Users.Any())
-        {
-            var adminUser = new ApplicationUser
-            {
-                UserName = "admin@sdms.com",
-                Email = "admin@sdms.com",
-                EmailConfirmed = true,
-                DisplayName = "Administrator"
-            };
-            await userManager.CreateAsync(adminUser, "Admin@123");
-            await userManager.AddToRoleAsync(adminUser, "Administrator");
-        }
+        await OpenIddictClientInitialization.InitializeAsync(
+            scope.ServiceProvider,
+            builder.Configuration,
+            logger);
     }
 
     // Start the application

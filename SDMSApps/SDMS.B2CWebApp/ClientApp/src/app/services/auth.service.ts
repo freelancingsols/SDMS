@@ -1,19 +1,10 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { OAuthService } from 'angular-oauth2-oidc';
-import { BehaviorSubject, firstValueFrom } from 'rxjs';
+import { BehaviorSubject, firstValueFrom, Observable } from 'rxjs';
 import { AppSettings } from '../config/app-settings';
 import { environment } from '../../environments/environment';
-
-export interface UserInfo {
-  userId: string;
-  email: string;
-  displayName?: string;
-  externalProvider?: string;
-  profilePictureUrl?: string;
-  lastLoginDate?: string;
-  roles?: string[];
-}
+import { UserInfo, AuthenticationProvider } from '../interfaces/auth.interface';
 
 @Injectable({
   providedIn: 'root'
@@ -90,7 +81,7 @@ export class AuthService {
     }
   }
 
-  async loginWithExternalProvider(_provider: 'auth0' | 'google'): Promise<void> {
+  async loginWithExternalProvider(_provider: AuthenticationProvider): Promise<void> {
     // Initiate OAuth flow with PKCE
     this.oauthService.initCodeFlow();
   }

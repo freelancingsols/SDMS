@@ -5,7 +5,12 @@ using Microsoft.AspNetCore.Mvc;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
 using OpenIddict.Validation.AspNetCore;
+using SDMS.AuthenticationWebApp.Middleware;
 using SDMS.AuthenticationWebApp.Models;
+using SDMS.AuthenticationWebApp.Models.Common;
+using SDMS.AuthenticationWebApp.Models.Requests;
+using SDMS.AuthenticationWebApp.Models.Responses;
+using SDMS.AuthenticationWebApp.Repositories;
 using SDMS.AuthenticationWebApp.Services;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 using OpenIddictConstants = OpenIddict.Abstractions.OpenIddictConstants;
@@ -19,24 +24,31 @@ public class AccountController : ControllerBase
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly IExternalAuthService _externalAuthService;
-    private readonly TokenService _tokenService;
+    private readonly ITokenService _tokenService;
+    private readonly IUserService _userService;
+    private readonly IUserRepository _userRepository;
     private readonly ILogger<AccountController> _logger;
 
     public AccountController(
         UserManager<ApplicationUser> userManager,
         SignInManager<ApplicationUser> signInManager,
         IExternalAuthService externalAuthService,
-        TokenService tokenService,
+        ITokenService tokenService,
+        IUserService userService,
+        IUserRepository userRepository,
         ILogger<AccountController> logger)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _externalAuthService = externalAuthService;
         _tokenService = tokenService;
+        _userService = userService;
+        _userRepository = userRepository;
         _logger = logger;
     }
 
     [HttpPost("login")]
+    [ValidateRequest]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
         try
@@ -74,7 +86,7 @@ public class AccountController : ControllerBase
             // Fallback to local authentication if external failed or not attempted
             if (user == null && !string.IsNullOrEmpty(request.Email) && !string.IsNullOrEmpty(request.Password))
             {
-                user = await _userManager.FindByEmailAsync(request.Email);
+                user = await _userRepository.GetByEmailAsync(request.Email);
                 if (user != null)
                 {
                     var isValidPassword = await _userManager.CheckPasswordAsync(user, request.Password);
@@ -104,29 +116,37 @@ public class AccountController : ControllerBase
                 return BadRequest(new { error = "Invalid login request" });
             }
 
+            // Update last login date
+            await _userService.UpdateLastLoginDateAsync(user.Id);
+
             // User is now signed in via SignInManager
             // Return success - the Angular app will handle the OAuth flow redirect
             // The cookie is set, so when initCodeFlow() redirects to /connect/authorize, 
             // the user will be authenticated
             
-            return Ok(new
+            var correlationId = HttpContext.Items["CorrelationId"]?.ToString();
+            var loginResponse = new LoginResponse
             {
-                userId = user.Id,
-                email = user.Email,
-                displayName = user.DisplayName,
-                externalProvider = user.ExternalProvider,
-                success = true,
-                message = "Authentication successful. User signed in."
-            });
+                UserId = user.Id,
+                Email = user.Email ?? string.Empty,
+                DisplayName = user.DisplayName,
+                ExternalProvider = user.ExternalProvider,
+                Success = true,
+                Message = "Authentication successful. User signed in."
+            };
+
+            return Ok(ApiResponse<LoginResponse>.SuccessResponse(loginResponse, "Login successful", correlationId));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during login");
-            return StatusCode(500, new { error = "Internal server error" });
+            var correlationId = HttpContext.Items["CorrelationId"]?.ToString();
+            _logger.LogError(ex, "Error during login. CorrelationId: {CorrelationId}", correlationId);
+            return StatusCode(500, ApiResponse<object>.ErrorResponse("An error occurred during login", correlationId: correlationId));
         }
     }
 
     [HttpPost("register")]
+    [ValidateRequest]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
         try
@@ -136,10 +156,14 @@ public class AccountController : ControllerBase
                 return BadRequest(new { error = "Email and password are required" });
             }
 
-            var existingUser = await _userManager.FindByEmailAsync(request.Email);
+            // Use repository to check if user exists
+            var existingUser = await _userRepository.GetByEmailAsync(request.Email);
             if (existingUser != null)
             {
-                return BadRequest(new { error = "User with this email already exists" });
+                var correlationId = HttpContext.Items["CorrelationId"]?.ToString();
+                return BadRequest(ApiResponse<object>.ErrorResponse(
+                    "User with this email already exists",
+                    correlationId: correlationId));
             }
 
             var user = new ApplicationUser
@@ -158,18 +182,22 @@ public class AccountController : ControllerBase
 
             _logger.LogInformation("User registered: {Email}", request.Email);
 
-            return Ok(new
+            var correlationId = HttpContext.Items["CorrelationId"]?.ToString();
+            var registerResponse = new RegisterResponse
             {
-                userId = user.Id,
-                email = user.Email,
-                displayName = user.DisplayName,
-                message = "Registration successful"
-            });
+                UserId = user.Id,
+                Email = user.Email ?? string.Empty,
+                DisplayName = user.DisplayName,
+                Message = "Registration successful"
+            };
+
+            return Ok(ApiResponse<RegisterResponse>.SuccessResponse(registerResponse, "Registration successful", correlationId));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during registration");
-            return StatusCode(500, new { error = "Internal server error" });
+            var correlationId = HttpContext.Items["CorrelationId"]?.ToString();
+            _logger.LogError(ex, "Error during registration. CorrelationId: {CorrelationId}", correlationId);
+            return StatusCode(500, ApiResponse<object>.ErrorResponse("An error occurred during registration", correlationId: correlationId));
         }
     }
 
@@ -191,27 +219,21 @@ public class AccountController : ControllerBase
                 return Unauthorized();
             }
 
-            var user = await _userManager.FindByIdAsync(userId);
-            if (user == null)
+            var userInfo = await _userService.GetUserInfoAsync(userId);
+            if (userInfo == null)
             {
-                return NotFound(new { error = "User not found" });
+                var correlationId = HttpContext.Items["CorrelationId"]?.ToString();
+                return NotFound(ApiResponse<object>.ErrorResponse("User not found", correlationId: correlationId));
             }
 
-            return Ok(new
-            {
-                userId = user.Id,
-                email = user.Email,
-                displayName = user.DisplayName,
-                externalProvider = user.ExternalProvider,
-                profilePictureUrl = user.ProfilePictureUrl,
-                lastLoginDate = user.LastLoginDate,
-                roles = await _userManager.GetRolesAsync(user)
-            });
+            var correlationId2 = HttpContext.Items["CorrelationId"]?.ToString();
+            return Ok(ApiResponse<UserInfoResponse>.SuccessResponse(userInfo, "User information retrieved successfully", correlationId2));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving user info");
-            return StatusCode(500, new { error = "Internal server error" });
+            var correlationId = HttpContext.Items["CorrelationId"]?.ToString();
+            _logger.LogError(ex, "Error retrieving user info. CorrelationId: {CorrelationId}", correlationId);
+            return StatusCode(500, ApiResponse<object>.ErrorResponse("An error occurred while retrieving user information", correlationId: correlationId));
         }
     }
 
@@ -239,12 +261,12 @@ public class AccountController : ControllerBase
 
             return Ok(new
             {
-                email = user.Email,
-                storedHash = storedHash,
-                providedHash = request.PasswordHash,
-                hashMatches = hashMatches,
-                passwordMatches = passwordMatches,
-                verificationResult = verificationResult.ToString()
+                Email = user.Email,
+                StoredHash = storedHash,
+                ProvidedHash = request.PasswordHash,
+                HashMatches = hashMatches,
+                PasswordMatches = passwordMatches,
+                VerificationResult = verificationResult.ToString()
             });
         }
         catch (Exception ex)
@@ -255,24 +277,4 @@ public class AccountController : ControllerBase
     }
 }
 
-public class VerifyPasswordHashRequest
-{
-    public string PasswordHash { get; set; } = string.Empty;
-}
-
-public class LoginRequest
-{
-    public string? Provider { get; set; }
-    public string? IdToken { get; set; }
-    public string? Code { get; set; }
-    public string? Email { get; set; }
-    public string? Password { get; set; }
-}
-
-public class RegisterRequest
-{
-    public string Email { get; set; } = string.Empty;
-    public string Password { get; set; } = string.Empty;
-    public string? DisplayName { get; set; }
-}
 

@@ -54,7 +54,6 @@ public class AccountController : ControllerBase
         try
         {
             ApplicationUser? user = null;
-            bool externalAuthSuccess = false;
 
             // Try external authentication first if provider is specified
             if (!string.IsNullOrEmpty(request.Provider) &&
@@ -68,7 +67,6 @@ public class AccountController : ControllerBase
                     if (success && externalUser != null)
                     {
                         user = externalUser;
-                        externalAuthSuccess = true;
                     }
                     else
                     {
@@ -149,6 +147,7 @@ public class AccountController : ControllerBase
     [ValidateRequest]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
+        var correlationId = HttpContext.Items["CorrelationId"]?.ToString();
         try
         {
             if (string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Password))
@@ -160,7 +159,6 @@ public class AccountController : ControllerBase
             var existingUser = await _userRepository.GetByEmailAsync(request.Email);
             if (existingUser != null)
             {
-                var correlationId = HttpContext.Items["CorrelationId"]?.ToString();
                 return BadRequest(ApiResponse<object>.ErrorResponse(
                     "User with this email already exists",
                     correlationId: correlationId));
@@ -181,8 +179,6 @@ public class AccountController : ControllerBase
             }
 
             _logger.LogInformation("User registered: {Email}", request.Email);
-
-            var correlationId = HttpContext.Items["CorrelationId"]?.ToString();
             var registerResponse = new RegisterResponse
             {
                 UserId = user.Id,
@@ -195,7 +191,6 @@ public class AccountController : ControllerBase
         }
         catch (Exception ex)
         {
-            var correlationId = HttpContext.Items["CorrelationId"]?.ToString();
             _logger.LogError(ex, "Error during registration. CorrelationId: {CorrelationId}", correlationId);
             return StatusCode(500, ApiResponse<object>.ErrorResponse("An error occurred during registration", correlationId: correlationId));
         }

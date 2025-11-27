@@ -14,8 +14,11 @@ using SDMS.AuthenticationWebApp.Constants;
 using SDMS.AuthenticationWebApp.Data;
 using SDMS.AuthenticationWebApp.Middleware;
 using SDMS.AuthenticationWebApp.Models;
+using SDMS.AuthenticationWebApp.Models.Requests;
+using SDMS.AuthenticationWebApp.Repositories;
 using SDMS.AuthenticationWebApp.Services;
 using FluentValidation;
+using FluentValidation.AspNetCore;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 using Microsoft.Extensions.FileProviders;
 using System.Net;
@@ -271,7 +274,7 @@ try
     builder.Services.AddScoped<IUserService, UserService>();
     
     // Repositories
-    builder.Services.AddScoped<Repositories.IUserRepository, Repositories.UserRepository>();
+    builder.Services.AddScoped<IUserRepository, UserRepository>();
     
     builder.Services.AddHttpClient();
 

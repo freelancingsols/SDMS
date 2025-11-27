@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SDMS.AuthenticationWebApp.Constants;
+using SDMS.AuthenticationWebApp.Data;
 using SDMS.AuthenticationWebApp.Models;
 
 namespace SDMS.AuthenticationWebApp.Configuration;

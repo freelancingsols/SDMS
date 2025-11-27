@@ -57,14 +57,14 @@ public class AccountController : ControllerBase
             bool externalAuthSuccess = false;
 
             // Try external authentication first if provider is specified
-            if (!string.IsNullOrEmpty(request.Provider) && 
+            if (!string.IsNullOrEmpty(request.Provider) &&
                 (request.Provider == "auth0" || request.Provider == "google"))
             {
                 try
                 {
                     var (success, externalUser, error) = await _externalAuthService
                         .AuthenticateWithProviderAsync(request.Provider, request.IdToken, request.Code);
-                    
+
                     if (success && externalUser != null)
                     {
                         user = externalUser;
@@ -72,7 +72,7 @@ public class AccountController : ControllerBase
                     }
                     else
                     {
-                        _logger.LogWarning("External authentication failed for {Provider}: {Error}", 
+                        _logger.LogWarning("External authentication failed for {Provider}: {Error}",
                             request.Provider, error);
                     }
                 }
@@ -94,7 +94,7 @@ public class AccountController : ControllerBase
                     {
                         // Sign the user in using Identity
                         await _signInManager.SignInAsync(user, isPersistent: false);
-                        
+
                         user.LastLoginDate = DateTime.UtcNow;
                         await _userManager.UpdateAsync(user);
                     }
@@ -123,7 +123,7 @@ public class AccountController : ControllerBase
             // Return success - the Angular app will handle the OAuth flow redirect
             // The cookie is set, so when initCodeFlow() redirects to /connect/authorize, 
             // the user will be authenticated
-            
+
             var correlationId = HttpContext.Items["CorrelationId"]?.ToString();
             var loginResponse = new LoginResponse
             {
@@ -210,10 +210,10 @@ public class AccountController : ControllerBase
         try
         {
             // Try to get user ID from Bearer token first (OpenIddict)
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) 
-                ?? User.FindFirstValue("sub") 
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? User.FindFirstValue("sub")
                 ?? User.FindFirstValue(OpenIddictConstants.Claims.Subject);
-            
+
             if (string.IsNullOrEmpty(userId))
             {
                 return Unauthorized();
@@ -250,10 +250,10 @@ public class AccountController : ControllerBase
 
             // Get the stored password hash
             var storedHash = user.PasswordHash;
-            
+
             // Verify the provided hash matches the stored hash
             bool hashMatches = storedHash == request.PasswordHash;
-            
+
             // Also verify if the password "Admin@123" matches the stored hash
             var passwordHasher = _userManager.PasswordHasher;
             var verificationResult = passwordHasher.VerifyHashedPassword(user, storedHash ?? "", "Admin@123");

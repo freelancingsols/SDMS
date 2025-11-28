@@ -140,7 +140,6 @@ public class ExternalAuthService : IExternalAuthService
                 {
                     return (false, null, string.Join(", ", result.Errors.Select(e => e.Description)));
                 }
-                _logger.LogInformation("Created new user from Auth0: {Email}", email);
             }
             else
             {
@@ -154,7 +153,6 @@ public class ExternalAuthService : IExternalAuthService
                     user.ExternalId = externalId;
                 }
                 await _userManager.UpdateAsync(user);
-                _logger.LogInformation("Updated user from Auth0: {Email}", email);
             }
 
             return (true, user, null);
@@ -253,7 +251,6 @@ public class ExternalAuthService : IExternalAuthService
                 {
                     return (false, null, string.Join(", ", result.Errors.Select(e => e.Description)));
                 }
-                _logger.LogInformation("Created new user from Google: {Email}", email);
             }
             else
             {
@@ -267,7 +264,6 @@ public class ExternalAuthService : IExternalAuthService
                     user.ExternalId = externalId;
                 }
                 await _userManager.UpdateAsync(user);
-                _logger.LogInformation("Updated user from Google: {Email}", email);
             }
 
             return (true, user, null);
@@ -284,7 +280,12 @@ public class ExternalAuthService : IExternalAuthService
     {
         try
         {
-            var redirectUri = _configuration["ExternalAuth:RedirectUri"] ?? "http://localhost:4200/auth-callback";
+            // BREAKING CHANGE: No hardcoded defaults. Configuration must be provided.
+            // No fallbacks - ExternalAuth:RedirectUri must be explicitly set
+            var redirectUri = _configuration["ExternalAuth:RedirectUri"]
+                ?? throw new InvalidOperationException(
+                    "Missing required configuration: ExternalAuth:RedirectUri. " +
+                    "Set in appsettings.json or environment variable (SDMS_AuthenticationWebApp_ExternalAuth_RedirectUri).");
             var content = new FormUrlEncodedContent(new[]
             {
                 new KeyValuePair<string, string>("grant_type", "authorization_code"),

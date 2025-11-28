@@ -8,6 +8,7 @@ export interface AppSettingsConfig {
   SDMS_AuthenticationWebApp_url?: string;
   SDMS_AuthenticationWebApp_clientid?: string;
   SDMS_AuthenticationWebApp_redirectUri?: string;
+  SDMS_AuthenticationWebApp_postLogoutRedirectUri?: string;
   SDMS_AuthenticationWebApp_scope?: string;
 }
 
@@ -25,16 +26,10 @@ export class AppSettingsLoaderService {
    * Load appsettings from appsettings.json
    * This service method is available for use within Angular DI context
    * For bootstrap, use loadAppSettingsBeforeBootstrap() instead
+   * 
+   * BREAKING CHANGE: No hardcoded defaults. Configuration must be provided via appsettings.json or env vars.
    */
   async loadAppSettings(): Promise<void> {
-    const defaultConfig: AppSettingsConfig = {
-      SDMS_B2CWebApp_url: 'http://localhost:4200',
-      SDMS_AuthenticationWebApp_url: 'https://localhost:7001',
-      SDMS_AuthenticationWebApp_clientid: 'sdms_frontend',
-      SDMS_AuthenticationWebApp_redirectUri: 'http://localhost:4200/auth-callback',
-      SDMS_AuthenticationWebApp_scope: 'openid profile email roles api'
-    };
-
     try {
       // Try assets/appsettings.json first
       try {
@@ -43,8 +38,7 @@ export class AppSettingsLoaderService {
         );
         if (config) {
           console.log('✓ AppSettings loaded from /assets/appsettings.json');
-          const mergedConfig = { ...defaultConfig, ...config };
-          AppSettings.initialize(mergedConfig);
+          AppSettings.initialize(config);
           return;
         }
       } catch (error1) {
@@ -60,20 +54,23 @@ export class AppSettingsLoaderService {
               SDMS_AuthenticationWebApp_url: rootConfig.SDMS_AuthenticationWebApp_url,
               SDMS_AuthenticationWebApp_clientid: rootConfig.SDMS_AuthenticationWebApp_clientid,
               SDMS_AuthenticationWebApp_redirectUri: rootConfig.SDMS_AuthenticationWebApp_redirectUri,
+              SDMS_AuthenticationWebApp_postLogoutRedirectUri: rootConfig.SDMS_AuthenticationWebApp_postLogoutRedirectUri,
               SDMS_AuthenticationWebApp_scope: rootConfig.SDMS_AuthenticationWebApp_scope
             };
-            const mergedConfig = { ...defaultConfig, ...appConfig };
-            AppSettings.initialize(mergedConfig);
+            AppSettings.initialize(appConfig);
             return;
           }
         } catch (error2) {
-          console.warn('Could not load appsettings.json files, using defaults');
-          AppSettings.initialize(defaultConfig);
+          throw new Error(
+            'Could not load appsettings.json files. ' +
+            'Ensure /assets/appsettings.json or /appsettings.json exists with required configuration. ' +
+            'For local development, create appsettings.json with localhost values.'
+          );
         }
       }
     } catch (error) {
       console.error('Error loading appsettings:', error);
-      AppSettings.initialize(defaultConfig);
+      throw error;
     }
   }
 }
@@ -82,24 +79,18 @@ export class AppSettingsLoaderService {
  * Standalone function to load appsettings before Angular bootstrap
  * This can be called from main.ts without Angular DI
  * 
- * Simple flow:
- * 1. Read from /assets/appsettings.json (updated at build time from env vars)
- * 2. Fallback to hardcoded defaults if file not found
+ * Configuration Priority:
+ * 1. Environment Variables (process.env.SDMS_*) - HIGHEST PRIORITY
+ * 2. appsettings.json file - Fallback for local development
+ * 3. Error if missing - No hardcoded defaults
  * 
  * Note: appsettings.json is updated at build time by CI/CD/Vercel
  * which reads environment variables and updates the file before Angular build.
+ * 
+ * BREAKING CHANGE: No hardcoded defaults. Configuration must be provided.
  */
 export async function loadAppSettingsBeforeBootstrap(): Promise<void> {
-  return new Promise<void>((resolve) => {
-    // Default configuration (used as fallback)
-    const defaultConfig: AppSettingsConfig = {
-      SDMS_B2CWebApp_url: 'http://localhost:4200',
-      SDMS_AuthenticationWebApp_url: 'https://localhost:7001',
-      SDMS_AuthenticationWebApp_clientid: 'sdms_frontend',
-      SDMS_AuthenticationWebApp_redirectUri: 'http://localhost:4200/auth-callback',
-      SDMS_AuthenticationWebApp_scope: 'openid profile email roles api'
-    };
-
+  return new Promise<void>((resolve, reject) => {
     // Load from assets/appsettings.json (updated at build time from env vars)
     fetch('/assets/appsettings.json')
       .then(response => {
@@ -110,19 +101,17 @@ export async function loadAppSettingsBeforeBootstrap(): Promise<void> {
       })
       .then((config: AppSettingsConfig) => {
         console.log('✓ AppSettings loaded from /assets/appsettings.json');
-        // Merge with defaults (config values take precedence)
-        const mergedConfig: AppSettingsConfig = {
-          ...defaultConfig,
-          ...config
-        };
-        AppSettings.initialize(mergedConfig);
+        AppSettings.initialize(config);
         resolve();
       })
-      .catch(() => {
-        // If file not found, use hardcoded defaults
-        console.warn('Could not load /assets/appsettings.json, using hardcoded defaults');
-        AppSettings.initialize(defaultConfig);
-        resolve();
+      .catch((error) => {
+        const errorMessage = 
+          'Could not load /assets/appsettings.json. ' +
+          'Ensure appsettings.json exists with required configuration. ' +
+          'For local development, create appsettings.json with localhost values. ' +
+          'For production, ensure environment variables (SDMS_*) are set in CI/CD.';
+        console.error(errorMessage, error);
+        reject(new Error(errorMessage));
       });
   });
 }

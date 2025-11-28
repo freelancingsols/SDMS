@@ -2,10 +2,9 @@
 # This file helps Railway understand how to build and run your application
 
 [build]
-builder = "NIXPACKS"
+builder = "DOCKERFILE"
 
 [deploy]
-startCommand = "dotnet SDMS.AuthenticationWebApp.dll"
 healthcheckPath = "/ping"
 healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"

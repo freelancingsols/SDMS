@@ -2,6 +2,7 @@ import { NgModule } from '@angular/core';
 import { Routes, RouterModule } from '@angular/router';
 import { TestComponent } from './components/test/test.component';
 import { LandingComponent } from './components/landing/landing.component';
+import { AboutComponent } from './components/about/about.component';
 import { AuthorizeGuard } from './auth/authorize.guard';
 import { LoginComponent } from './auth/login/login.component';
 
@@ -13,6 +14,7 @@ const routes: Routes = [
   { path: 'login-callback-popup', component: LoginComponent },
   { path: 'auth-callback', component: LoginComponent }, // Also support /auth-callback for compatibility
   { path: 'test', component: TestComponent, canActivate: [AuthorizeGuard] }, // Test component in center canvas - requires auth
+  { path: 'about', component: AboutComponent }, // About page - no auth required
   { path: '**', redirectTo: '' } // Redirect unknown routes to landing page
 ];
 

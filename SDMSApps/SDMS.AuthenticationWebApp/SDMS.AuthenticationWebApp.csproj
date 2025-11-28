@@ -6,6 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>SDMS.AuthenticationWebApp</AssemblyName>
     <RootNamespace>SDMS.AuthenticationWebApp</RootNamespace>
+    <!-- Exclude dist folder from automatic Content inclusion to avoid duplicates -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);ClientApp\dist\**\*</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
@@ -24,6 +26,13 @@
     <PackageReference Include="OpenIddict.Server.AspNetCore" Version="5.2.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
     <PackageReference Include="AspNetCore.HealthChecks.Npgsql" Version="8.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="8.0.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.0" />
+    <PackageReference Include="Serilog.Sinks.Grafana.Loki" Version="8.3.1" />
+    <PackageReference Include="Serilog.Enrichers.Environment" Version="3.0.1" />
+    <PackageReference Include="Serilog.Enrichers.Thread" Version="4.0.0" />
+    <PackageReference Include="FluentValidation.AspNetCore" Version="11.3.0" />
+    <PackageReference Include="AspNetCoreRateLimit" Version="5.0.0" />
   </ItemGroup>
 
   <ItemGroup>

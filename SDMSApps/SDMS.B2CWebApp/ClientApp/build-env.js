@@ -2,6 +2,11 @@
 // This script replaces environment variables in appsettings.json during build
 // Vercel will set these environment variables during deployment
 // Uses SDMS_* naming convention for all configuration keys
+//
+// BREAKING CHANGE: No hardcoded defaults. Configuration must be provided via:
+// 1. Environment Variables (process.env.SDMS_*) - HIGHEST PRIORITY
+// 2. appsettings.json file - Fallback for local development
+// 3. Error if missing - No hardcoded defaults
 
 const fs = require('fs');
 const path = require('path');
@@ -9,44 +14,78 @@ const path = require('path');
 // Generate appsettings.json for runtime loading
 // Read from root appsettings.json as template and replace values from environment variables
 const rootAppSettingsPath = path.join(__dirname, '..', 'appsettings.json');
-let appSettingsConfig = {
-  SDMS_B2CWebApp_url: 'http://localhost:4200',
-  SDMS_AuthenticationWebApp_url: 'https://localhost:7001',
-  SDMS_AuthenticationWebApp_clientid: 'sdms_frontend',
-  SDMS_AuthenticationWebApp_redirectUri: 'http://localhost:4200/auth-callback',
-  SDMS_AuthenticationWebApp_scope: 'openid profile email roles api'
-};
+let appSettingsConfig = {};
 
-// Try to read from root appsettings.json
+// Try to read from root appsettings.json first
 if (fs.existsSync(rootAppSettingsPath)) {
   try {
     const rootAppSettings = JSON.parse(fs.readFileSync(rootAppSettingsPath, 'utf8'));
     
+    // Log environment variable status
+    console.log('📋 Environment Variables Status:');
+    const envUrl = process.env.SDMS_AuthenticationWebApp_url;
+    const envB2CUrl = process.env.SDMS_B2CWebApp_url;
+    const envClientId = process.env.SDMS_AuthenticationWebApp_clientid;
+    
+    console.log(`  SDMS_AuthenticationWebApp_url: ${envUrl ? '✅ Environment Variable' : '⚠️  Fallback to appsettings.json'}`);
+    console.log(`  SDMS_B2CWebApp_url: ${envB2CUrl ? '✅ Environment Variable' : '⚠️  Fallback to appsettings.json'}`);
+    console.log(`  SDMS_AuthenticationWebApp_clientid: ${envClientId ? '✅ Environment Variable' : '⚠️  Fallback to appsettings.json'}`);
+    console.log('');
+    
     // Use values from environment variables if provided (Vercel deployment), otherwise use appsettings.json values
-    appSettingsConfig.SDMS_B2CWebApp_url = process.env.SDMS_B2CWebApp_url || rootAppSettings.SDMS_B2CWebApp_url || appSettingsConfig.SDMS_B2CWebApp_url;
-    appSettingsConfig.SDMS_AuthenticationWebApp_url = process.env.SDMS_AuthenticationWebApp_url || rootAppSettings.SDMS_AuthenticationWebApp_url || appSettingsConfig.SDMS_AuthenticationWebApp_url;
-    appSettingsConfig.SDMS_AuthenticationWebApp_clientid = process.env.SDMS_AuthenticationWebApp_clientid || rootAppSettings.SDMS_AuthenticationWebApp_clientid || appSettingsConfig.SDMS_AuthenticationWebApp_clientid;
-    appSettingsConfig.SDMS_AuthenticationWebApp_redirectUri = process.env.SDMS_AuthenticationWebApp_redirectUri || rootAppSettings.SDMS_AuthenticationWebApp_redirectUri || appSettingsConfig.SDMS_AuthenticationWebApp_redirectUri;
-    appSettingsConfig.SDMS_AuthenticationWebApp_scope = process.env.SDMS_AuthenticationWebApp_scope || rootAppSettings.SDMS_AuthenticationWebApp_scope || appSettingsConfig.SDMS_AuthenticationWebApp_scope;
+    appSettingsConfig.SDMS_B2CWebApp_url = process.env.SDMS_B2CWebApp_url || rootAppSettings.SDMS_B2CWebApp_url;
+    appSettingsConfig.SDMS_AuthenticationWebApp_url = process.env.SDMS_AuthenticationWebApp_url || rootAppSettings.SDMS_AuthenticationWebApp_url;
+    appSettingsConfig.SDMS_AuthenticationWebApp_clientid = process.env.SDMS_AuthenticationWebApp_clientid || rootAppSettings.SDMS_AuthenticationWebApp_clientid;
+    appSettingsConfig.SDMS_AuthenticationWebApp_redirectUri = process.env.SDMS_AuthenticationWebApp_redirectUri || rootAppSettings.SDMS_AuthenticationWebApp_redirectUri;
+    appSettingsConfig.SDMS_AuthenticationWebApp_scope = process.env.SDMS_AuthenticationWebApp_scope || rootAppSettings.SDMS_AuthenticationWebApp_scope;
+    
+    // Warn if using localhost in production-like environment
+    if (appSettingsConfig.SDMS_AuthenticationWebApp_url && appSettingsConfig.SDMS_AuthenticationWebApp_url.includes('localhost')) {
+      const isVercel = !!process.env.VERCEL;
+      const isCI = !!process.env.CI;
+      if (isVercel || (isCI && !process.env.NODE_ENV)) {
+        console.warn('⚠️  WARNING: Using localhost URL in build!');
+        console.warn('   URL:', appSettingsConfig.SDMS_AuthenticationWebApp_url);
+        console.warn('   This should not happen in production.');
+        console.warn('   Ensure SDMS_AuthenticationWebApp_url environment variable is set in Vercel.');
+      }
+    }
     
     console.log('Loaded appsettings from root appsettings.json (with environment variable overrides)');
   } catch (error) {
-    console.warn('Could not read root appsettings.json, using environment variables or defaults:', error);
-    // Use environment variables or defaults
-    appSettingsConfig.SDMS_B2CWebApp_url = process.env.SDMS_B2CWebApp_url || appSettingsConfig.SDMS_B2CWebApp_url;
-    appSettingsConfig.SDMS_AuthenticationWebApp_url = process.env.SDMS_AuthenticationWebApp_url || appSettingsConfig.SDMS_AuthenticationWebApp_url;
-    appSettingsConfig.SDMS_AuthenticationWebApp_clientid = process.env.SDMS_AuthenticationWebApp_clientid || appSettingsConfig.SDMS_AuthenticationWebApp_clientid;
-    appSettingsConfig.SDMS_AuthenticationWebApp_redirectUri = process.env.SDMS_AuthenticationWebApp_redirectUri || appSettingsConfig.SDMS_AuthenticationWebApp_redirectUri;
-    appSettingsConfig.SDMS_AuthenticationWebApp_scope = process.env.SDMS_AuthenticationWebApp_scope || appSettingsConfig.SDMS_AuthenticationWebApp_scope;
+    console.warn('Could not read root appsettings.json, using environment variables only:', error);
+    // Use environment variables only
+    appSettingsConfig.SDMS_B2CWebApp_url = process.env.SDMS_B2CWebApp_url;
+    appSettingsConfig.SDMS_AuthenticationWebApp_url = process.env.SDMS_AuthenticationWebApp_url;
+    appSettingsConfig.SDMS_AuthenticationWebApp_clientid = process.env.SDMS_AuthenticationWebApp_clientid;
+    appSettingsConfig.SDMS_AuthenticationWebApp_redirectUri = process.env.SDMS_AuthenticationWebApp_redirectUri;
+    appSettingsConfig.SDMS_AuthenticationWebApp_scope = process.env.SDMS_AuthenticationWebApp_scope;
   }
 } else {
-  // Use environment variables or defaults
-  console.warn('Root appsettings.json not found, using environment variables or hardcoded defaults');
-  appSettingsConfig.SDMS_B2CWebApp_url = process.env.SDMS_B2CWebApp_url || appSettingsConfig.SDMS_B2CWebApp_url;
-  appSettingsConfig.SDMS_AuthenticationWebApp_url = process.env.SDMS_AuthenticationWebApp_url || appSettingsConfig.SDMS_AuthenticationWebApp_url;
-  appSettingsConfig.SDMS_AuthenticationWebApp_clientid = process.env.SDMS_AuthenticationWebApp_clientid || appSettingsConfig.SDMS_AuthenticationWebApp_clientid;
-  appSettingsConfig.SDMS_AuthenticationWebApp_redirectUri = process.env.SDMS_AuthenticationWebApp_redirectUri || appSettingsConfig.SDMS_AuthenticationWebApp_redirectUri;
-  appSettingsConfig.SDMS_AuthenticationWebApp_scope = process.env.SDMS_AuthenticationWebApp_scope || appSettingsConfig.SDMS_AuthenticationWebApp_scope;
+  // Use environment variables only
+  console.warn('Root appsettings.json not found, using environment variables only');
+  appSettingsConfig.SDMS_B2CWebApp_url = process.env.SDMS_B2CWebApp_url;
+  appSettingsConfig.SDMS_AuthenticationWebApp_url = process.env.SDMS_AuthenticationWebApp_url;
+  appSettingsConfig.SDMS_AuthenticationWebApp_clientid = process.env.SDMS_AuthenticationWebApp_clientid;
+  appSettingsConfig.SDMS_AuthenticationWebApp_redirectUri = process.env.SDMS_AuthenticationWebApp_redirectUri;
+  appSettingsConfig.SDMS_AuthenticationWebApp_scope = process.env.SDMS_AuthenticationWebApp_scope;
+}
+
+// Validate required configuration
+// Note: redirectUri is optional - will be generated from B2CWebApp_url in code if not set
+const missing = [];
+if (!appSettingsConfig.SDMS_B2CWebApp_url) missing.push('SDMS_B2CWebApp_url');
+if (!appSettingsConfig.SDMS_AuthenticationWebApp_url) missing.push('SDMS_AuthenticationWebApp_url');
+if (!appSettingsConfig.SDMS_AuthenticationWebApp_clientid) missing.push('SDMS_AuthenticationWebApp_clientid');
+// redirectUri is optional - generated from B2CWebApp_url in AppSettings if not provided
+if (!appSettingsConfig.SDMS_AuthenticationWebApp_scope) missing.push('SDMS_AuthenticationWebApp_scope');
+
+if (missing.length > 0) {
+  console.error('❌ ERROR: Missing required configuration!');
+  console.error('   Missing:', missing.join(', '));
+  console.error('   Ensure appsettings.json exists with these values or set environment variables (SDMS_*).');
+  console.error('   BREAKING CHANGE: No hardcoded defaults. Configuration is required.');
+  process.exit(1);
 }
 
 // Create appsettings.json in src/assets so it gets copied to dist

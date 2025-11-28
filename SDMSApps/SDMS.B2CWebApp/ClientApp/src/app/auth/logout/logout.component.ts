@@ -23,13 +23,20 @@ export class LogoutComponent implements OnInit {
 
   async ngOnInit() {
     const action = this.activatedRoute.snapshot.url[0];
-    switch (action.path) {
+    switch (action?.path) {
       case LogoutActions.Logout:
-        if (!!window.history.state.local) {
+        // Check if logout was initiated from within the page (via routerLink with state)
+        // Also allow if user is authenticated (safety check)
+        const isLocalLogout = !!window.history.state?.local;
+        const isAuthenticated = await this.authorizeService.isAuthenticated().pipe(take(1)).toPromise();
+        
+        if (isLocalLogout || isAuthenticated) {
           await this.logout(this.getReturnUrl());
         } else {
           // This prevents regular links to <app>/authentication/logout from triggering a logout
           this.message.next('The logout was not initiated from within the page.');
+          // Still navigate to landing page
+          await this.navigateToReturnUrl(this.getReturnUrl());
         }
 
         break;
@@ -53,18 +60,24 @@ export class LogoutComponent implements OnInit {
       const result = await this.authorizeService.signOut(state);
       switch (result.status) {
         case AuthenticationResultStatus.Redirect:
+          // Logout will redirect to auth server, which will then redirect back
+          // No need to navigate manually - the redirect is handled by OAuth service
           break;
         case AuthenticationResultStatus.Success:
+          // If logout succeeded without redirect, navigate to return URL
           await this.navigateToReturnUrl(returnUrl);
           break;
         case AuthenticationResultStatus.Fail:
-          this.message.next(result.message);
+          this.message.next(result.message || 'Logout failed');
+          // Even on failure, try to navigate to landing page
+          await this.navigateToReturnUrl(returnUrl);
           break;
         default:
           throw new Error('Invalid authentication result status.');
       }
     } else {
-      this.message.next('You successfully logged out!');
+      // User is not authenticated, just navigate to landing page
+      await this.navigateToReturnUrl(returnUrl);
     }
   }
 

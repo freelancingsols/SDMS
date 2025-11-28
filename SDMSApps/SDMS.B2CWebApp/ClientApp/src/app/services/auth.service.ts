@@ -1,20 +1,10 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { Router } from '@angular/router';
 import { OAuthService } from 'angular-oauth2-oidc';
 import { BehaviorSubject, firstValueFrom } from 'rxjs';
 import { AppSettings } from '../config/app-settings';
 import { environment } from '../../environments/environment';
-
-export interface UserInfo {
-  userId: string;
-  email: string;
-  displayName?: string;
-  externalProvider?: string;
-  profilePictureUrl?: string;
-  lastLoginDate?: string;
-  roles?: string[];
-}
+import { UserInfo, AuthenticationProvider } from '../interfaces/auth.interface';
 
 @Injectable({
   providedIn: 'root'
@@ -26,8 +16,7 @@ export class AuthService {
 
   constructor(
     private oauthService: OAuthService,
-    private http: HttpClient,
-    private router: Router
+    private http: HttpClient
   ) {
     this.configureOAuth();
     this.loadUserProfile();
@@ -38,8 +27,14 @@ export class AuthService {
     // Silent refresh requires a refresh token, which is obtained from authorization code or password grant
     const enableSilentRefresh = true; // Set to false to disable silent refresh
 
+    // Normalize issuer URL - ensure it ends with a slash to match discovery document
+    let issuerUrl = AppSettings.SDMS_AuthenticationWebApp_url;
+    if (!issuerUrl.endsWith('/')) {
+      issuerUrl = issuerUrl + '/';
+    }
+
     this.oauthService.configure({
-      issuer: AppSettings.SDMS_AuthenticationWebApp_url,
+      issuer: issuerUrl,
       redirectUri: AppSettings.SDMS_AuthenticationWebApp_redirectUri,
       clientId: AppSettings.SDMS_AuthenticationWebApp_clientid,
       responseType: 'code',
@@ -65,14 +60,28 @@ export class AuthService {
       this.oauthService.setupAutomaticSilentRefresh();
     }
 
-    this.oauthService.loadDiscoveryDocumentAndTryLogin().then(() => {
-      if (this.oauthService.hasValidAccessToken()) {
-        this.loadUserProfile();
-      }
-    });
+    // CRITICAL: Check if there's a code in the URL before auto-processing
+    // If there's a code, only load discovery document (don't auto-process)
+    // The code will be processed by completeSignIn() to prevent duplicate exchanges
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasCode = urlParams.has('code');
+    
+    if (hasCode) {
+      console.log('Authorization code detected in URL - loading discovery document only (no auto-login)');
+      this.oauthService.loadDiscoveryDocument().then(() => {
+        // Don't auto-process - let completeSignIn() handle it
+      });
+    } else {
+      // No code in URL - safe to use loadDiscoveryDocumentAndTryLogin for silent refresh
+      this.oauthService.loadDiscoveryDocumentAndTryLogin().then(() => {
+        if (this.oauthService.hasValidAccessToken()) {
+          this.loadUserProfile();
+        }
+      });
+    }
   }
 
-  async loginWithExternalProvider(_provider: 'auth0' | 'google'): Promise<void> {
+  async loginWithExternalProvider(_provider: AuthenticationProvider): Promise<void> {
     // Initiate OAuth flow with PKCE
     this.oauthService.initCodeFlow();
   }
@@ -300,9 +309,102 @@ export class AuthService {
   }
 
   async logout(): Promise<void> {
-    this.oauthService.logOut();
+    // IMPORTANT: Get the ID token BEFORE clearing tokens (needed for logout request)
+    const idToken = this.oauthService.getIdToken();
+    
+    // Set logout flag to prevent auto-login
+    sessionStorage.setItem('_logout_flag', 'true');
+    
+    // Clear user info first
     this.userInfoSubject.next(null);
-    this.router.navigate(['/login']);
+    
+    // Get the post-logout redirect URI from AppSettings (same pattern as redirectUri)
+    let postLogoutRedirectUri = AppSettings.SDMS_AuthenticationWebApp_postLogoutRedirectUri;
+    
+    // Normalize postLogoutRedirectUri: remove trailing slash for root URIs
+    // This ensures it matches the database format (OpenIddict does exact matching)
+    // AppSettings.getter should already normalize it, but do it here as a safety check
+    if (postLogoutRedirectUri && postLogoutRedirectUri.endsWith('/')) {
+      try {
+        const url = new URL(postLogoutRedirectUri);
+        // If the path is just "/", remove the trailing slash
+        if (url.pathname === '/') {
+          postLogoutRedirectUri = postLogoutRedirectUri.slice(0, -1);
+        }
+      } catch {
+        // If URL parsing fails, just remove trailing slash
+        postLogoutRedirectUri = postLogoutRedirectUri.endsWith('/') 
+          ? postLogoutRedirectUri.slice(0, -1) 
+          : postLogoutRedirectUri;
+      }
+    }
+    
+    // Get the auth server URL from configuration
+    const authServerUrl = AppSettings.SDMS_AuthenticationWebApp_url;
+    const logoutUrl = authServerUrl.endsWith('/') 
+      ? `${authServerUrl}connect/logout`
+      : `${authServerUrl}/connect/logout`;
+    
+    // Build the logout URL with proper parameters
+    const logoutParams = new URLSearchParams();
+    logoutParams.set('post_logout_redirect_uri', postLogoutRedirectUri);
+    if (idToken) {
+      logoutParams.set('id_token_hint', idToken);
+    }
+    
+    const fullLogoutUrl = `${logoutUrl}?${logoutParams.toString()}`;
+    
+    // Clear local tokens first
+    this.clearLocalTokens();
+    
+    // Redirect to auth server logout endpoint
+    // The auth server will invalidate the session and redirect back
+    window.location.href = fullLogoutUrl;
+  }
+  
+  private clearLocalTokens(): void {
+    // Clear all OAuth tokens from storage
+    const oauthKeys = [
+      'access_token',
+      'access_token_stored_at',
+      'access_token_expires_at',
+      'id_token',
+      'id_token_stored_at',
+      'id_token_expires_at',
+      'id_token_claims_obj',
+      'refresh_token',
+      'nonce',
+      'PKCE_verifier',
+      'session_state',
+      'granted_scopes',
+      'expires_at',
+      'token_type',
+      'scope'
+    ];
+    
+    oauthKeys.forEach(key => {
+      try {
+        sessionStorage.removeItem(key);
+        localStorage.removeItem(key);
+      } catch (e) {
+        // Ignore errors
+      }
+    });
+    
+    // Clear any OAuth-prefixed keys
+    for (let i = sessionStorage.length - 1; i >= 0; i--) {
+      const key = sessionStorage.key(i);
+      if (key && (key.startsWith('oauth_') || key.startsWith('oidc_'))) {
+        sessionStorage.removeItem(key);
+      }
+    }
+    
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key && (key.startsWith('oauth_') || key.startsWith('oidc_'))) {
+        localStorage.removeItem(key);
+      }
+    }
   }
 
   getUserInfo(): UserInfo | null {

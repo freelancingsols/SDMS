@@ -12,6 +12,8 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { OAuthModule } from 'angular-oauth2-oidc';
 import { AuthModule } from './auth/auth.module';
 import { AuthorizeInterceptor } from './auth/authorize.interceptor';
+import { HttpErrorInterceptor } from './services/http-error.interceptor';
+import { HttpLoadingInterceptor } from './services/http-loading.interceptor';
 import { LandingComponent } from './components/landing/landing.component';
 // TestComponent moved to FrameworkModule to be accessible by CenterCanvasComponent
 // import { TestComponent } from './components/test/test.component';
@@ -33,11 +35,16 @@ import { MatTableModule } from '@angular/material/table';
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { MatSortModule } from '@angular/material/sort';
 import { MatSidenavModule } from '@angular/material/sidenav';
+import { MatExpansionModule } from '@angular/material/expansion';
+import { ErrorHandler } from '@angular/core';
+import { GlobalErrorHandler } from './services/error-handler.service';
+import { AboutComponent } from './components/about/about.component';
 
 @NgModule({
   declarations: [
     AppComponent,
-    LandingComponent
+    LandingComponent,
+    AboutComponent
     // TestComponent moved to FrameworkModule
   ],
   imports: [
@@ -72,10 +79,14 @@ import { MatSidenavModule } from '@angular/material/sidenav';
     MatTableModule,
     MatPaginatorModule,
     MatSortModule,
-    MatSidenavModule
+    MatSidenavModule,
+    MatExpansionModule
   ],
   providers: [
-    { provide: HTTP_INTERCEPTORS, useClass: AuthorizeInterceptor, multi: true }
+    { provide: HTTP_INTERCEPTORS, useClass: AuthorizeInterceptor, multi: true },
+    { provide: HTTP_INTERCEPTORS, useClass: HttpErrorInterceptor, multi: true },
+    { provide: HTTP_INTERCEPTORS, useClass: HttpLoadingInterceptor, multi: true },
+    { provide: ErrorHandler, useClass: GlobalErrorHandler }
   ],
   bootstrap: [AppComponent]
 })

@@ -43,6 +43,7 @@ export class AuthorizeService {
   private popUpDisabled = true; // By default pop ups are disabled because they don't work properly on Edge.
   private userSubject: BehaviorSubject<IUser | null> = new BehaviorSubject<IUser | null>(null);
   private oauthConfigured = false;
+  private isProcessingCodeExchange = false; // Flag to prevent duplicate code exchanges
 
   constructor(
     private oauthService: OAuthService,
@@ -98,28 +99,43 @@ export class AuthorizeService {
 
     // Load discovery document and try to login automatically if token exists
     // Use a retry mechanism for better reliability
-    this.loadDiscoveryDocumentWithRetry(3).then(() => {
-      if (this.oauthService.hasValidAccessToken()) {
-        this.loadUserProfile().catch(err => console.error('Error loading user profile on init:', err));
-      }
-    }).catch(err => {
-      // Log the full error for debugging
-      console.warn('Error loading discovery document after retries:', err);
-      if (err instanceof Error) {
-        console.warn('Error details:', err.message, err.stack);
-      } else if (err && typeof err === 'object') {
-        // Handle OAuthErrorEvent
-        console.warn('OAuth error details:', JSON.stringify(err, null, 2));
-        if ('reason' in err) {
-          console.warn('Error reason:', (err as any).reason);
+    // CRITICAL: Check if there's a code in URL first - if so, don't auto-process
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasCode = urlParams.has('code');
+    
+    if (!hasCode) {
+      // Only auto-process if there's no code in the URL
+      // If there's a code, it will be processed by completeSignIn() to prevent duplicate exchanges
+      this.loadDiscoveryDocumentWithRetry(3).then(() => {
+        if (this.oauthService.hasValidAccessToken()) {
+          this.loadUserProfile().catch(err => console.error('Error loading user profile on init:', err));
         }
-        if ('params' in err) {
-          console.warn('Error params:', (err as any).params);
+      }).catch(err => {
+        // Log the full error for debugging
+        console.warn('Error loading discovery document after retries:', err);
+        if (err instanceof Error) {
+          console.warn('Error details:', err.message, err.stack);
+        } else if (err && typeof err === 'object') {
+          // Handle OAuthErrorEvent
+          console.warn('OAuth error details:', JSON.stringify(err, null, 2));
+          if ('reason' in err) {
+            console.warn('Error reason:', (err as any).reason);
+          }
+          if ('params' in err) {
+            console.warn('Error params:', (err as any).params);
+          }
         }
-      }
-      // Try to manually set discovery document URL as fallback
-      this.tryManualDiscoveryDocument();
-    });
+        // Try to manually set discovery document URL as fallback
+        this.tryManualDiscoveryDocument();
+      });
+    } else {
+      // There's a code in the URL - just load discovery document without auto-processing
+      // The code will be processed by completeSignIn() to prevent duplicate exchanges
+      console.log('Authorization code detected in URL during OAuth configuration - skipping auto-login');
+      this.oauthService.loadDiscoveryDocument().catch(err => {
+        console.warn('Error loading discovery document:', err);
+      });
+    }
 
     // Listen for token events
     this.oauthService.events.subscribe(event => {
@@ -169,22 +185,58 @@ export class AuthorizeService {
   //    redirect flow.
   public async signIn(state: any): Promise<IAuthenticationResult> {
     try {
-      // Try silent refresh first (equivalent to signinSilent)
-      if (this.oauthService.hasValidAccessToken()) {
-        await this.loadUserProfile();
-        return this.success(state);
+      // Check if we have a logout flag in sessionStorage (set during logout)
+      // If logout flag exists, skip auto-login and force redirect to auth server
+      const logoutFlag = sessionStorage.getItem('_logout_flag');
+      if (logoutFlag) {
+        // Clear the logout flag
+        sessionStorage.removeItem('_logout_flag');
+        // Force redirect to auth server login page
+        await this.oauthService.loadDiscoveryDocument();
+        this.oauthService.initCodeFlow();
+        return this.redirect();
       }
 
-      // Try silent refresh
-      try {
-        await this.oauthService.loadDiscoveryDocument();
-        await this.oauthService.tryLoginCodeFlow();
-        if (this.oauthService.hasValidAccessToken()) {
+      // Try silent refresh first (equivalent to signinSilent)
+      // But only if we have a valid token AND it's not expired
+      if (this.oauthService.hasValidAccessToken()) {
+        // Double-check that tokens actually exist in storage
+        const hasStoredToken = !!sessionStorage.getItem('access_token');
+        if (hasStoredToken) {
           await this.loadUserProfile();
           return this.success(state);
+        } else {
+          // Token is marked as valid but not in storage - clear it and redirect
+          await this.oauthService.loadDiscoveryDocument();
+          this.oauthService.initCodeFlow();
+          return this.redirect();
         }
-      } catch (silentError) {
-        console.log('Silent authentication error: ', silentError);
+      }
+
+      // Try silent refresh - but ONLY if there's no authorization code in the URL
+      // If there's a code, it should be processed by completeSignIn(), not here
+      const urlParams = new URLSearchParams(window.location.search);
+      const hasCode = urlParams.has('code');
+      
+      if (!hasCode) {
+        // Only try silent refresh if there's no code in the URL
+        // This prevents duplicate code exchanges
+        try {
+          await this.oauthService.loadDiscoveryDocument();
+          await this.oauthService.tryLoginCodeFlow();
+          if (this.oauthService.hasValidAccessToken()) {
+            // Verify token is actually in storage
+            const hasStoredToken = !!sessionStorage.getItem('access_token');
+            if (hasStoredToken) {
+              await this.loadUserProfile();
+              return this.success(state);
+            }
+          }
+        } catch (silentError) {
+          console.log('Silent authentication error: ', silentError);
+        }
+      } else {
+        console.log('Authorization code detected in URL - skipping silent refresh to prevent duplicate exchange');
       }
 
       // User might not be authenticated, fallback to popup authentication
@@ -248,13 +300,16 @@ export class AuthorizeService {
       
       // Check if we already have tokens (prevent multiple processing of the same callback)
       // This should be checked AFTER determining if it's a logout callback
+      // IMPORTANT: If we have valid tokens, skip code exchange entirely to prevent "code already redeemed" errors
       const existingAccessToken = sessionStorage.getItem('access_token');
       const existingIdToken = sessionStorage.getItem('id_token');
       if (existingAccessToken || existingIdToken) {
         console.log('Tokens already exist in storage, checking if valid');
         if (this.oauthService.hasValidAccessToken()) {
-          console.log('Already have valid access token, loading user profile');
+          console.log('Already have valid access token, skipping code exchange to prevent duplicate redemption');
           await this.loadUserProfile();
+          // Clear any OAuth callback parameters from URL after successful login
+          window.history.replaceState({}, document.title, '/');
           return this.success(null);
         } else {
           // Tokens exist but OAuth service says invalid - try to load user profile anyway
@@ -262,11 +317,19 @@ export class AuthorizeService {
           try {
             await this.loadUserProfile();
             if (this.userSubject.value) {
+              // Successfully loaded user with existing tokens - skip code exchange
+              window.history.replaceState({}, document.title, '/');
               return this.success(null);
             }
           } catch (error) {
             console.log('Failed to load user profile with existing tokens:', error);
             // Continue to process callback if profile load fails
+            // But only if we have a code to exchange - otherwise return success
+            if (!hasCode || !hasState) {
+              console.log('No code/state in URL and tokens exist but invalid - treating as already processed');
+              window.history.replaceState({}, document.title, '/');
+              return this.success(null);
+            }
           }
         }
       }
@@ -304,9 +367,39 @@ export class AuthorizeService {
         return this.error('Failed to load discovery document. Please check the authentication server is running.');
       }
       
+      // CRITICAL: Double-check if we have valid tokens before attempting code exchange
+      // This prevents "code already redeemed" errors from duplicate processing
+      if (this.oauthService.hasValidAccessToken()) {
+        const storedToken = sessionStorage.getItem('access_token');
+        if (storedToken) {
+          console.log('Valid access token already exists - skipping code exchange to prevent duplicate redemption');
+          await this.loadUserProfile();
+          window.history.replaceState({}, document.title, '/');
+          return this.success(null);
+        }
+      }
+      
+      // CRITICAL: Check if we're already processing a code exchange to prevent duplicate calls
+      if (this.isProcessingCodeExchange) {
+        console.log('Code exchange already in progress - skipping duplicate call');
+        // Wait a bit and check if tokens were stored
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const accessToken = sessionStorage.getItem('access_token');
+        if (accessToken) {
+          await this.loadUserProfile();
+          window.history.replaceState({}, document.title, '/');
+          return this.success(null);
+        }
+        return this.error('Code exchange already in progress');
+      }
+      
       // Try to process the callback URL
       // IMPORTANT: Restore the original URL temporarily because tryLoginCodeFlow() reads from window.location.href
       // The OAuth library may have already modified the URL to remove code/state
+      
+      // Set flag to prevent duplicate processing BEFORE the try block
+      this.isProcessingCodeExchange = true;
+      
       try {
         console.log('Processing OAuth callback, original URL:', originalUrl);
         console.log('Processing OAuth callback, current URL:', window.location.href);
@@ -401,24 +494,33 @@ export class AuthorizeService {
                           (errorObj?.message && errorObj.message.includes('400')) ||
                           (errorObj?.error && errorObj.error.includes('400'));
         
-        if (is400Error) {
-          console.log('Received 400 error - checking if tokens already exist (code may have been used)');
+        // Check for specific "code already redeemed" error
+        const isCodeAlreadyRedeemed = errorObj?.error?.error === 'invalid_grant' ||
+                                     (errorObj?.error?.error_description && 
+                                      errorObj.error.error_description.includes('already been redeemed'));
+        
+        if (is400Error || isCodeAlreadyRedeemed) {
+          console.log('Received 400/invalid_grant error - checking if tokens already exist (code may have been used)');
           const existingAccessToken = sessionStorage.getItem('access_token');
           const existingIdToken = sessionStorage.getItem('id_token');
           
           if (existingAccessToken || existingIdToken) {
-            console.log('Tokens found in storage despite 400 error - attempting to use existing tokens');
+            console.log('Tokens found in storage despite 400 error - code was likely already redeemed. Using existing tokens.');
             try {
               await this.loadUserProfile();
               if (this.userSubject.value) {
                 // Successfully loaded user with existing tokens
-                window.history.replaceState({}, document.title, '/test');
+                // Clear URL and return success - the code was already used but we have valid tokens
+                window.history.replaceState({}, document.title, '/');
                 return this.success(null);
               }
             } catch (profileError) {
               console.log('Failed to load user profile with existing tokens:', profileError);
               // Continue to return error
             }
+          } else {
+            // 400 error but no tokens - this is a real error
+            console.error('Received 400 error but no tokens exist - this indicates a real authentication failure');
           }
         }
         
@@ -459,8 +561,13 @@ export class AuthorizeService {
         }
         
         return this.error(errorMessage);
+      } finally {
+        // Always clear the flag when done processing (success or error)
+        this.isProcessingCodeExchange = false;
       }
     } catch (error) {
+      // Ensure flag is cleared even if outer catch is triggered
+      this.isProcessingCodeExchange = false;
       console.error('There was an error signing in: ', error);
       
       // Extract meaningful error message from various error formats
@@ -509,8 +616,15 @@ export class AuthorizeService {
 
   public async signOut(state: any): Promise<IAuthenticationResult> {
     try {
+      // IMPORTANT: Get the ID token BEFORE clearing tokens (needed for logout request)
+      const idToken = this.oauthService.getIdToken();
+      
       // Clear user subject first to prevent getUserFromStorage from repopulating
       this.userSubject.next(null);
+      
+      // Set a logout flag to prevent auto-login on next signIn attempt
+      // This flag will be checked in signIn() to force redirect to auth server
+      sessionStorage.setItem('_logout_flag', 'true');
       
       // Manually clear OAuth-related storage FIRST before calling logOut()
       // This prevents logOut() from redirecting with tokens still in storage
@@ -519,6 +633,7 @@ export class AuthorizeService {
         const oauthKeys = [
           'access_token',
           'access_token_stored_at',
+          'access_token_expires_at',
           'id_token',
           'id_token_stored_at',
           'id_token_expires_at',
@@ -528,7 +643,9 @@ export class AuthorizeService {
           'PKCE_verifier',
           'session_state',
           'granted_scopes',
-          'expires_at'
+          'expires_at',
+          'token_type',
+          'scope'
         ];
         
         // Clear all OAuth keys from sessionStorage - do this synchronously
@@ -596,12 +713,86 @@ export class AuthorizeService {
         console.log('Error clearing storage:', storageError);
       }
       
-      // Don't call oauthService.logOut() - it will redirect to /connect/logout
-      // which then redirects back to /auth-callback, causing a login loop
-      // We've already cleared all storage, so logOut() is not needed
-      // The OAuth service's internal state will be cleared when tokens are removed from storage
-      
-      return this.success(state);
+      // Build logout URL manually to ensure proper absolute URI
+      // This will redirect to /connect/logout on the auth server, which will:
+      // 1. Invalidate the session on the auth server
+      // 2. Clear the authentication cookie
+      // 3. Redirect back to the post_logout_redirect_uri (landing page)
+      try {
+        // Get the post-logout redirect URI from AppSettings (same pattern as redirectUri)
+        // If returnUrl is provided and is absolute, use it; otherwise use configured postLogoutRedirectUri
+        let postLogoutRedirectUri: string;
+        if (state?.returnUrl) {
+          const returnUrl = state.returnUrl;
+          // Check if it's already an absolute URI
+          if (returnUrl.startsWith('http://') || returnUrl.startsWith('https://')) {
+            postLogoutRedirectUri = returnUrl;
+          } else {
+            // It's a relative path, use configured postLogoutRedirectUri as base
+            const baseUri = AppSettings.SDMS_AuthenticationWebApp_postLogoutRedirectUri;
+            // Remove trailing slash from base if present, then append returnUrl
+            const baseWithoutSlash = baseUri.endsWith('/') ? baseUri.slice(0, -1) : baseUri;
+            postLogoutRedirectUri = baseWithoutSlash + (returnUrl.startsWith('/') ? returnUrl : '/' + returnUrl);
+          }
+        } else {
+          // Use configured postLogoutRedirectUri (defaults to landing page)
+          postLogoutRedirectUri = AppSettings.SDMS_AuthenticationWebApp_postLogoutRedirectUri;
+        }
+        
+        // Normalize postLogoutRedirectUri: remove trailing slash for root URIs
+        // This ensures it matches the database format (OpenIddict does exact matching)
+        if (postLogoutRedirectUri && postLogoutRedirectUri.endsWith('/')) {
+          try {
+            const url = new URL(postLogoutRedirectUri);
+            // If the path is just "/", remove the trailing slash
+            if (url.pathname === '/') {
+              postLogoutRedirectUri = postLogoutRedirectUri.slice(0, -1);
+            }
+          } catch {
+            // If URL parsing fails, just remove trailing slash
+            postLogoutRedirectUri = postLogoutRedirectUri.slice(0, -1);
+          }
+        }
+        
+        // Get the auth server URL from configuration
+        const authServerUrl = AppSettings.SDMS_AuthenticationWebApp_url;
+        const logoutUrl = authServerUrl.endsWith('/') 
+          ? `${authServerUrl}connect/logout`
+          : `${authServerUrl}/connect/logout`;
+        
+        // Build the logout URL with proper parameters
+        const logoutParams = new URLSearchParams();
+        logoutParams.set('post_logout_redirect_uri', postLogoutRedirectUri);
+        if (idToken) {
+          logoutParams.set('id_token_hint', idToken);
+        }
+        
+        const fullLogoutUrl = `${logoutUrl}?${logoutParams.toString()}`;
+        
+        console.log('Logout URL:', fullLogoutUrl); // Debug log
+        
+        // Clear tokens one more time before redirect to ensure they're gone
+        // Do this synchronously to ensure it completes before redirect
+        const finalClearKeys = ['access_token', 'id_token', 'refresh_token', 'nonce', 'PKCE_verifier', 'session_state', 'granted_scopes', 'expires_at'];
+        finalClearKeys.forEach(key => {
+          try {
+            sessionStorage.removeItem(key);
+            localStorage.removeItem(key);
+          } catch (e) {}
+        });
+        
+        // Redirect to auth server logout endpoint
+        // The auth server will invalidate the session and redirect back
+        window.location.href = fullLogoutUrl;
+        
+        // Return redirect status since we're redirecting
+        return this.redirect();
+      } catch (logoutError) {
+        console.error('Error building logout URL:', logoutError);
+        // If logout fails, still clear local state and return success
+        // User will need to manually navigate
+        return this.success(state);
+      }
     } catch (popupSignOutError) {
       console.log('Signout error: ', popupSignOutError);
       try {
@@ -629,11 +820,68 @@ export class AuthorizeService {
 
   public async completeSignOut(_url: string): Promise<IAuthenticationResult> {
     try {
-      this.oauthService.logOut();
+      // Clear user subject first
       this.userSubject.next(null);
+      
+      // Aggressively clear all OAuth tokens from storage
+      const oauthKeys = [
+        'access_token',
+        'access_token_stored_at',
+        'access_token_expires_at',
+        'id_token',
+        'id_token_stored_at',
+        'id_token_expires_at',
+        'id_token_claims_obj',
+        'refresh_token',
+        'nonce',
+        'PKCE_verifier',
+        'session_state',
+        'granted_scopes',
+        'expires_at',
+        'token_type',
+        'scope'
+      ];
+      
+      // Clear from sessionStorage
+      oauthKeys.forEach(key => {
+        try {
+          sessionStorage.removeItem(key);
+        } catch (e) {}
+      });
+      
+      // Clear from localStorage
+      oauthKeys.forEach(key => {
+        try {
+          localStorage.removeItem(key);
+        } catch (e) {}
+      });
+      
+      // Clear any OAuth-prefixed keys
+      for (let i = sessionStorage.length - 1; i >= 0; i--) {
+        const key = sessionStorage.key(i);
+        if (key && (key.startsWith('oauth_') || key.startsWith('oidc_'))) {
+          sessionStorage.removeItem(key);
+        }
+      }
+      
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('oauth_') || key.startsWith('oidc_'))) {
+          localStorage.removeItem(key);
+        }
+      }
+      
+      // Call OAuth service logout
+      this.oauthService.logOut();
+      
+      // Ensure logout flag is set
+      sessionStorage.setItem('_logout_flag', 'true');
+      
       return this.success(null);
     } catch (error) {
       console.log(`There was an error trying to log out '${error}'.`);
+      // Even on error, clear user
+      this.userSubject.next(null);
       return this.error(String(error));
     }
   }
@@ -716,7 +964,21 @@ export class AuthorizeService {
     let lastError: any = null;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        await this.oauthService.loadDiscoveryDocumentAndTryLogin();
+        // CRITICAL: Use loadDiscoveryDocument() instead of loadDiscoveryDocumentAndTryLogin()
+        // to prevent automatic code exchange. We handle code exchange manually in completeSignIn()
+        // Check if there's a code in the URL - if so, don't auto-process it
+        const urlParams = new URLSearchParams(window.location.search);
+        const hasCode = urlParams.has('code');
+        
+        if (hasCode) {
+          // If there's a code, only load discovery document (don't auto-process)
+          // The code will be processed by completeSignIn() to prevent duplicate exchanges
+          console.log('Authorization code detected in URL - loading discovery document only (no auto-login)');
+          await this.oauthService.loadDiscoveryDocument();
+        } else {
+          // No code in URL - safe to use loadDiscoveryDocumentAndTryLogin for silent refresh
+          await this.oauthService.loadDiscoveryDocumentAndTryLogin();
+        }
         return; // Success
       } catch (error) {
         lastError = error;

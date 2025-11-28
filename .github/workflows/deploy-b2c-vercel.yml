@@ -330,6 +330,74 @@ jobs:
           
           echo ""
           echo "✅ Environment variable sync complete"
+          
+          # Verify critical variables are set in Vercel
+          echo ""
+          echo "=== Verifying Critical Variables in Vercel ==="
+          sleep 3  # Give Vercel API time to propagate
+          
+          verify_var() {
+            local var_name=$1
+            local environment=$2
+            
+            # Check if variable exists in Vercel
+            if vercel env ls "$environment" --token="$VERCEL_TOKEN" 2>/dev/null | grep -q "^$var_name"; then
+              # Pull env file to check value
+              rm -f .env.local .env
+              vercel env pull --token="$VERCEL_TOKEN" --environment="$environment" --yes >/dev/null 2>&1
+              
+              if [ -f ".env.local" ]; then
+                local var_value=$(grep "^$var_name=" .env.local 2>/dev/null | cut -d'=' -f2- | tr -d '"' || echo "")
+                rm -f .env.local .env
+                
+                if [ -n "$var_value" ] && [[ ! "$var_value" =~ localhost ]]; then
+                  echo "  ✅ $var_name: Set correctly in $environment"
+                  return 0
+                elif [ -n "$var_value" ] && [[ "$var_value" =~ localhost ]]; then
+                  echo "  ❌ $var_name: Set to localhost in $environment (WRONG!)"
+                  echo "     Value: $var_value"
+                  return 1
+                else
+                  echo "  ⚠️  $var_name: Found in $environment but value may be empty"
+                  return 1
+                fi
+              else
+                echo "  ⚠️  $var_name: Found in $environment but could not verify value"
+                return 0  # Assume it's OK if we can't verify
+              fi
+            else
+              echo "  ❌ $var_name: NOT FOUND in $environment"
+              return 1
+            fi
+          }
+          
+          critical_vars=("SDMS_AuthenticationWebApp_url" "SDMS_B2CWebApp_url" "SDMS_AuthenticationWebApp_clientid")
+          has_error=0
+          
+          for env in "production" "preview"; do
+            echo ""
+            echo "Checking $env environment:"
+            for var in "${critical_vars[@]}"; do
+              if ! verify_var "$var" "$env"; then
+                has_error=1
+              fi
+            done
+          done
+          
+          if [ $has_error -eq 1 ]; then
+            echo ""
+            echo "❌ ERROR: Critical variables are missing or set to localhost in Vercel!"
+            echo ""
+            echo "Solution:"
+            echo "1. Check the sync step above for any errors"
+            echo "2. Manually verify variables in Vercel Dashboard → Project → Settings → Environment Variables"
+            echo "3. Ensure variables are set for 'Production' and 'Preview' environments"
+            echo "4. Variables should NOT contain 'localhost'"
+            exit 1
+          else
+            echo ""
+            echo "✅ All critical variables verified in Vercel"
+          fi
 
       - name: Install dependencies
         working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
@@ -339,6 +407,14 @@ jobs:
 
       - name: Build Angular app
         working-directory: SDMSApps/SDMS.B2CWebApp/ClientApp
+        env:
+          # CRITICAL: These are used during build to generate appsettings.json
+          # They are synced to Vercel above, and also passed here for local build validation
+          SDMS_B2CWebApp_url: ${{ vars.SDMS_B2CWebApp_url }}
+          SDMS_AuthenticationWebApp_url: ${{ vars.SDMS_AuthenticationWebApp_url }}
+          SDMS_AuthenticationWebApp_clientid: ${{ vars.SDMS_AuthenticationWebApp_clientid }}
+          SDMS_AuthenticationWebApp_redirectUri: ${{ vars.SDMS_AuthenticationWebApp_redirectUri }}
+          SDMS_AuthenticationWebApp_scope: ${{ vars.SDMS_AuthenticationWebApp_scope }}
         run: npm run build
 
       - name: Verify Vercel project settings before deployment

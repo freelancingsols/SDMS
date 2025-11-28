@@ -1,1 +1,58 @@
-<p>{{ message | async }}</p>
+<div class="login-container">
+  <mat-card class="login-card">
+    <mat-card-header>
+      <mat-card-title>
+        <mat-icon>lock</mat-icon>
+        Authentication
+      </mat-card-title>
+      <mat-card-subtitle>Please wait while we process your authentication</mat-card-subtitle>
+    </mat-card-header>
+    
+    <mat-card-content>
+      <!-- Loading State -->
+      <div *ngIf="!message.value" class="loading-section">
+        <mat-spinner diameter="50"></mat-spinner>
+        <p class="loading-text">Processing authentication...</p>
+        <p class="loading-subtext">This may take a few moments</p>
+      </div>
+
+      <!-- Error/Success Message -->
+      <div *ngIf="message.value" class="message-section">
+        <mat-icon [class.error-icon]="message.value.includes('error') || message.value.includes('Error') || message.value.includes('failed') || message.value.includes('Failed')" 
+                  [class.success-icon]="!message.value.includes('error') && !message.value.includes('Error') && !message.value.includes('failed') && !message.value.includes('Failed')">
+          {{ (message.value.includes('error') || message.value.includes('Error') || message.value.includes('failed') || message.value.includes('Failed')) ? 'error' : 'check_circle' }}
+        </mat-icon>
+        <p [class.error-message]="message.value.includes('error') || message.value.includes('Error') || message.value.includes('failed') || message.value.includes('Failed')"
+           [class.success-message]="!message.value.includes('error') && !message.value.includes('Error') && !message.value.includes('failed') && !message.value.includes('Failed')">
+          {{ message.value }}
+        </p>
+      </div>
+
+      <!-- Help Section -->
+      <div class="help-section">
+        <mat-expansion-panel>
+          <mat-expansion-panel-header>
+            <mat-panel-title>
+              <mat-icon>help</mat-icon>
+              Need Help?
+            </mat-panel-title>
+          </mat-expansion-panel-header>
+          <div class="help-content">
+            <p><strong>If you're experiencing issues:</strong></p>
+            <ul>
+              <li>Make sure you're using a supported browser</li>
+              <li>Check that JavaScript is enabled</li>
+              <li>Clear your browser cache and cookies</li>
+              <li>Try logging in again</li>
+              <li>Contact support if the problem persists</li>
+            </ul>
+            <button mat-stroked-button color="primary" (click)="retryLogin()" style="margin-top: 12px;">
+              <mat-icon>refresh</mat-icon>
+              Retry Login
+            </button>
+          </div>
+        </mat-expansion-panel>
+      </div>
+    </mat-card-content>
+  </mat-card>
+</div>

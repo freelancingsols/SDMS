@@ -8,7 +8,10 @@ using SDMS.AuthenticationWebApp.Models;
 
 namespace SDMS.AuthenticationWebApp.Services;
 
-public class TokenService
+/// <summary>
+/// Service for token operations
+/// </summary>
+public class TokenService : ITokenService
 {
     private readonly IOpenIddictApplicationManager _applicationManager;
     private readonly IOpenIddictAuthorizationManager _authorizationManager;

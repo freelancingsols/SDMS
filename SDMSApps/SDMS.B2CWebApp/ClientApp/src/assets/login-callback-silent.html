@@ -5,12 +5,15 @@
 <body>
     <script src="oidc-client.min.js"></script>
     <script>
+        // BREAKING CHANGE: No hardcoded URLs. Uses dynamic URL based on current origin.
+        // This ensures the silent callback works regardless of deployment environment.
+        var silentRedirectUri = window.location.origin + '/assets/login-callback-silent.html';
 
         new UserManager().signinSilentCallback(
             {
                 automaticSilentRenew: true,
                 includeIdTokenInSilentRenew: true,
-                silent_redirect_uri: 'http://localhost:5000/assets/login-callback-silent.html'
+                silent_redirect_uri: silentRedirectUri
             }
         ).then(() => {
             setTimeout(function () {

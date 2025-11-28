@@ -23,6 +23,7 @@ import { MatListModule } from '@angular/material/list';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 
 // Import sidebar components
 import { LeftSidebarComponent } from './left-sidebar/left-sidebar.component';
@@ -59,7 +60,8 @@ import { TestComponent } from '../components/test/test.component';
     MatListModule,
     MatSidenavModule,
     MatTooltipModule,
-    MatCheckboxModule
+    MatCheckboxModule,
+    MatProgressSpinnerModule
   ],
   exports: [
     FrameworkBodyComponent,

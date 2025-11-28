@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
@@ -73,7 +74,7 @@ public class TokenController : ControllerBase
     private readonly IOpenIddictScopeManager _scopeManager;
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly UserManager<ApplicationUser> _userManager;
-    private readonly TokenService _tokenService;
+    private readonly ITokenService _tokenService;
 
     public TokenController(
         IOpenIddictApplicationManager applicationManager,
@@ -81,7 +82,7 @@ public class TokenController : ControllerBase
         IOpenIddictScopeManager scopeManager,
         SignInManager<ApplicationUser> signInManager,
         UserManager<ApplicationUser> userManager,
-        TokenService tokenService)
+        ITokenService tokenService)
     {
         _applicationManager = applicationManager;
         _authorizationManager = authorizationManager;
@@ -91,11 +92,33 @@ public class TokenController : ControllerBase
         _tokenService = tokenService;
     }
 
+    [HttpOptions("~/connect/token")]
     [HttpPost("~/connect/token")]
     [IgnoreAntiforgeryToken]
     [Produces("application/json")]
     public async Task<IActionResult> Exchange()
     {
+        // Handle CORS preflight requests
+        if (Request.Method == "OPTIONS")
+        {
+            return Ok();
+        }
+        
+        return await ExchangeInternal();
+    }
+    
+    private async Task<IActionResult> ExchangeInternal()
+    {
+        // Get logger for error logging only
+        var logger = HttpContext.RequestServices.GetRequiredService<ILogger<TokenController>>();
+        
+        // Declare variables outside try block for use in catch
+        string? grantType = null;
+        string? clientId = null;
+        
+        try
+        {
+        
         // Get the OpenIddict request from HttpContext.Items
         // With passthrough enabled, OpenIddict stores the request in HttpContext.Items
         object? requestObj = null;
@@ -144,13 +167,57 @@ public class TokenController : ControllerBase
         
         if (requestObj == null)
         {
-            throw new InvalidOperationException("The OpenID Connect request cannot be retrieved.");
+            // Log all form and query parameters for debugging
+            var formParams = new Dictionary<string, string>();
+            foreach (var key in Request.Form.Keys)
+            {
+                formParams[key] = Request.Form[key].ToString();
+            }
+            var queryParams = new Dictionary<string, string>();
+            foreach (var key in Request.Query.Keys)
+            {
+                queryParams[key] = Request.Query[key].ToString();
+            }
+            
+            logger.LogError("The OpenID Connect request cannot be retrieved. Form params: {FormParams}, Query params: {QueryParams}",
+                System.Text.Json.JsonSerializer.Serialize(formParams), 
+                System.Text.Json.JsonSerializer.Serialize(queryParams));
+            
+            // Check if OpenIddict set an error in the response
+            if (Response.Headers.ContainsKey("WWW-Authenticate"))
+            {
+                // OpenIddict may have already set an error response
+                return StatusCode(400, new
+                {
+                    error = Errors.InvalidRequest,
+                    error_description = "The OpenID Connect request cannot be retrieved. Check server logs for details."
+                });
+            }
+            
+            return BadRequest(new
+            {
+                error = Errors.InvalidRequest,
+                error_description = "The OpenID Connect request cannot be retrieved. This may indicate the request format is invalid or OpenIddict middleware did not process it."
+            });
         }
         
         // Use reflection to access the OpenIddict request methods
         // The request type is internal, so we access it via reflection
         var request = requestObj;
 
+        // Log request details for debugging
+        if (request is OpenIddictTokenRequestWrapper wrapperLog)
+        {
+            grantType = wrapperLog.GrantType;
+            clientId = wrapperLog.ClientId;
+        }
+        else
+        {
+            var grantTypeProp = request.GetType().GetProperty("GrantType", BindingFlags.Public | BindingFlags.Instance);
+            var clientIdProp = request.GetType().GetProperty("ClientId", BindingFlags.Public | BindingFlags.Instance);
+            grantType = grantTypeProp?.GetValue(request)?.ToString();
+            clientId = clientIdProp?.GetValue(request)?.ToString();
+        }
         // Check grant type - handle both wrapper and real OpenIddict request
         bool isAuthCode, isRefreshToken;
         if (request is OpenIddictTokenRequestWrapper wrapper)
@@ -168,13 +235,57 @@ public class TokenController : ControllerBase
         
         if (isAuthCode || isRefreshToken)
         {
+            // Get code/refresh_token for logging
+            string? codeOrToken = null;
+            if (request is OpenIddictTokenRequestWrapper wrapperCode)
+            {
+                codeOrToken = isAuthCode ? wrapperCode.Code : wrapperCode.RefreshToken;
+            }
+            else
+            {
+                var codeProp = request.GetType().GetProperty("Code", BindingFlags.Public | BindingFlags.Instance);
+                var refreshTokenProp = request.GetType().GetProperty("RefreshToken", BindingFlags.Public | BindingFlags.Instance);
+                codeOrToken = isAuthCode 
+                    ? codeProp?.GetValue(request)?.ToString() 
+                    : refreshTokenProp?.GetValue(request)?.ToString();
+            }
+            
             // Retrieve the claims principal stored in the authorization code/refresh token.
             var result = await HttpContext.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+            
+            if (result?.Principal == null)
+            {
+                logger.LogWarning("Authentication failed: No principal found for {GrantType}. Code/Token: {CodeToken}", 
+                    isAuthCode ? "authorization_code" : "refresh_token",
+                    codeOrToken?.Substring(0, Math.Min(20, codeOrToken?.Length ?? 0)) ?? "null");
+                return Forbid(
+                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+                    properties: new AuthenticationProperties(new Dictionary<string, string?>
+                    {
+                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = Errors.InvalidGrant,
+                        [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "The authorization code or refresh token is invalid or has already been used."
+                    }));
+            }
 
             // Retrieve the user profile corresponding to the authorization code/refresh token.
-            var user = await _userManager.FindByIdAsync(result.Principal?.GetClaim(Claims.Subject) ?? string.Empty);
+            var subject = result.Principal.GetClaim(Claims.Subject);
+            
+            if (string.IsNullOrEmpty(subject))
+            {
+                logger.LogWarning("Token exchange failed: No subject claim found in principal");
+                return Forbid(
+                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+                    properties: new AuthenticationProperties(new Dictionary<string, string?>
+                    {
+                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = Errors.InvalidGrant,
+                        [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "The token does not contain a valid subject claim."
+                    }));
+            }
+            
+            var user = await _userManager.FindByIdAsync(subject);
             if (user == null)
             {
+                logger.LogWarning("Token exchange failed: User not found for subject: {Subject}", subject);
                 return Forbid(
                     authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
                     properties: new AuthenticationProperties(new Dictionary<string, string?>
@@ -391,7 +502,22 @@ public class TokenController : ControllerBase
             return SignIn(new ClaimsPrincipal(identity), OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         }
 
-        throw new InvalidOperationException("The specified grant type is not supported.");
+        logger.LogWarning("Unsupported grant type: {GrantType}", grantType ?? "unknown");
+        return BadRequest(new
+        {
+            error = Errors.UnsupportedGrantType,
+            error_description = $"The specified grant type '{grantType}' is not supported."
+        });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "An unexpected error occurred during token exchange for GrantType={GrantType}, ClientId={ClientId}", grantType, clientId);
+            return StatusCode(500, new
+            {
+                error = Errors.ServerError,
+                error_description = "An unexpected internal server error occurred during token exchange."
+            });
+        }
     }
 
     private async Task<IEnumerable<string>> GetResourcesAsync(IEnumerable<string> scopes)

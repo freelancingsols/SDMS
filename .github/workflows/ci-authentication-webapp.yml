@@ -8,29 +8,37 @@ concurrency:
 on:
   push:
     branches:
-      # Release branch: Always run CI on any push (including merged PRs from stage)
+      # Release and Stage branches: Always run CI on any push (no paths filter)
       # This ensures CI runs when PRs are merged, even if paths filter might miss merge commits
       - release
       - Release
-      # Other branches: Run CI on pushes (paths filter removed to ensure release branch works)
-      - main
-      - master
-      - develop
       - stage
       - Stage
       - staging
       - Staging
+      # Other branches: Run CI only when relevant files change (paths filter to save Actions minutes)
+      - main
+      - master
+      - develop
     paths:
-      # Only run CI when relevant files change (saves Actions minutes)
+      # Only trigger CI when files in Authentication WebApp change
+      # Note: Path filter applies to all branches, but release/stage branches will still trigger
+      # due to job-level conditions that check branch name
       - 'SDMSApps/SDMS.AuthenticationWebApp/**'
       - '.github/workflows/ci-authentication-webapp.yml'
-    # Paths filter prevents unnecessary CI runs on unrelated changes
   pull_request:
     branches:
       - '**'  # Run on PRs targeting any branch
     paths:
+      # Only trigger CI when files in Authentication WebApp change
       - 'SDMSApps/SDMS.AuthenticationWebApp/**'
       - '.github/workflows/ci-authentication-webapp.yml'
+      # Explicitly exclude other apps to prevent false triggers
+      - '!SDMSApps/SDMS.B2CWebApp/**'
+      - '!SDMSApps/SDMS.B2BWebApp/**'
+      - '!SDMSApps/SDMS.BackOfficeWebApp/**'
+      - '!SDMSApps/SDMS.VendorWebApp/**'
+      - '!SDMSApps/SDMS.DeliveryPartnerWebApp/**'
     types:
       - opened
       - synchronize
@@ -39,8 +47,33 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Check if this workflow should run based on changed files
+  check-changes:
+    name: Check Changed Files
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      should-run: ${{ steps.filter.outputs.auth-app }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for PR comparison
+      
+      - name: Check if relevant files changed
+        id: filter
+        uses: dorny/paths-filter@v2
+        with:
+          filters: |
+            auth-app:
+              - 'SDMSApps/SDMS.AuthenticationWebApp/**'
+              - '.github/workflows/ci-authentication-webapp.yml'
+          list-files: shell
+
   lint:
     name: Lint Code
+    needs: check-changes
+    if: needs.check-changes.outputs.should-run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10  # Prevent long-running jobs
     steps:
@@ -66,6 +99,8 @@ jobs:
 
   build-dev:
     name: Build (Development)
+    needs: check-changes
+    if: needs.check-changes.outputs.should-run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20  # Prevent long-running jobs
     steps:
@@ -95,6 +130,12 @@ jobs:
 
       - name: Build Angular app (Development) - Build Node code first
         working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
+        env:
+          # BREAKING CHANGE: No hardcoded defaults. Environment variables must be set.
+          # These should be set as GitHub secrets or repository variables.
+          # For local development, appsettings.json will be used as fallback.
+          SDMS_AuthenticationWebApp_url: ${{ secrets.SDMS_AuthenticationWebApp_url || vars.SDMS_AuthenticationWebApp_url }}
+          SDMS_AuthenticationWebApp_clientid: ${{ secrets.SDMS_AuthenticationWebApp_clientid || vars.SDMS_AuthenticationWebApp_clientid }}
         run: npm run build
 
       - name: Restore .NET dependencies
@@ -118,6 +159,8 @@ jobs:
 
   build-prod:
     name: Build (Production)
+    needs: check-changes
+    if: needs.check-changes.outputs.should-run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20  # Prevent long-running jobs
     steps:
@@ -147,7 +190,13 @@ jobs:
 
       - name: Build Angular app (Production) - Build Node code first
         working-directory: SDMSApps/SDMS.AuthenticationWebApp/ClientApp
-        run: npm run build -- --configuration production
+        env:
+          # BREAKING CHANGE: No hardcoded defaults. Environment variables must be set.
+          # These should be set as GitHub secrets or repository variables.
+          # For local development, appsettings.json will be used as fallback.
+          SDMS_AuthenticationWebApp_url: ${{ secrets.SDMS_AuthenticationWebApp_url || vars.SDMS_AuthenticationWebApp_url }}
+          SDMS_AuthenticationWebApp_clientid: ${{ secrets.SDMS_AuthenticationWebApp_clientid || vars.SDMS_AuthenticationWebApp_clientid }}
+        run: npm run build:prod
 
       - name: Restore .NET dependencies
         working-directory: SDMSApps/SDMS.AuthenticationWebApp
@@ -174,6 +223,8 @@ jobs:
 
   test:
     name: Run Unit Tests
+    needs: check-changes
+    if: needs.check-changes.outputs.should-run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20  # Prevent long-running jobs
     steps:
@@ -260,8 +311,8 @@ jobs:
   ci-complete:
     name: CI Complete
     runs-on: ubuntu-latest
-    needs: [lint, build-dev, build-prod, test]
-    if: always()
+    needs: [check-changes, lint, build-dev, build-prod, test]
+    if: always() && needs.check-changes.outputs.should-run == 'true'
     timeout-minutes: 2  # Very quick status check
     steps:
       - name: Check CI status

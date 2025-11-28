@@ -30,28 +30,21 @@
   "git.template": ".gitmessage",
   // Enable commit message formatting
   "git.format.enabled": true,
-
   // ============================================
   // C# Extension Settings (OmniSharp / C# Dev Kit)
   // ============================================
   // Configure C# extension to provide IntelliSense WITHOUT automatic builds
-  
   // OmniSharp Settings (if using C# extension)
   "omnisharp.enableRoslynAnalyzers": true,
   "omnisharp.enableEditorConfigSupport": true,
-  "omnisharp.enableImportCompletion": true,
   "omnisharp.enableMsBuildLoadProjectsOnDemand": true,
-  "omnisharp.organizeImportsOnFormat": true,
   "omnisharp.useModernNet": true,
-  
   // Disable automatic builds - only use design-time builds for IntelliSense
   "omnisharp.enableAutoRestore": false,
   "omnisharp.enableAsyncCompletion": true,
-  
   // C# Dev Kit Settings (if using C# Dev Kit extension)
   "dotnet.buildOnSave": false,
   "dotnet.server.useOmnisharp": false,
-  
   // Hide build artifacts from file explorer (they still exist but won't clutter the UI)
   "files.exclude": {
     "**/bin": true,
@@ -64,12 +57,13 @@
     "**/.vs": true,
     "**/node_modules": true
   },
-  
   // File watcher exclusions to reduce file system load
   "files.watcherExclude": {
     "**/bin/**": true,
     "**/obj/**": true,
     "**/.vs/**": true,
     "**/node_modules/**": true
-  }
+  },
+  "dotnet.completion.showCompletionItemsFromUnimportedNamespaces": true,
+  "dotnet.formatting.organizeImportsOnFormat": true
 }

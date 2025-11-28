@@ -38,9 +38,9 @@ jobs:
           echo "║        Create PR from Stage to Release                     ║"
           echo "╚════════════════════════════════════════════════════════════╝"
           echo ""
-          echo "📋 Purpose: Create/update PR from stage → release"
+          echo "📋 Purpose: Create/update PR from stage → Release"
           echo "🌿 Source Branch: stage"
-          echo "🎯 Target Branch: release"
+          echo "🎯 Target Branch: Release"
           if [ "${{ github.event_name }}" == "push" ]; then
             echo "🔍 Triggered by: Auto (push to stage branch)"
             echo "🌿 Branch: ${{ github.ref_name }}"
@@ -58,13 +58,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Need full history for branch comparison
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GH_TOKEN_PR }}
 
       - name: Check CI workflow status (no waiting)
         id: check-ci
         if: github.event_name == 'push'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_PR }}
         run: |
           echo "🔍 Checking CI workflow status for stage branch (no waiting)..."
           echo ""
@@ -140,13 +140,13 @@ jobs:
       - name: Check if PR already exists (early exit)
         id: check-pr-early
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_PR }}
         run: |
-          echo "🔍 Checking if PR from stage to release already exists..."
+          echo "🔍 Checking if PR from stage to Release already exists..."
           
           # Quick check - no checkout needed, saves Actions minutes
           PR_DATA=$(gh pr list \
-            --base release \
+            --base Release \
             --head stage \
             --state open \
             --json number,title,url,state \
@@ -185,7 +185,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1  # Minimal fetch to save time
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GH_TOKEN_PR }}
 
       - name: Quick check if branches are in sync (early exit)
         id: check-sync
@@ -194,7 +194,7 @@ jobs:
           echo "🔍 Quick check: Are stage and release branches in sync?"
           
           # Fetch only the refs we need (minimal network)
-          git fetch origin stage:refs/remotes/origin/stage release:refs/remotes/origin/release --depth=1 2>&1 || true
+          git fetch origin stage:refs/remotes/origin/stage Release:refs/remotes/origin/Release --depth=1 2>&1 || true
           
           # Check if branches exist
           if ! git show-ref --verify --quiet refs/remotes/origin/stage; then
@@ -202,14 +202,14 @@ jobs:
             exit 1
           fi
           
-          if ! git show-ref --verify --quiet refs/remotes/origin/release; then
-            echo "⚠️  release branch does not exist - will be created later"
+          if ! git show-ref --verify --quiet refs/remotes/origin/Release; then
+            echo "⚠️  Release branch does not exist - will be created later"
             echo "branches_synced=false" >> $GITHUB_OUTPUT
             exit 0
           fi
           
           # Quick commit count check (minimal computation)
-          COMMIT_COUNT=$(git rev-list --count origin/release..origin/stage 2>/dev/null || echo "0")
+          COMMIT_COUNT=$(git rev-list --count origin/Release..origin/stage 2>/dev/null || echo "0")
           
           if [ "$COMMIT_COUNT" == "0" ]; then
             echo "✅ Branches are in sync - no commits to merge"
@@ -240,7 +240,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Full history only if we need to create/update PR
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GH_TOKEN_PR }}
 
       - name: Setup Git
         if: steps.check-pr-early.outputs.pr_exists != 'true' || steps.check-sync.outputs.branches_synced != 'true'
@@ -268,36 +268,36 @@ jobs:
           git checkout stage || git checkout -b stage origin/stage
           git pull origin stage 2>&1 || true
           
-          # Check if release branch exists, create it if it doesn't
-          if ! git show-ref --verify --quiet refs/remotes/origin/release; then
-            echo "⚠️  release branch does not exist"
-            echo "📝 Creating release branch from stage..."
+          # Check if Release branch exists, create it if it doesn't
+          if ! git show-ref --verify --quiet refs/remotes/origin/Release; then
+            echo "⚠️  Release branch does not exist"
+            echo "📝 Creating Release branch from stage..."
             
-            # Create release branch from current stage
-            git checkout -b release
+            # Create Release branch from current stage
+            git checkout -b Release
             
-            # Push release branch to origin
-            git push -u origin release
+            # Push Release branch to origin
+            git push -u origin Release
             
-            echo "✅ Created release branch from stage"
+            echo "✅ Created Release branch from stage"
           else
-            echo "✅ release branch exists: $(git rev-parse origin/release)"
-            git fetch origin release:release 2>&1 || true
+            echo "✅ Release branch exists: $(git rev-parse origin/Release)"
+            git fetch origin Release:Release 2>&1 || true
           fi
           
           echo ""
           echo "📋 Branch Status:"
           echo "  - stage: $(git rev-parse origin/stage 2>/dev/null || echo 'N/A')"
-          echo "  - release: $(git rev-parse origin/release 2>/dev/null || echo 'N/A')"
+          echo "  - Release: $(git rev-parse origin/Release 2>/dev/null || echo 'N/A')"
           echo ""
 
       - name: Check if PR already exists (detailed)
         id: check-pr
         if: steps.check-pr-early.outputs.pr_exists != 'true' || steps.check-sync.outputs.branches_synced != 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_PR }}
         run: |
-          echo "🔍 Checking if PR from stage to release already exists..."
+          echo "🔍 Checking if PR from stage to Release already exists..."
           
           # Use cached result from early check if available
           if [ "${{ steps.check-pr-early.outputs.pr_exists }}" == "true" ]; then
@@ -306,9 +306,9 @@ jobs:
             echo "pr_number=${{ steps.check-pr-early.outputs.pr_number }}" >> $GITHUB_OUTPUT
             echo "pr_url=${{ steps.check-pr-early.outputs.pr_url }}" >> $GITHUB_OUTPUT
           else
-            # Get existing PRs from stage to release
+            # Get existing PRs from stage to Release
             PR_DATA=$(gh pr list \
-              --base release \
+              --base Release \
               --head stage \
               --state open \
               --json number,title,url,state \
@@ -345,7 +345,7 @@ jobs:
           github.event_name == 'workflow_dispatch' &&
           github.event.inputs.check_ci == 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_PR }}
         run: |
           echo "🔍 Checking if both CI workflows passed on stage branch..."
           
@@ -486,7 +486,7 @@ jobs:
         id: create-pr
         if: steps.check-pr-early.outputs.pr_exists != 'true' || steps.check-sync.outputs.branches_synced != 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_PR }}
         run: |
           PR_EXISTS="${{ steps.check-pr.outputs.pr_exists }}"
           # Get CI ready status from check-ci-status, push-ci-status, or skip-ci-status step
@@ -509,7 +509,7 @@ jobs:
           
           # Check if there are commits to merge
           echo "📝 Checking if there are commits to merge..."
-          COMMIT_COUNT=$(git rev-list --count origin/release..origin/stage 2>/dev/null || echo "0")
+          COMMIT_COUNT=$(git rev-list --count origin/Release..origin/stage 2>/dev/null || echo "0")
           
           if [ "$COMMIT_COUNT" == "0" ]; then
             echo ""
@@ -517,8 +517,8 @@ jobs:
             echo "║              No Action Needed - Branches Synced           ║"
             echo "╚════════════════════════════════════════════════════════════╝"
             echo ""
-            echo "✅ Stage and release branches are already in sync"
-            echo "   No commits to merge from stage → release"
+            echo "✅ Stage and Release branches are already in sync"
+            echo "   No commits to merge from stage → Release"
             echo ""
             if [ "$PR_EXISTS" == "true" ]; then
               PR_NUMBER="${{ steps.check-pr.outputs.pr_number }}"
@@ -542,7 +542,7 @@ jobs:
           
           # Get commit messages for PR body
           echo "📝 Gathering commit information..."
-          COMMITS=$(git log origin/release..origin/stage --oneline --no-decorate | head -20)
+          COMMITS=$(git log origin/Release..origin/stage --oneline --no-decorate | head -20)
           
           # Build CI status section
           CI_STATUS_SECTION=""
@@ -608,14 +608,14 @@ jobs:
           fi
           
           # Base title (will be updated with PR number after creation)
-          BASE_TITLE="Release: Merge stage to release"
+          BASE_TITLE="Release: Merge stage to Release"
           PR_BODY="## PR from Stage to Release
           
-          This PR was created to merge changes from \`stage\` branch to \`release\` branch.
+          This PR was created to merge changes from \`stage\` branch to \`Release\` branch.
 
           ### 📋 Summary
           - **Source Branch:** \`stage\`
-          - **Target Branch:** \`release\`
+          - **Target Branch:** \`Release\`
           - **Commits:** $COMMIT_COUNT commit(s)
           
           $CI_STATUS_SECTION
@@ -640,7 +640,7 @@ jobs:
             echo "📋 Updating existing PR #$PR_NUMBER..."
             
             # Update PR title with number
-            UPDATED_TITLE="Release PR #$PR_NUMBER: Merge stage to release"
+            UPDATED_TITLE="Release PR #$PR_NUMBER: Merge stage to Release"
             
             # Update PR body and title with latest information
             gh pr edit "$PR_NUMBER" \
@@ -653,11 +653,11 @@ jobs:
             echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
             echo "pr_title=$UPDATED_TITLE" >> $GITHUB_OUTPUT
           else
-            echo "🆕 Creating new PR from stage to release..."
+            echo "🆕 Creating new PR from stage to Release..."
             
             # Create the PR with base title (labels are optional)
             PR_RESULT=$(gh pr create \
-              --base release \
+              --base Release \
               --head stage \
               --title "$BASE_TITLE" \
               --body "$PR_BODY" \
@@ -666,7 +666,7 @@ jobs:
               if echo "$PR_RESULT" | grep -qi "label"; then
                 echo "⚠️  Label assignment failed, retrying without labels..."
                 PR_RESULT=$(gh pr create \
-                  --base release \
+                  --base Release \
                   --head stage \
                   --title "$BASE_TITLE" \
                   --body "$PR_BODY" 2>&1) || {
@@ -694,7 +694,7 @@ jobs:
               echo "✅ PR created successfully! Updating title with PR number..."
               
               # Update PR title to include PR number
-              UPDATED_TITLE="Release PR #$PR_NUMBER: Merge stage to release"
+              UPDATED_TITLE="Release PR #$PR_NUMBER: Merge stage to Release"
               gh pr edit "$PR_NUMBER" --title "$UPDATED_TITLE" 2>&1 || {
                 echo "⚠️  Could not update PR title (PR was created with base title)"
                 UPDATED_TITLE="$BASE_TITLE"

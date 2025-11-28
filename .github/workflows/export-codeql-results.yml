@@ -1,0 +1,153 @@
+name: Export CodeQL Results
+
+on:
+  # Trigger when CodeQL workflow completes
+  workflow_run:
+    workflows: ["CodeQL"]
+    types:
+      - completed
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      format:
+        description: 'Export format'
+        required: true
+        default: 'json'
+        type: choice
+        options:
+          - json
+          - csv
+          - sarif
+          - all
+
+jobs:
+  export-results:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: read
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup GitHub CLI
+        run: |
+          gh --version || (echo "GitHub CLI not found, installing..." && \
+            type -p curl >/dev/null || (apt update && apt install curl -y) && \
+            curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg && \
+            chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg && \
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null && \
+            apt update && \
+            apt install gh -y)
+
+      - name: Export CodeQL alerts to JSON
+        if: github.event.inputs.format == 'json' || github.event.inputs.format == 'all' || github.event_name == 'workflow_run'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "📊 Exporting CodeQL alerts to JSON..."
+          gh api repos/${{ github.repository }}/code-scanning/alerts \
+            --jq '.' > codeql-alerts.json
+          
+          ALERT_COUNT=$(jq '. | length' codeql-alerts.json)
+          echo "✅ Exported $ALERT_COUNT alerts to codeql-alerts.json"
+
+      - name: Export CodeQL alerts to CSV
+        if: github.event.inputs.format == 'csv' || github.event.inputs.format == 'all' || github.event_name == 'workflow_run'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "📊 Exporting CodeQL alerts to CSV..."
+          echo "Rule ID,Severity,State,Path,Line,Message,Rule Description" > codeql-alerts.csv
+          gh api repos/${{ github.repository }}/code-scanning/alerts \
+            --jq '.[] | [
+              .rule.id,
+              .rule.severity,
+              .state,
+              .most_recent_instance.location.path // "N/A",
+              .most_recent_instance.location.start_line // "N/A",
+              (.message.text | gsub("\""; "\"\""")),
+              (.rule.description | gsub("\""; "\"\"""))
+            ] | @csv' >> codeql-alerts.csv
+          
+          echo "✅ Exported alerts to codeql-alerts.csv"
+
+      - name: Export CodeQL analyses
+        if: github.event.inputs.format == 'json' || github.event.inputs.format == 'all' || github.event_name == 'workflow_run'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "📊 Exporting CodeQL analyses..."
+          gh api repos/${{ github.repository }}/code-scanning/analyses \
+            --jq '.' > codeql-analyses.json
+          
+          ANALYSIS_COUNT=$(jq '. | length' codeql-analyses.json)
+          echo "✅ Exported $ANALYSIS_COUNT analyses to codeql-analyses.json"
+
+      - name: Generate summary report
+        if: github.event.inputs.format == 'all' || github.event_name == 'workflow_run'
+        run: |
+          echo "📋 Generating summary report..."
+          cat > codeql-summary.md << 'EOF'
+          # CodeQL Code Scanning Results Summary
+          
+          Generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          
+          ## Alerts Summary
+          EOF
+          
+          if [ -f codeql-alerts.json ]; then
+            TOTAL=$(jq '. | length' codeql-alerts.json)
+            OPEN=$(jq '[.[] | select(.state == "open")] | length' codeql-alerts.json)
+            FIXED=$(jq '[.[] | select(.state == "fixed")] | length' codeql-alerts.json)
+            DISMISSED=$(jq '[.[] | select(.state == "dismissed")] | length' codeql-alerts.json)
+            ERRORS=$(jq '[.[] | select(.rule.severity == "error")] | length' codeql-alerts.json)
+            WARNINGS=$(jq '[.[] | select(.rule.severity == "warning")] | length' codeql-alerts.json)
+            
+            cat >> codeql-summary.md << EOF
+          
+          - **Total Alerts**: $TOTAL
+          - **Open**: $OPEN
+          - **Fixed**: $FIXED
+          - **Dismissed**: $DISMISSED
+          - **Errors**: $ERRORS
+          - **Warnings**: $WARNINGS
+          
+          ## Top 10 Most Common Rules
+          
+          EOF
+          
+            jq -r '.[] | .rule.id' codeql-alerts.json | sort | uniq -c | sort -rn | head -10 | \
+              awk '{print "- " $2 ": " $1 " occurrences"}' >> codeql-summary.md
+          fi
+          
+          echo "✅ Summary report generated"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-results-${{ github.run_number }}
+          path: |
+            codeql-alerts.json
+            codeql-alerts.csv
+            codeql-analyses.json
+            codeql-summary.md
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Display summary
+        run: |
+          echo "## CodeQL Results Export Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f codeql-summary.md ]; then
+            cat codeql-summary.md >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ CodeQL results exported successfully" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Files generated:" >> $GITHUB_STEP_SUMMARY
+            echo "- codeql-alerts.json" >> $GITHUB_STEP_SUMMARY
+            echo "- codeql-alerts.csv" >> $GITHUB_STEP_SUMMARY
+            echo "- codeql-analyses.json" >> $GITHUB_STEP_SUMMARY
+          fi
+

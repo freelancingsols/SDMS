@@ -8,6 +8,11 @@
   justify-content: flex-start;
 }
 
+.footer-container.collapsed {
+  height: 0;
+  overflow: hidden;
+}
+
 .footer-content {
   padding: 24px 16px 16px;
   min-height: 120px;

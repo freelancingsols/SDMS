@@ -1,7 +1,8 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthorizeService } from '../../auth/authorize.service';
-import { AuthService, UserInfo } from '../../services/auth.service';
+import { AuthService } from '../../services/auth.service';
+import { UserInfo } from '../../interfaces/auth.interface';
 import { OAuthService } from 'angular-oauth2-oidc';
 import { NotificationService } from '../../services/notification.service';
 import { LoadingService } from '../../services/loading.service';

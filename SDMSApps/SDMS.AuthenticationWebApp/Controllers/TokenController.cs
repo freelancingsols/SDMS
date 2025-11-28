@@ -74,7 +74,7 @@ public class TokenController : ControllerBase
     private readonly IOpenIddictScopeManager _scopeManager;
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly UserManager<ApplicationUser> _userManager;
-    private readonly TokenService _tokenService;
+    private readonly ITokenService _tokenService;
 
     public TokenController(
         IOpenIddictApplicationManager applicationManager,
@@ -82,7 +82,7 @@ public class TokenController : ControllerBase
         IOpenIddictScopeManager scopeManager,
         SignInManager<ApplicationUser> signInManager,
         UserManager<ApplicationUser> userManager,
-        TokenService tokenService)
+        ITokenService tokenService)
     {
         _applicationManager = applicationManager;
         _authorizationManager = authorizationManager;

@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
+import { LoadingState } from '../interfaces/loading.interface';
 
 @Injectable({
   providedIn: 'root'
@@ -11,6 +12,19 @@ export class LoadingService {
   
   public readonly loading$: Observable<boolean> = this.loadingSubject.asObservable();
   public readonly loadingMessage$: Observable<string | null> = this.loadingMessageSubject.asObservable();
+  
+  /**
+   * Combined loading state observable
+   */
+  public readonly loadingState$: Observable<LoadingState> = new Observable(observer => {
+    const subscription = this.loadingSubject.subscribe(isLoading => {
+      observer.next({
+        isLoading,
+        message: this.loadingMessageSubject.value
+      });
+    });
+    return () => subscription.unsubscribe();
+  });
 
   /**
    * Show loading indicator

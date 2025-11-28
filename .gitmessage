@@ -1,0 +1,26 @@
+# <type>(<scope>): <subject>
+#
+# IMPORTANT: Keep commit message to ONE LINE only (max 72 characters)
+# Format: <type>(<scope>): <subject>
+#
+# Types:
+#   feat:     A new feature
+#   fix:      A bug fix
+#   docs:     Documentation only changes
+#   style:    Changes that do not affect the meaning of the code
+#   refactor: A code change that neither fixes a bug nor adds a feature
+#   perf:     A code change that improves performance
+#   test:     Adding missing tests or correcting existing tests
+#   chore:    Changes to the build process or auxiliary tools
+#   ci:       Changes to CI configuration files and scripts
+#   build:    Changes that affect the build system or dependencies
+#
+# Scope: Optional, what part of codebase (e.g., auth, api, ui, b2c, b2b, workflow)
+# Subject: Imperative mood, lowercase, no period, max 50 characters
+# 
+# ONE-LINE EXAMPLES (delete this template and write your one-liner):
+# feat(auth): add OAuth2 login support
+# fix(b2c): resolve logout redirect URI trailing slash issue
+# ci(workflow): add path filters to prevent unnecessary CI runs
+# docs: update commit message customization guide
+# refactor(auth): optimize logging configuration

@@ -1,13 +1,6 @@
 import { Injectable } from '@angular/core';
 import { MatSnackBar, MatSnackBarConfig, MatSnackBarRef, TextOnlySnackBar } from '@angular/material/snack-bar';
-
-export interface NotificationOptions {
-  duration?: number;
-  action?: string;
-  horizontalPosition?: 'start' | 'center' | 'end' | 'left' | 'right';
-  verticalPosition?: 'top' | 'bottom';
-  panelClass?: string | string[];
-}
+import { NotificationOptions } from '../interfaces/notification.interface';
 
 @Injectable({
   providedIn: 'root'

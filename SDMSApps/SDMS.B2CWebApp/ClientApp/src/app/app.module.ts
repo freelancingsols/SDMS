@@ -12,6 +12,8 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { OAuthModule } from 'angular-oauth2-oidc';
 import { AuthModule } from './auth/auth.module';
 import { AuthorizeInterceptor } from './auth/authorize.interceptor';
+import { HttpErrorInterceptor } from './services/http-error.interceptor';
+import { HttpLoadingInterceptor } from './services/http-loading.interceptor';
 import { LandingComponent } from './components/landing/landing.component';
 // TestComponent moved to FrameworkModule to be accessible by CenterCanvasComponent
 // import { TestComponent } from './components/test/test.component';
@@ -82,6 +84,8 @@ import { AboutComponent } from './components/about/about.component';
   ],
   providers: [
     { provide: HTTP_INTERCEPTORS, useClass: AuthorizeInterceptor, multi: true },
+    { provide: HTTP_INTERCEPTORS, useClass: HttpErrorInterceptor, multi: true },
+    { provide: HTTP_INTERCEPTORS, useClass: HttpLoadingInterceptor, multi: true },
     { provide: ErrorHandler, useClass: GlobalErrorHandler }
   ],
   bootstrap: [AppComponent]

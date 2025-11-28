@@ -1,0 +1,75 @@
+{
+  // GitHub Copilot Chat - Customize commit message generation (ONE-LINER ONLY)
+  "github.copilot.chat.commitMessagePrompt": "Generate a ONE-LINE commit message following Conventional Commits. Format: <type>(<scope>): <subject>. Types: feat, fix, docs, style, refactor, test, chore, perf, ci, build. Scope: auth, api, b2c, b2b, ui, workflow. Subject: imperative mood, lowercase, no period, max 50 chars. CRITICAL: Output ONLY the commit message text on a SINGLE line. NO bullet points, NO line breaks, NO paragraphs, NO body, NO footer. Just one line like: ci(workflow): refactor GitHub Actions for improved CI status handling",
+  // GitHub Copilot commit message generation instructions
+  "github.copilot.chat.commitMessageGeneration.instructions": [
+    {
+      "file": "doc/.copilot-commit-message-instructions.md"
+    }
+  ],
+  // Disable snippet suggestions in commit message editor
+  "editor.snippetSuggestions": "none",
+  "[git-commit]": {
+    "editor.snippetSuggestions": "none",
+    "editor.wordWrap": "off",
+    "editor.rulers": [
+      72
+    ]
+  },
+  // Git commit message validation
+  "git.inputValidation": true,
+  "git.inputValidationLength": 72,
+  "git.inputValidationSubjectLength": 50,
+  // Editor settings for commit messages
+  "editor.wordWrap": "on",
+  "editor.rulers": [
+    50,
+    72
+  ],
+  // Use Git commit template
+  "git.template": ".gitmessage",
+  // Enable commit message formatting
+  "git.format.enabled": true,
+
+  // ============================================
+  // C# Extension Settings (OmniSharp / C# Dev Kit)
+  // ============================================
+  // Configure C# extension to provide IntelliSense WITHOUT automatic builds
+  
+  // OmniSharp Settings (if using C# extension)
+  "omnisharp.enableRoslynAnalyzers": true,
+  "omnisharp.enableEditorConfigSupport": true,
+  "omnisharp.enableImportCompletion": true,
+  "omnisharp.enableMsBuildLoadProjectsOnDemand": true,
+  "omnisharp.organizeImportsOnFormat": true,
+  "omnisharp.useModernNet": true,
+  
+  // Disable automatic builds - only use design-time builds for IntelliSense
+  "omnisharp.enableAutoRestore": false,
+  "omnisharp.enableAsyncCompletion": true,
+  
+  // C# Dev Kit Settings (if using C# Dev Kit extension)
+  "dotnet.buildOnSave": false,
+  "dotnet.server.useOmnisharp": false,
+  
+  // Hide build artifacts from file explorer (they still exist but won't clutter the UI)
+  "files.exclude": {
+    "**/bin": true,
+    "**/obj": true,
+    "**/.vs": true
+  },
+  "search.exclude": {
+    "**/bin": true,
+    "**/obj": true,
+    "**/.vs": true,
+    "**/node_modules": true
+  },
+  
+  // File watcher exclusions to reduce file system load
+  "files.watcherExclude": {
+    "**/bin/**": true,
+    "**/obj/**": true,
+    "**/.vs/**": true,
+    "**/node_modules/**": true
+  }
+}

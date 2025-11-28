@@ -1,0 +1,45 @@
+{
+  "Conventional Commit (One-Liner)": {
+    "prefix": "commit",
+    "body": [
+      "${1|feat,fix,docs,style,refactor,test,chore,perf,ci,build|}(${2:scope}): ${3:subject}"
+    ],
+    "description": "Conventional Commit format (one-line only)",
+    "scope": "git-commit"
+  },
+  "Feature Commit": {
+    "prefix": "feat",
+    "body": [
+      "feat(${1|auth,api,b2c,b2b,ui,workflow|}): ${2:description}"
+    ],
+    "description": "New feature commit (one-line)"
+  },
+  "Bug Fix Commit": {
+    "prefix": "fix",
+    "body": [
+      "fix(${1|auth,api,b2c,b2b,ui,workflow|}): ${2:description}"
+    ],
+    "description": "Bug fix commit (one-line)"
+  },
+  "Documentation Commit": {
+    "prefix": "docs",
+    "body": [
+      "docs(${1:scope}): ${2:description}"
+    ],
+    "description": "Documentation commit (one-line)"
+  },
+  "Refactor Commit": {
+    "prefix": "refactor",
+    "body": [
+      "refactor(${1|auth,api,b2c,b2b,ui|}): ${2:description}"
+    ],
+    "description": "Code refactoring commit (one-line)"
+  },
+  "CI/CD Commit": {
+    "prefix": "ci",
+    "body": [
+      "ci(${1|workflow,github,railway,vercel|}): ${2:description}"
+    ],
+    "description": "CI/CD changes commit (one-line)"
+  }
+}

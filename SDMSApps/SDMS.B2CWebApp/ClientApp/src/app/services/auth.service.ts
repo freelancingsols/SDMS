@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { OAuthService } from 'angular-oauth2-oidc';
-import { BehaviorSubject, firstValueFrom, Observable } from 'rxjs';
+import { BehaviorSubject, firstValueFrom } from 'rxjs';
 import { AppSettings } from '../config/app-settings';
 import { environment } from '../../environments/environment';
 import { UserInfo, AuthenticationProvider } from '../interfaces/auth.interface';

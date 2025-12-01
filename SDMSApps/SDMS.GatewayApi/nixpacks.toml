@@ -1,0 +1,20 @@
+# Railway uses Nixpacks for .NET builds
+# This file configures the build process
+
+[phases.setup]
+nixPkgs = ["dotnet-sdk_8"]
+
+[phases.install]
+cmds = [
+  "dotnet restore"
+]
+
+[phases.build]
+cmds = [
+  "dotnet build -c Release",
+  "dotnet publish -c Release -o ./publish"
+]
+
+[start]
+cmd = "cd /app/publish && dotnet SDMS.GatewayApi.dll"
+

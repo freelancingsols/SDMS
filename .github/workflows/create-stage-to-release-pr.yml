@@ -76,7 +76,7 @@ jobs:
           echo ""
           
           # Workflows to check
-          WORKFLOWS=("CI - B2C WebApp (Build, Test, and Lint)" "CI - Authentication WebApp (Build, Test, and Lint)")
+          WORKFLOWS=("CI - B2C WebApp (Build, Test, and Lint)" "CI - Authentication WebApp (Build, Test, and Lint)" "CI - Gateway API (Build, Test, and Lint)")
           ALL_PASSED=true
           ANY_FOUND=false
           ANY_RUNNING=false

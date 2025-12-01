@@ -47,3 +47,15 @@ logging_loki_url = https://your-loki-instance.com/loki/api/v1/push
 
 logging_loki_user = your-loki-username
 
+# Gateway API Variables
+SDMS_GatewayApi_Authentication_Authority = https://your-auth-domain.railway.app
+SDMS_GatewayApi_Authentication_Audience = api
+SDMS_GatewayApi_Cors_AllowedOrigins = https://your-b2c-domain.vercel.app,https://your-frontend-domain.com
+SDMS_GatewayApi_Service_Authentication_Url = https://your-auth-domain.railway.app
+SDMS_GatewayApi_Service_Catalog_Url = https://your-catalog-domain.railway.app
+SDMS_GatewayApi_Service_ContentManagement_Url = https://your-content-domain.railway.app
+SDMS_GatewayApi_Service_Booking_Url = https://your-booking-domain.railway.app
+SDMS_GatewayApi_BaseUrl = https://your-gateway-domain.railway.app
+
+RAILWAY_GATEWAY_SERVICE_ID = your-railway-gateway-service-id-here
+

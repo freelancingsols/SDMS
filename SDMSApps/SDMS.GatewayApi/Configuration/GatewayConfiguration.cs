@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Configuration;
+
 namespace SDMS.GatewayApi.Configuration;
 
 /// <summary>

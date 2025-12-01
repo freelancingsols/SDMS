@@ -76,8 +76,6 @@ try
                 // Uncomment and install package if needed:
                 // configuration.WriteTo.GrafanaLoki(...);
                 Log.Information("GrafanaLoki URL configured but sink not enabled (package not installed)");
-
-                Log.Information("GrafanaLoki logging configured");
             }
             catch (Exception ex)
             {

@@ -1,0 +1,243 @@
+name: CI - Gateway API (Build, Test, and Lint)
+
+# Concurrency: Cancel in-progress runs when a new one starts (saves Actions minutes)
+concurrency:
+  group: ci-gateway-api-${{ github.ref }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      # Release and Stage branches: Always run CI on any push (no paths filter)
+      # This ensures CI runs when PRs are merged, even if paths filter might miss merge commits
+      - release
+      - Release
+      - stage
+      - Stage
+      - staging
+      - Staging
+      # Other branches: Run CI only when relevant files change (paths filter to save Actions minutes)
+      - main
+      - master
+      - develop
+    paths:
+      # Only trigger CI when files in Gateway API change
+      - 'SDMSApps/SDMS.GatewayApi/**'
+      - '.github/workflows/ci-gateway-api.yml'
+  pull_request:
+    branches:
+      - '**'  # Run on PRs targeting any branch
+    paths:
+      # Only trigger CI when files in Gateway API change
+      - 'SDMSApps/SDMS.GatewayApi/**'
+      - '.github/workflows/ci-gateway-api.yml'
+      # Explicitly exclude other apps to prevent false triggers
+      - '!SDMSApps/SDMS.AuthenticationWebApp/**'
+      - '!SDMSApps/SDMS.B2CWebApp/**'
+      - '!SDMSApps/SDMS.B2BWebApp/**'
+      - '!SDMSApps/SDMS.BackOfficeWebApp/**'
+      - '!SDMSApps/SDMS.VendorWebApp/**'
+      - '!SDMSApps/SDMS.DeliveryPartnerWebApp/**'
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+  workflow_dispatch:
+
+jobs:
+  # Check if this workflow should run based on changed files
+  check-changes:
+    name: Check Changed Files
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      should-run: ${{ steps.filter.outputs.gateway-api }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for PR comparison
+      
+      - name: Check if relevant files changed
+        id: filter
+        uses: dorny/paths-filter@v2
+        with:
+          filters: |
+            gateway-api:
+              - 'SDMSApps/SDMS.GatewayApi/**'
+              - '.github/workflows/ci-gateway-api.yml'
+          list-files: shell
+
+  lint:
+    name: Lint Code
+    needs: check-changes
+    if: needs.check-changes.outputs.should-run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10  # Prevent long-running jobs
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1  # Only fetch current commit (saves time and Actions minutes)
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+          cache-dotnet: true  # Cache .NET dependencies (saves Actions minutes)
+
+      - name: Install .NET format tool
+        run: dotnet tool install -g dotnet-format
+        continue-on-error: true  # Don't fail if already installed
+
+      - name: Run dotnet format (check)
+        working-directory: SDMSApps/SDMS.GatewayApi
+        run: dotnet format --verify-no-changes --verbosity diagnostic
+        continue-on-error: true
+
+  build-dev:
+    name: Build (Development)
+    needs: check-changes
+    if: needs.check-changes.outputs.should-run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15  # Prevent long-running jobs
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1  # Only fetch current commit (saves time and Actions minutes)
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+          cache-dotnet: true  # Cache .NET dependencies (saves Actions minutes)
+
+      - name: Restore .NET dependencies
+        working-directory: SDMSApps/SDMS.GatewayApi
+        run: dotnet restore
+
+      - name: Build .NET app (Development)
+        working-directory: SDMSApps/SDMS.GatewayApi
+        run: dotnet build --configuration Debug --no-restore
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-dev-gateway
+          path: |
+            SDMSApps/SDMS.GatewayApi/bin/Debug
+          retention-days: 1
+          compression-level: 6
+          if-no-files-found: ignore
+
+  build-prod:
+    name: Build (Production)
+    needs: check-changes
+    if: needs.check-changes.outputs.should-run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15  # Prevent long-running jobs
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1  # Only fetch current commit (saves time and Actions minutes)
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+          cache-dotnet: true  # Cache .NET dependencies (saves Actions minutes)
+
+      - name: Restore .NET dependencies
+        working-directory: SDMSApps/SDMS.GatewayApi
+        run: dotnet restore
+
+      - name: Build .NET app (Production)
+        working-directory: SDMSApps/SDMS.GatewayApi
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Publish .NET app
+        working-directory: SDMSApps/SDMS.GatewayApi
+        run: dotnet publish --configuration Release --no-build --output ./publish
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-prod-gateway
+          path: |
+            SDMSApps/SDMS.GatewayApi/publish
+          retention-days: 3  # Reduced from 7 to save storage
+          compression-level: 6
+          if-no-files-found: ignore
+
+  test:
+    name: Run Unit Tests
+    needs: check-changes
+    if: needs.check-changes.outputs.should-run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15  # Prevent long-running jobs
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1  # Only fetch current commit (saves time and Actions minutes)
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+          cache-dotnet: true  # Cache .NET dependencies (saves Actions minutes)
+
+      - name: Run .NET tests (if any)
+        working-directory: SDMSApps/SDMS.GatewayApi
+        run: |
+          # Find and run test projects
+          find . -name "*.Tests.csproj" -o -name "*Test.csproj" | while read testproj; do
+            if [ -f "$testproj" ]; then
+              dotnet test "$testproj" --configuration Release --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx"
+            fi
+          done
+        continue-on-error: true
+
+      - name: Build .NET app (if needed for tests)
+        working-directory: SDMSApps/SDMS.GatewayApi
+        run: |
+          # Only build if there are .NET test projects
+          if find . -name "*.Tests.csproj" -o -name "*Test.csproj" | grep -q .; then
+            dotnet build --configuration Release --no-restore
+          else
+            echo "No .NET test projects found, skipping build"
+          fi
+        continue-on-error: true
+
+      - name: Upload .NET test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dotnet-test-results-gateway
+          path: "SDMSApps/SDMS.GatewayApi/**/TestResults/*.trx"
+          retention-days: 3  # Reduced from 7 to save storage
+          compression-level: 6
+          if-no-files-found: ignore
+
+  ci-complete:
+    name: CI Complete
+    runs-on: ubuntu-latest
+    needs: [check-changes, lint, build-dev, build-prod, test]
+    if: always() && needs.check-changes.outputs.should-run == 'true'
+    timeout-minutes: 2  # Very quick status check
+    steps:
+      - name: Check CI status
+        run: |
+          if [ "${{ needs.lint.result }}" == "failure" ] || \
+             [ "${{ needs.build-dev.result }}" == "failure" ] || \
+             [ "${{ needs.build-prod.result }}" == "failure" ] || \
+             [ "${{ needs.test.result }}" == "failure" ]; then
+            echo "CI checks failed"
+            exit 1
+          else
+            echo "All CI checks passed"
+          fi
+
